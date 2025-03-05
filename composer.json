@@ -1,5 +1,6 @@
 {
     "name": "421c/autodoc-php",
+    "description": "Automatic API documentation generation tool for PHP projects",
     "require": {
         "php": "^8.1",
         "nikic/php-parser": "^5.2",
