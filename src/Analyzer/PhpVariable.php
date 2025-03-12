@@ -38,9 +38,8 @@ class PhpVariable
 
         krsort(PhpVariable::$cache[$cacheKey][$node->name]->assignments);
 
-
-        $nodeStartLine = $node->getAttribute('startLine', 0);
-        $currentLine = $nodeStartLine;
+        /** @var int */
+        $currentLine = $node->getAttribute('startLine', 0);
         $possibleTypes = [];
 
         while ($currentLine > 0) {

@@ -2,8 +2,6 @@
 
 namespace AutoDoc\OpenApi;
 
-use AutoDoc\DataTypes\Type;
-
 /**
  * https://spec.openapis.org/oas/v3.1.0.html#media-type-object
  */

@@ -48,9 +48,9 @@ class PhpClass
     private array $properties;
 
     /**
-     * @var ?ReflectionClass<TClass>
+     * @var ReflectionClass<TClass>
      */
-    private ?ReflectionClass $classReflection;
+    private ReflectionClass $classReflection;
 
     private ?PhpDoc $docComment = null;
 

@@ -35,7 +35,7 @@ trait ComparesSchemaArrays
     }
 
     /**
-     * @param array<string, mixed> &$array
+     * @param array<mixed> &$array
      */
     private function sortArrayRecursively(array &$array): void
     {
@@ -51,8 +51,8 @@ trait ComparesSchemaArrays
     }
 
     /**
-     * @param array<string, mixed> $expected
-     * @param array<string, mixed> $actual
+     * @param array<mixed> $expected
+     * @param array<mixed> $actual
      *
      * @return string[]
      */
@@ -94,6 +94,10 @@ trait ComparesSchemaArrays
     private function valueToPhpString(mixed $value, int $indentLevel = 0): string
     {
         if (is_array($value)) {
+            if (count($value) === 0) {
+                return '[]';
+            }
+
             return $this->arrayToPhpString($value, $indentLevel + 1);
 
         } else if (is_string($value)) {

@@ -491,23 +491,21 @@ class PhpDoc
     public function getExtendsTag(): ?object
     {
         foreach ($this->node->getExtendsTagValues() as $extendsTag) {
-            if ($extendsTag->type instanceof GenericTypeNode) {
-                try {
-                    $parentClassName = $this->scope->getResolvedClassName($extendsTag->type->type->name);
+            try {
+                $parentClassName = $this->scope->getResolvedClassName($extendsTag->type->type->name);
 
-                    if (! $parentClassName) {
-                        throw new Exception('Unable to resolve class name');
-                    }
+                if (! $parentClassName) {
+                    throw new Exception('Unable to resolve class name');
+                }
 
-                    return (object) [
-                        'className' => $parentClassName,
-                        'genericTypes' => array_map($this->createUnresolvedType(...), $extendsTag->type->genericTypes),
-                    ];
+                return (object) [
+                    'className' => $parentClassName,
+                    'genericTypes' => array_map($this->createUnresolvedType(...), $extendsTag->type->genericTypes),
+                ];
 
-                } catch (Throwable $exception) {
-                    if ($this->scope->isDebugModeEnabled()) {
-                        throw new AutoDocException('Error resolving "@extends ' . ((string) $extendsTag->type) . '": ', $exception);
-                    }
+            } catch (Throwable $exception) {
+                if ($this->scope->isDebugModeEnabled()) {
+                    throw new AutoDocException('Error resolving "@extends ' . ((string) $extendsTag->type) . '": ', $exception);
                 }
             }
         }
@@ -640,7 +638,7 @@ class PhpDoc
         $summaryAndDescription = explode("\n\n", $this->getText(), 2);
 
         return [
-            $summaryAndDescription[0] ?? '',
+            $summaryAndDescription[0],
             $summaryAndDescription[1] ?? '',
         ];
     }

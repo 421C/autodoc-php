@@ -81,7 +81,7 @@ class ExtensionHandler
         } else if ($classOrExpr instanceof StaticCall) {
             $extensionTypeClass = StaticCallExtension::class;
 
-        } else if ($classOrExpr instanceof PhpClass) {
+        } else {
             $extensionTypeClass = ClassExtension::class;
         }
 

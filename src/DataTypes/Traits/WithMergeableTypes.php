@@ -220,6 +220,9 @@ trait WithMergeableTypes
             return new $typeClass;
         }
 
-        return new $typeClass(array_values(array_unique(array_merge($t1Values, $t2Values))));
+        $possibleValues = array_values(array_unique(array_merge($t1Values, $t2Values)));
+
+        /** @phpstan-ignore-next-line */
+        return new $typeClass($possibleValues);
     }
 }
