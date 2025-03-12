@@ -19,6 +19,8 @@ class ArrayType extends Type
          * @var ?class-string<object>
          */
         public ?string $className = null,
+        public ?int $minItems = null,
+        public ?int $maxItems = null,
     ) {}
 
 
@@ -50,6 +52,8 @@ class ArrayType extends Type
                 'additionalProperties' => ($this->itemType ?? new UnknownType)->toSchema(),
                 'description' => $this->description,
                 'examples' => $this->examples,
+                'minProperties' => $this->minItems,
+                'maxProperties' => $this->maxItems,
             ]);
 
         } else {
@@ -58,6 +62,8 @@ class ArrayType extends Type
                 'items' => ($this->itemType ?? new UnknownType)->toSchema(),
                 'description' => $this->description,
                 'examples' => $this->examples,
+                'minItems' => $this->minItems,
+                'maxItems' => $this->maxItems,
             ]);
         }
     }

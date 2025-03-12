@@ -94,7 +94,7 @@ class UnionType extends Type
                     return false;
                 }
 
-                if (in_array($schema['type'], ['array', 'object'])) {
+                if (is_array($schema['type']) || in_array($schema['type'], ['array', 'object'])) {
                     return true;
                 }
 
