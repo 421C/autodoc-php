@@ -11,7 +11,10 @@ use Throwable;
 
 class DocGenerator
 {
-    public function makeOpenApi(Config $config): RootSchema
+    /**
+     * @param array{start?: (callable(Route): void), end?: (callable(Route): void)}|null $reportProgress
+     */
+    public function makeOpenApi(Config $config, ?array $reportProgress = null): RootSchema
     {
         if (isset($config->data['memory_limit'])) {
             ini_set('memory_limit', $config->data['memory_limit']);
@@ -25,7 +28,7 @@ class DocGenerator
             description: $config->data['api']['description'] ?? '',
         );
 
-        $openApi->paths = $config->getRouteLoader()->getOpenApiPaths();
+        $openApi->paths = $config->getRouteLoader()->getOpenApiPaths($reportProgress);
 
         $openApi->servers[] = new Server(
             $config->data['api']['domain'] ?? '',

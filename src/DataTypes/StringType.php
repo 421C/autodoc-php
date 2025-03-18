@@ -11,6 +11,8 @@ class StringType extends Type
         public string|array|null $value = null,
         public ?string $description = null,
         public ?string $format = null,
+        public ?int $minLength = null,
+        public ?int $maxLength = null,
     ) {}
 
 
@@ -34,6 +36,8 @@ class StringType extends Type
             'format' => $this->format,
             'description' => $this->description,
             'examples' => $this->examples,
+            'minLength' => $this->minLength,
+            'maxLength' => $this->maxLength,
         ]);
 
         $possibleValues = $this->getPossibleValues();

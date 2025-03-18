@@ -67,6 +67,7 @@ class Config
          * @var ?WorkspaceConfig
          */
         public ?array $selectedWorkspace = null,
+        public int|string|null $selectedWorkspaceKey = null,
     ) {}
 
 

@@ -40,10 +40,7 @@ final class OpenApiSchemaTest extends TestCase
 
         $this->assertNotNull($schema);
 
-
-        $routes = $config->getRouteLoader()->getRoutes();
-
-        foreach ($routes as $route) {
+        foreach ($config->getRouteLoader()->getRoutes() as $route) {
             if ($route->className && $route->classMethod) {
                 $this->assertClassMethodMatchesOperationSchema(
                     schema: $schema,

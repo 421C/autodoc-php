@@ -492,6 +492,17 @@ class Scope
             ]);
         }
 
+        if ($node instanceof Node\Expr\BinaryOp\Concat) {
+            $leftString = $this->getRawValueFromNode($node->left);
+            $rightString = $this->getRawValueFromNode($node->right);
+
+            if ($leftString === null || $rightString === null) {
+                return new StringType;
+            }
+
+            return new StringType($leftString . $rightString);
+        }
+
         return new UnknownType;
     }
 
@@ -572,7 +583,7 @@ class Scope
             return $this->getResolvedClassName($name->name);
         }
 
-        if ($name === 'self') {
+        if ($name === 'self' || $name === 'static') {
             return $this->className;
         }
 
