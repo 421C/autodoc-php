@@ -13,6 +13,7 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedType;
 use DateTimeInterface;
+use DOMNode;
 use Exception;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
@@ -21,6 +22,7 @@ use PhpParser\ParserFactory;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionProperty;
+use SplFixedArray;
 use Stringable;
 
 /**
@@ -83,6 +85,12 @@ class PhpClass
 
         } else if ($this->getReflection()->isSubclassOf(Stringable::class)) {
             $objectType->typeToDisplay = new StringType;
+
+        } else if (is_a($this->className, DOMNode::class, true)) {
+            return $objectType;
+
+        } else if (is_a($this->className, SplFixedArray::class, true)) {
+            return new ArrayType;
         }
 
         if ($this->scope->depth > $this->scope->config->data['max_depth']) {
