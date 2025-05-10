@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -85,21 +86,29 @@ class PhpClassMethod
         }
 
         if ($requestBodyType && !($requestBodyType instanceof UnknownType)) {
-            $operation->requestBody = new RequestBody(
+            if (! ($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
+                $operation->requestBody = new RequestBody(
+                    content: [
+                        'application/json' => new MediaType($requestBodyType->toSchema()),
+                    ],
+                );
+            }
+        }
+
+        foreach ($this->scope->route->responses ?? [] as $response) {
+            $operation->responses[strval($response['status'] ?? 200)] = new Response(
                 content: [
-                    'application/json' => new MediaType($requestBodyType->toSchema()),
+                    ($response['contentType'] ?? 'application/json') => new MediaType(($response['body'] ?? new UnknownType)->toSchema()),
                 ],
             );
         }
 
         if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
-            $operation->responses = [
-                '200' => new Response(
-                    content: [
-                        'application/json' => new MediaType($responseBodyType->toSchema()),
-                    ],
-                ),
-            ];
+            $operation->responses['200'] = new Response(
+                content: [
+                    'application/json' => new MediaType($responseBodyType->toSchema()),
+                ],
+            );
         }
 
         return $operation;

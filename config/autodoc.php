@@ -59,7 +59,7 @@ return [
     /**
      * Directory where OpenApi schema files will be exported.
      */
-    'openapi_export_dir' => __DIR__ .  '/../../openapi',
+    'openapi_export_dir' => '/path/to/openapi',
 
     /**
      * Enum handling settings.

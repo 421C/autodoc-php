@@ -21,6 +21,15 @@ class Route
 
 
     /**
+     * @var array{
+     *     status?: int,
+     *     contentType?: string,
+     *     body?: Type,
+     * }[]
+     */
+    public array $responses = [];
+
+    /**
      * @var Type[]
      */
     private array $requestBodyTypes = [];
@@ -34,5 +43,15 @@ class Route
     public function getRequestBodyType(): ?Type
     {
         return (new UnionType($this->requestBodyTypes))->unwrapType();
+    }
+
+
+    public function addResponse(int $status, string $contentType, Type $body): void
+    {
+        $this->responses[] = [
+            'status' => $status,
+            'contentType' => $contentType,
+            'body' => $body,
+        ];
     }
 }

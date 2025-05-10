@@ -43,6 +43,7 @@ use PHPStan\PhpDocParser\Parser\ConstExprParser;
 use PHPStan\PhpDocParser\Parser\PhpDocParser;
 use PHPStan\PhpDocParser\Parser\TokenIterator;
 use PHPStan\PhpDocParser\Parser\TypeParser;
+use PHPStan\PhpDocParser\ParserConfig;
 use Throwable;
 
 class PhpDoc
@@ -76,13 +77,15 @@ class PhpDoc
     {
         static $phpDocParser = null;
 
+        $parserConfig = new ParserConfig([]);
+
         if ($phpDocParser === null) {
-            $constExprParser = new ConstExprParser;
-            $typeParser = new TypeParser($constExprParser);
-            $phpDocParser = new PhpDocParser($typeParser, $constExprParser);
+            $constExprParser = new ConstExprParser($parserConfig);
+            $typeParser = new TypeParser($parserConfig, $constExprParser);
+            $phpDocParser = new PhpDocParser($parserConfig, $typeParser, $constExprParser);
         }
 
-        $tokens = new TokenIterator((new Lexer)->tokenize($this->docComment));
+        $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($this->docComment));
 
         return $phpDocParser->parse($tokens);
     }
@@ -138,7 +141,7 @@ class PhpDoc
                 $itemType->required = $itemNode->optional === false;
 
                 if ($itemNode->keyName) {
-                    $arrayType->shape[(string) $itemNode->keyName] = $itemType;
+                    $arrayType->shape[$this->getUnquotedValue($itemNode->keyName)] = $itemType;
 
                 } else {
                     $arrayType->shape[] = $itemType;
@@ -232,7 +235,7 @@ class PhpDoc
 
                 $itemType->required = $itemNode->optional === false;
 
-                $objectType->properties[(string) $itemNode->keyName] = $itemType;
+                $objectType->properties[$this->getUnquotedValue($itemNode->keyName)] = $itemType;
             }
 
             return $objectType;
@@ -635,7 +638,7 @@ class PhpDoc
      */
     public function getSummaryAndDescription(): array
     {
-        $summaryAndDescription = explode("\n\n", $this->getText(), 2);
+        $summaryAndDescription = explode("\n\n", str_replace("\r\n", "\n", $this->getText()), 2);
 
         return [
             $summaryAndDescription[0],
@@ -647,5 +650,19 @@ class PhpDoc
     public function createUnresolvedType(TypeNode $typeNode, ?string $description = null): UnresolvedPhpDocType
     {
         return new UnresolvedPhpDocType($typeNode, $this, $description);
+    }
+
+
+    private function getUnquotedValue(ConstExprIntegerNode|ConstExprStringNode|IdentifierTypeNode $node): string
+    {
+        if ($node instanceof ConstExprIntegerNode) {
+            return (string) $node->value;
+        }
+
+        if ($node instanceof ConstExprStringNode) {
+            return $node->value;
+        }
+
+        return $node->name;
     }
 }

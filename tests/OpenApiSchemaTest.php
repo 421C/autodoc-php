@@ -28,6 +28,7 @@ final class OpenApiSchemaTest extends TestCase
 
         $config->data['route_loader'] = TestProject\RouteLoader::class;
         $config->data['openapi']['show_routes_as_titles'] = false;
+        $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';
         $config->data['debug']['enabled'] = true;
         $config->data['debug']['ignore_dynamic_method_errors'] = false;
 

@@ -60,7 +60,11 @@ class Scope
                 if ($comment instanceof Comment\Doc) {
                     $phpDoc = new PhpDoc($comment->getText(), $this);
 
-                    return $phpDoc->resolveVarType($variableName);
+                    $typeFromPhpDoc = $phpDoc->resolveVarType($variableName);
+
+                    if (! ($typeFromPhpDoc instanceof UnknownType)) {
+                        return $typeFromPhpDoc;
+                    }
                 }
             }
         }

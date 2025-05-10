@@ -13,7 +13,7 @@
         <elements-api
             apiDescriptionUrl="<?= htmlspecialchars($this->openApiUrl) ?>"
             router="hash"
-            layout="sidebar"
+            layout="responsive"
             <?= ($this->hideTryIt ? 'hideTryIt="true"' : '') ?>
             <?= ($this->logo ? 'logo="' . htmlspecialchars($this->logo) . '"' : '') ?>
         />
