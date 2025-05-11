@@ -75,7 +75,14 @@ class UnionType extends Type
                 if ($isTypeTheOnlyProperty) {
                     if (is_array($schema['type'])) {
                         foreach ($schema['type'] as $subTypeName) {
-                            $simpleSchemaTypeNames[$subTypeName] = 1;
+                            if (is_array($subTypeName)) {
+                                foreach ($subTypeName as $name) {
+                                    $simpleSchemaTypeNames[$name] = 1;
+                                }
+
+                            } else {
+                                $simpleSchemaTypeNames[$subTypeName] = 1;
+                            }
                         }
 
                     } else if (is_string($schema['type'])) {
