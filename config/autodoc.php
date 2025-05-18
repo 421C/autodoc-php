@@ -54,6 +54,11 @@ return [
          * Disabled by default because it is not guaranteed that all possible values will be detected.
          */
         'show_values_for_scalar_types' => false,
+
+        /**
+         * When enabled, will use pattern instead of format for numeric string types.
+         */
+        'use_pattern_for_numeric_strings' => false,
     ],
 
     /**

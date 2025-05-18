@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
 use AutoDoc\DataTypes\Traits\WithMergeableTypes;
 
 
@@ -17,18 +18,18 @@ class IntersectionType extends Type
     ) {}
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         $this->mergeDuplicateTypes(mergeAsIntersection: true);
 
         $type = $this->unwrapType();
 
         if (! ($type instanceof IntersectionType)) {
-            return $type->toSchema();
+            return $type->toSchema($config);
         }
 
         return [
-            'allOf' => array_map(fn ($type) => $type->toSchema(), $this->types),
+            'allOf' => array_map(fn ($type) => $type->toSchema($config), $this->types),
         ];
     }
 }

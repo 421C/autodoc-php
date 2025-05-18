@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
 use AutoDoc\Analyzer\Scope;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
@@ -14,7 +15,7 @@ abstract class Type
     /**
      * @return array<string, mixed>
      */
-    abstract public function toSchema(): array;
+    abstract public function toSchema(?Config $config = null): array;
 
     public ?string $description = null;
 
@@ -24,6 +25,8 @@ abstract class Type
     public ?array $examples = null;
 
     public bool $required = false;
+
+    public bool $isEnum = false;
 
 
     public function unwrapType(): Type
@@ -51,10 +54,12 @@ abstract class Type
 
 
     /**
-     * @param array<int|string> $values
+     * @param array<float|int|string> $values
      */
     public function setEnumValues(array $values): void
     {
+        $this->isEnum = true;
+
         if (property_exists($this, 'value')) {
             $this->value = $values;
         }

@@ -62,6 +62,6 @@ class DocGenerator
             }
         }
 
-        return array_map(fn ($type) => $type->toSchema(), Workspace::$schemaComponents);
+        return array_map(fn ($type) => $type->toSchema($config), Workspace::$schemaComponents);
     }
 }

@@ -2,13 +2,15 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class UnknownType extends Type
 {
     public function __construct(
         public ?string $description = null,
     ) {}
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         return array_filter([
             'type' => 'string',

@@ -52,7 +52,7 @@ class PhpClosure
             $operation->responses = [
                 '200' => new Response(
                     content: [
-                        'application/json' => new MediaType($responseBodyType->toSchema()),
+                        'application/json' => new MediaType($responseBodyType->toSchema($this->scope->config)),
                     ],
                 ),
             ];

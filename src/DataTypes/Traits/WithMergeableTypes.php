@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes\Traits;
 
+use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
@@ -19,7 +20,7 @@ use AutoDoc\DataTypes\VoidType;
 
 trait WithMergeableTypes
 {
-    public function mergeDuplicateTypes(bool $mergeAsIntersection = false): void
+    public function mergeDuplicateTypes(bool $mergeAsIntersection = false, ?Config $config = null): void
     {
         foreach ($this->types as $i => $type) {
             $this->types[$i] = $type->unwrapType();
@@ -31,7 +32,7 @@ trait WithMergeableTypes
             $merged = false;
 
             foreach ($mergedTypes as $i => $existingType) {
-                $mergedType = $this->mergeTypes($existingType, $type, $mergeAsIntersection);
+                $mergedType = $this->mergeTypes($existingType, $type, $mergeAsIntersection, $config);
 
                 if ($mergedType) {
                     $mergedTypes[$i] = $mergedType;
@@ -49,7 +50,7 @@ trait WithMergeableTypes
     }
 
 
-    private function mergeTypes(Type $type1, Type $type2, bool $mergeAsIntersection = false): ?Type
+    private function mergeTypes(Type $type1, Type $type2, bool $mergeAsIntersection = false, ?Config $config = null): ?Type
     {
         // Converting UnknownType to StringType to prevent `string or string`
         // when there is an union of StringType and UnknownType.
@@ -62,7 +63,7 @@ trait WithMergeableTypes
         }
 
         if ($this->isScalarType($type1) && $this->isScalarType($type2)) {
-            return $this->mergeScalarTypes($type1, $type2);
+            return $this->mergeScalarTypes($type1, $type2, $config);
         }
 
         // If type classes do not match, they can not be merged and will be returned as a UnionType.
@@ -188,10 +189,8 @@ trait WithMergeableTypes
     private function mergeScalarTypes(
         IntegerType|FloatType|NumberType|StringType $type1,
         IntegerType|FloatType|NumberType|StringType $type2,
+        ?Config $config = null,
     ): IntegerType|FloatType|NumberType|StringType|null {
-
-        $t1Values = $type1->getPossibleValues();
-        $t2Values = $type2->getPossibleValues();
 
         $t1IsNumber = $type1 instanceof IntegerType
             || $type1 instanceof FloatType
@@ -216,13 +215,21 @@ trait WithMergeableTypes
             return null;
         }
 
-        if (! $t1Values || ! $t2Values) {
-            return new $typeClass;
+        $resultType = new $typeClass;
+
+        $resultType->required = $this->required;
+
+        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+            $t1Values = $type1->getPossibleValues();
+            $t2Values = $type2->getPossibleValues();
+
+            if ($t1Values && $t2Values) {
+                $possibleValues = array_values(array_unique(array_merge($t1Values, $t2Values)));
+
+                $resultType->setEnumValues($possibleValues);
+            }
         }
 
-        $possibleValues = array_values(array_unique(array_merge($t1Values, $t2Values)));
-
-        /** @phpstan-ignore-next-line */
-        return new $typeClass($possibleValues);
+        return $resultType;
     }
 }

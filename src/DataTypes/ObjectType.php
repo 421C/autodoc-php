@@ -3,6 +3,7 @@
 namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\PhpFunctionArgument;
+use AutoDoc\Config;
 
 class ObjectType extends Type
 {
@@ -26,15 +27,15 @@ class ObjectType extends Type
     ) {}
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         if ($this->typeToDisplay) {
-            return $this->typeToDisplay->toSchema();
+            return $this->typeToDisplay->toSchema($config);
         }
 
         return array_filter([
             'type' => 'object',
-            'properties' => array_map(fn ($prop) => $prop->toSchema(), $this->properties),
+            'properties' => array_map(fn ($prop) => $prop->toSchema($config), $this->properties),
             'description' => $this->description,
             'examples' => $this->examples,
             'required' => array_values(array_filter(

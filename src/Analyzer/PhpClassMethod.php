@@ -89,7 +89,7 @@ class PhpClassMethod
             if (! ($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
                 $operation->requestBody = new RequestBody(
                     content: [
-                        'application/json' => new MediaType($requestBodyType->toSchema()),
+                        'application/json' => new MediaType($requestBodyType->toSchema($this->scope->config)),
                     ],
                 );
             }
@@ -98,7 +98,7 @@ class PhpClassMethod
         foreach ($this->scope->route->responses ?? [] as $response) {
             $operation->responses[strval($response['status'] ?? 200)] = new Response(
                 content: [
-                    ($response['contentType'] ?? 'application/json') => new MediaType(($response['body'] ?? new UnknownType)->toSchema()),
+                    ($response['contentType'] ?? 'application/json') => new MediaType(($response['body'] ?? new UnknownType)->toSchema($this->scope->config)),
                 ],
             );
         }
@@ -106,7 +106,7 @@ class PhpClassMethod
         if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
             $operation->responses['200'] = new Response(
                 content: [
-                    'application/json' => new MediaType($responseBodyType->toSchema()),
+                    'application/json' => new MediaType($responseBodyType->toSchema($this->scope->config)),
                 ],
             );
         }

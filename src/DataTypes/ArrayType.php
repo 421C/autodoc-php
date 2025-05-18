@@ -2,6 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class ArrayType extends Type
 {
     public function __construct(
@@ -24,12 +26,12 @@ class ArrayType extends Type
     ) {}
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         if ($this->shape) {
             return array_filter([
                 'type' => 'object',
-                'properties' => array_map(fn ($prop) => $prop->toSchema(), $this->shape),
+                'properties' => array_map(fn ($prop) => $prop->toSchema($config), $this->shape),
                 'description' => $this->description,
                 'examples' => $this->examples,
                 'required' => array_values(array_filter(
@@ -49,7 +51,7 @@ class ArrayType extends Type
         if ($this->keyType && !($this->keyType instanceof IntegerType)) {
             return array_filter([
                 'type' => 'object',
-                'additionalProperties' => ($this->itemType ?? new UnknownType)->toSchema(),
+                'additionalProperties' => ($this->itemType ?? new UnknownType)->toSchema($config),
                 'description' => $this->description,
                 'examples' => $this->examples,
                 'minProperties' => $this->minItems,
@@ -59,7 +61,7 @@ class ArrayType extends Type
         } else {
             return array_filter([
                 'type' => 'array',
-                'items' => ($this->itemType ?? new UnknownType)->toSchema(),
+                'items' => ($this->itemType ?? new UnknownType)->toSchema($config),
                 'description' => $this->description,
                 'examples' => $this->examples,
                 'minItems' => $this->minItems,

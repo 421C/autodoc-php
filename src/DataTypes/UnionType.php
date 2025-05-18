@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
 use AutoDoc\DataTypes\Traits\WithMergeableTypes;
 
 
@@ -17,14 +18,14 @@ class UnionType extends Type
     ) {}
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
-        $this->mergeDuplicateTypes();
+        $this->mergeDuplicateTypes(false, $config);
 
         $type = $this->unwrapType();
 
         if (! ($type instanceof UnionType)) {
-            return $type->toSchema();
+            return $type->toSchema($config);
         }
 
         if (count($this->types) === 2) {
@@ -46,7 +47,7 @@ class UnionType extends Type
                     $nullableType->examples = $this->examples;
                 }
 
-                $schema = $nullableType->toSchema();
+                $schema = $nullableType->toSchema($config);
 
                 $schema['type'] = [$schema['type'], 'null'];
 
@@ -59,7 +60,7 @@ class UnionType extends Type
         $uniqueTypeSchemas = [];
 
         foreach ($this->types as $type) {
-            $schema = $type->toSchema();
+            $schema = $type->toSchema($config);
 
             if (isset($schema['anyOf'])) {
                 /** @var array<array<mixed>> */

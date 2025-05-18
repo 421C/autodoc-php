@@ -2,6 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class IntegerType extends Type
 {
     public function __construct(
@@ -14,6 +16,16 @@ class IntegerType extends Type
         public ?int $maximum = null,
     ) {}
 
+    public bool $isString = false;
+    public bool $isStrictInteger = false;
+
+    /**
+     * Allow `true` to be validated as integer.
+     *
+     * Laravel validation uses `filter_var(..., FILTER_VALIDATE_INT)`
+     * to validate integer values, which returns `1` for `true`.
+     */
+    public bool $allowTrueAsInteger = false;
 
     /**
      * @return int[]|null
@@ -28,7 +40,7 @@ class IntegerType extends Type
     }
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         $schema = array_filter([
             'type' => 'integer',
@@ -44,14 +56,31 @@ class IntegerType extends Type
             $schema['maximum'] = $this->maximum;
         }
 
-        $possibleValues = $this->getPossibleValues();
+        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+            $possibleValues = $this->getPossibleValues();
 
-        if ($possibleValues) {
-            if (count($possibleValues) === 1) {
-                $schema['const'] = $possibleValues[0];
+            if ($possibleValues) {
+                if (count($possibleValues) === 1) {
+                    $schema['const'] = $possibleValues[0];
 
-            } else {
-                $schema['enum'] = $possibleValues;
+                } else {
+                    $schema['enum'] = $possibleValues;
+                }
+            }
+        }
+
+        if ($this->isString) {
+            // OpenApi 3.1.0 string type does not support `minimum` and `maximum` properties,
+            // so we only set the type to string if these properties are not set.
+            if ($this->minimum === null && $this->maximum === null) {
+                $schema['type'] = 'string';
+
+                if ($config?->data['openapi']['use_pattern_for_numeric_strings'] ?? false) {
+                    $schema['pattern'] = '^[0-9]+$';
+
+                } else {
+                    $schema['format'] = 'integer';
+                }
             }
         }
 

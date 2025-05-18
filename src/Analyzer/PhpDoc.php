@@ -168,7 +168,7 @@ class PhpDoc
         }
 
         /**
-         * 'str'|420|0.5
+         * 'str' / 420 / 0.5
          */
         if ($node instanceof ConstTypeNode) {
             if ($node->constExpr instanceof ConstExprStringNode) {
@@ -195,6 +195,8 @@ class PhpDoc
             foreach ($node->types as $typeNode) {
                 $unionType->types[] = $this->resolveTypeFromNode($typeNode) ?? new UnknownType;
             }
+
+            $unionType->isEnum = true;
 
             return $unionType->unwrapType();
         }

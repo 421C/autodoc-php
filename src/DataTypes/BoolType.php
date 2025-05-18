@@ -2,9 +2,11 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class BoolType extends Type
 {
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         return array_filter([
             'type' => 'boolean',

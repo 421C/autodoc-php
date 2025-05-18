@@ -2,6 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class StringType extends Type
 {
     public function __construct(
@@ -29,7 +31,7 @@ class StringType extends Type
     }
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         $schema = array_filter([
             'type' => 'string',
@@ -40,14 +42,16 @@ class StringType extends Type
             'maxLength' => $this->maxLength,
         ]);
 
-        $possibleValues = $this->getPossibleValues();
+        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+            $possibleValues = $this->getPossibleValues();
 
-        if ($possibleValues) {
-            if (count($possibleValues) === 1) {
-                $schema['const'] = $possibleValues[0];
+            if ($possibleValues) {
+                if (count($possibleValues) === 1) {
+                    $schema['const'] = $possibleValues[0];
 
-            } else {
-                $schema['enum'] = $possibleValues;
+                } else {
+                    $schema['enum'] = $possibleValues;
+                }
             }
         }
 

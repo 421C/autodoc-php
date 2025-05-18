@@ -2,6 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Config;
+
 class NumberType extends Type
 {
     public function __construct(
@@ -14,6 +16,7 @@ class NumberType extends Type
         public ?int $maximum = null,
     ) {}
 
+    public bool $isString = false;
 
     /**
      * @return array<int|float>|null
@@ -24,11 +27,11 @@ class NumberType extends Type
             return null;
         }
 
-        return is_int($this->value) || is_float($this->value) ? [$this->value] : $this->value;
+        return is_array($this->value) ? $this->value : [$this->value];
     }
 
 
-    public function toSchema(): array
+    public function toSchema(?Config $config = null): array
     {
         $schema = array_filter([
             'type' => 'number',
@@ -44,14 +47,31 @@ class NumberType extends Type
             $schema['maximum'] = $this->maximum;
         }
 
-        $possibleValues = $this->getPossibleValues();
+        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+            $possibleValues = $this->getPossibleValues();
 
-        if ($possibleValues) {
-            if (count($possibleValues) === 1) {
-                $schema['const'] = $possibleValues[0];
+            if ($possibleValues) {
+                if (count($possibleValues) === 1) {
+                    $schema['const'] = $possibleValues[0];
 
-            } else {
-                $schema['enum'] = $possibleValues;
+                } else {
+                    $schema['enum'] = $possibleValues;
+                }
+            }
+        }
+
+        if ($this->isString) {
+            // OpenApi 3.1.0 string type does not support `minimum` and `maximum` properties,
+            // so we only set the type to string if these properties are not set.
+            if ($this->minimum === null && $this->maximum === null) {
+                $schema['type'] = 'string';
+
+                if ($config?->data['openapi']['use_pattern_for_numeric_strings'] ?? false) {
+                    $schema['pattern'] = '^[+-]?[0-9]+(\.[0-9]+)?$';
+
+                } else {
+                    $schema['format'] = 'numeric';
+                }
             }
         }
 
