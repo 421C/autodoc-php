@@ -9,6 +9,7 @@ use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NullType;
+use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -255,11 +256,25 @@ class PhpDoc
         $type = match ($identifier) {
             'int', 'integer', 'positive-int', 'negative-int', 'non-positive-int', 'non-negative-int', 'non-zero-int' => new IntegerType,
             'float', 'double' => new FloatType,
-            'string' => new StringType,
-            'class-string' => new ClassStringType(classTemplateType: $genericTypeValues[0] ?? null),
+            'string', 'lowercase-string', 'uppercase-string', 'literal-string',
+            'non-empty-lowercase-string', 'non-empty-uppercase-string', 'non-empty-literal-string',
+            'non-empty-string', 'non-falsy-string', 'truthy-string' => new StringType,
+            'class-string', 'interface-string', 'trait-string', 'enum-string' => new ClassStringType(classTemplateType: $genericTypeValues[0] ?? null),
+            'numeric-string' => new NumberType(isString: true),
             'bool', 'boolean', 'true', 'false' => new BoolType,
-            'array', 'non-empty-array', 'list', 'non-empty-list' => new ArrayType,
+            'array', 'associative-array', 'non-empty-array', 'list', 'non-empty-list', 'iterable' => new ArrayType,
             'object' => new ObjectType,
+            'scalar' => new UnionType([
+                new IntegerType,
+                new FloatType,
+                new StringType,
+                new BoolType,
+            ]),
+            'numeric' => new UnionType([
+                new IntegerType,
+                new FloatType,
+                new NumberType(isString: false),
+            ]),
             'null' => new NullType,
             'void' => new VoidType,
             default => null,

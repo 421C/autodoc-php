@@ -52,17 +52,28 @@ abstract class Type
         return $this;
     }
 
+    /**
+     * @return $this
+     */
+    public function setRequired(bool $required): self
+    {
+        $this->required = $required;
+        return $this;
+    }
 
     /**
      * @param array<float|int|string> $values
+     * @return $this
      */
-    public function setEnumValues(array $values): void
+    public function setEnumValues(array $values): self
     {
         $this->isEnum = true;
 
         if (property_exists($this, 'value')) {
             $this->value = $values;
         }
+
+        return $this;
     }
 
 

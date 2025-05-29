@@ -14,9 +14,9 @@ class NumberType extends Type
         public ?string $description = null,
         public ?int $minimum = null,
         public ?int $maximum = null,
+        public bool $isString = false,
     ) {}
 
-    public bool $isString = false;
 
     /**
      * @return array<int|float>|null
