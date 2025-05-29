@@ -497,6 +497,70 @@ class TestController
     }
 
 
+    /**
+     * @param SimpleClass $value
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'parameters' => [],
+        'requestBody' => null,
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'n' => [
+                                    'type' => ['integer', 'null'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route11($value): object
+    {
+        return $value;
+    }
+
+
+    /**
+     * @param $value Property description that is not going to be visible in response schema.
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'parameters' => [],
+        'requestBody' => null,
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'n' => [
+                                    'type' => ['integer', 'null'],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route12(SimpleClass $value): object
+    {
+        return $value;
+    }
+
+
 
     /**
      * @template TClass of object

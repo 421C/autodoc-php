@@ -50,13 +50,24 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
                 return NodeVisitor::DONT_TRAVERSE_CHILDREN;
             }
 
+            $docComment = $node->getDocComment();
+            $phpDocParameters = [];
+
+            if ($docComment) {
+                $phpDoc = new PhpDoc($docComment->getText(), $this->scope);
+                $phpDocParameters = $phpDoc->getParameters();
+            }
+
             foreach ($node->params as $paramIndex => $paramNode) {
                 if ($paramNode->var instanceof Variable) {
-                    if (isset($this->args[$paramIndex])) {
-                        $this->scope->assignVariable($paramNode->var, $this->args[$paramIndex]->getType() ?? new UnknownType, $node->getComments());
+                    if (is_string($paramNode->var->name) && isset($phpDocParameters[$paramNode->var->name])) {
+                        $this->scope->assignVariable($paramNode->var, $phpDocParameters[$paramNode->var->name], $docComment ? [$docComment] : []);
+
+                    } else if (isset($this->args[$paramIndex])) {
+                        $this->scope->assignVariable($paramNode->var, $this->args[$paramIndex]->getType() ?? new UnknownType, $docComment ? [$docComment] : []);
 
                     } else if (isset($paramNode->type)) {
-                        $this->scope->assignVariable($paramNode->var, $paramNode->type, $node->getComments());
+                        $this->scope->assignVariable($paramNode->var, $paramNode->type, $docComment ? [$docComment] : []);
                     }
 
                     if ($paramNode->type instanceof Node\Name) {
@@ -211,20 +222,13 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
 
                     if ($varType) {
                         if ($varType instanceof UnresolvedParserNodeType) {
-                            $prevLevel = null;
-                            $prevKey = null;
                             $currentLevel = &$varType->assignedProperties;
 
                             $lastKeyIndex = array_key_last($keyPath);
 
                             foreach ($keyPath as $keyIndex => $key) {
-                                if ($lastKeyIndex === $keyIndex) {
-                                    $prevLevel[$prevKey] = new ArrayItem($valueNode);
-
-                                } else {
+                                if ($lastKeyIndex !== $keyIndex) {
                                     if ($key === null) {
-                                        $prevLevel = $currentLevel;
-
                                         $placeholder = new Node\Expr\Array_;
                                         $currentLevel[] = new ArrayItem($placeholder);
 
@@ -240,8 +244,6 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
 
                                     $currentLevel[] = new ArrayItem($valueNode);
                                 }
-
-                                $prevKey = $key;
                             }
                         }
 
