@@ -26,7 +26,7 @@ use SplFixedArray;
 use Stringable;
 
 /**
- * @template TClass of object
+ * @template-covariant TClass of object
  */
 class PhpClass
 {
@@ -34,7 +34,7 @@ class PhpClass
         /**
          * @var class-string<TClass>
          */
-        public string $className,
+        public readonly string $className,
         public Scope $scope,
     ) {}
 
@@ -47,7 +47,12 @@ class PhpClass
     /**
      * @var array<string, Type>
      */
-    private array $properties;
+    private array $publicProperties;
+
+    /**
+     * @var array<string, Type>
+     */
+    private array $privateAndProtectedProperties;
 
     /**
      * @var ReflectionClass<TClass>
@@ -129,16 +134,26 @@ class PhpClass
     /**
      * @return array<string, Type>
      */
-    private function getPropertiesFromReflection(): array
+    private function getPropertiesFromReflection(bool $onlyPublic = true): array
     {
-        if ($this->scopeAllowsUsingCache() && isset($this->properties)) {
-            return $this->properties;
+        if ($this->scopeAllowsUsingCache()) {
+            if ($onlyPublic) {
+                if (isset($this->publicProperties)) {
+                    return $this->publicProperties;
+                }
+
+            } else if (isset($this->publicProperties, $this->privateAndProtectedProperties)) {
+                return array_merge($this->publicProperties, $this->privateAndProtectedProperties);
+            }
         }
 
-        $properties = [];
+        $publicProperties = [];
+        $privateAndProtectedProperties = [];
 
         foreach ($this->getReflection()->getProperties() as $propertyReflection) {
-            if (! $propertyReflection->isPublic()) {
+            $isPublic = $propertyReflection->isPublic();
+
+            if ($onlyPublic && !$isPublic) {
                 continue;
             }
 
@@ -166,28 +181,45 @@ class PhpClass
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
             }
 
-            $properties[$propertyName] = $propertyType;
+            if ($isPublic) {
+                $publicProperties[$propertyName] = $propertyType;
+
+            } else {
+                $privateAndProtectedProperties[$propertyName] = $propertyType;
+            }
         }
 
-        $properties = $this->handlePhpDocPropertyTags($properties);
+        if ($onlyPublic) {
+            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties);
+
+        } else {
+            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties);
+            $privateAndProtectedProperties = $this->handlePhpDocPropertyTags($privateAndProtectedProperties);
+        }
 
         if ($this->scopeAllowsUsingCache()) {
-            $this->properties = $properties;
+            if ($onlyPublic) {
+                $this->publicProperties = $publicProperties;
+
+            } else {
+                $this->publicProperties = $publicProperties;
+                $this->privateAndProtectedProperties = $privateAndProtectedProperties;
+            }
         }
 
-        return $properties;
+        return array_merge($publicProperties, $privateAndProtectedProperties);
     }
 
 
-    public function getProperty(string $name): ?Type
+    public function getProperty(string $name, bool $onlyPublic = true): ?Type
     {
-        return $this->getPropertiesFromReflection()[$name] ?? null;
+        return $this->getPropertiesFromReflection($onlyPublic)[$name] ?? null;
     }
 
 
     public function hasLoadedProperties(): bool
     {
-        return isset($this->properties);
+        return isset($this->publicProperties);
     }
 
     /**

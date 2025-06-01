@@ -318,17 +318,23 @@ class Scope
                     $propertyType = $propertyType?->unwrapType() ?? new UnknownType;
 
                     if ($propertyType instanceof UnknownType && isset($varClass) && is_string($propertyName)) {
-                        $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
+                        $allowPrivateAndProtected = $node->var instanceof Node\Expr\Variable && $node->var->name === 'this';
 
-                        if ($mixinTag) {
-                            $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
-                            $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
+                        $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType() ?? new UnknownType;
 
-                            if ($propertyType) {
-                                return $propertyType->unwrapType();
+                        if ($propertyType instanceof UnknownType) {
+                            $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
+
+                            if ($mixinTag) {
+                                $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
+                                $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
+
+                                if ($propertyType) {
+                                    return $propertyType->unwrapType();
+                                }
+
+                                return $mixinClass->getProperty($propertyName)?->unwrapType() ?? new UnknownType;
                             }
-
-                            return $mixinClass->getProperty($propertyName)?->unwrapType() ?? new UnknownType;
                         }
                     }
 
