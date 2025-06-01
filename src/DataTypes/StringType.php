@@ -15,6 +15,7 @@ class StringType extends Type
         public ?string $format = null,
         public ?int $minLength = null,
         public ?int $maxLength = null,
+        public ?string $pattern = null,
     ) {}
 
 
@@ -40,6 +41,7 @@ class StringType extends Type
             'examples' => $this->examples,
             'minLength' => $this->minLength,
             'maxLength' => $this->maxLength,
+            'pattern' => $this->pattern,
         ]);
 
         if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {

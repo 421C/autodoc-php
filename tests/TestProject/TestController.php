@@ -23,8 +23,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => 'Route 1',
         'description' => 'Reads response schema from `@return` tag.',
-        'requestBody' => null,
-        'parameters' => [],
         'responses' => [
             '200' => [
                 'content' => [
@@ -61,8 +59,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => 'Route 2',
         'description' => '',
-        'requestBody' => null,
-        'parameters' => [],
         'responses' => [
             '200' => [
                 'content' => [
@@ -154,8 +150,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => 'Route 3',
         'description' => '',
-        'requestBody' => null,
-        'parameters' => [],
         'responses' => [
             '200' => [
                 'content' => [
@@ -191,8 +185,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => 'Route 4',
         'description' => '',
-        'requestBody' => null,
-        'parameters' => [],
         'responses' => [
             '200' => [
                 'content' => [
@@ -225,8 +217,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => 'Route 5',
         'description' => '',
-        'requestBody' => null,
-        'parameters' => [],
         'responses' => [
             '200' => [
                 'content' => [
@@ -268,8 +258,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -317,8 +305,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -367,8 +353,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -402,10 +386,6 @@ class TestController
 
 
     #[ExpectedOperationSchema([
-        'summary' => '',
-        'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -460,8 +440,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -503,8 +481,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [
@@ -535,8 +511,6 @@ class TestController
     #[ExpectedOperationSchema([
         'summary' => '',
         'description' => '',
-        'parameters' => [],
-        'requestBody' => null,
         'responses' => [
             200 => [
                 'content' => [

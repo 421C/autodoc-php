@@ -35,8 +35,6 @@ class RouteLoader extends AbstractRouteLoader
         $closure1 = #[ExpectedOperationSchema([
             'summary' => 'Closure test 1',
             'description' => 'Description...',
-            'parameters' => [],
-            'requestBody' => null,
             'responses' => [
                 200 => [
                     'content' => [
@@ -64,10 +62,6 @@ class RouteLoader extends AbstractRouteLoader
 
 
         $closure2 = #[ExpectedOperationSchema([
-            'summary' => '',
-            'description' => '',
-            'parameters' => [],
-            'requestBody' => null,
             'responses' => [
                 200 => [
                     'content' => [
@@ -105,8 +99,6 @@ class RouteLoader extends AbstractRouteLoader
                 #[ExpectedOperationSchema([
                     'summary' => '',
                     'description' => '',
-                    'parameters' => [],
-                    'requestBody' => null,
                     'responses' => [
                         200 => [
                             'content' => [

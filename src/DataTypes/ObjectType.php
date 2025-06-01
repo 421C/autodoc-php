@@ -24,6 +24,14 @@ class ObjectType extends Type
          * @var array<PhpFunctionArgument>
          */
         public array $constructorArgs = [],
+
+        /**
+         * Properties that do not appear in the generated documentation
+         * unless specifically accessed or referenced.
+         *
+         * @var array<string, Type>
+         */
+        public array $hiddenProperties = [],
     ) {}
 
 

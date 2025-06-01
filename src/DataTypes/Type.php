@@ -2,8 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Config;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionType;
@@ -58,6 +58,7 @@ abstract class Type
     public function setRequired(bool $required): self
     {
         $this->required = $required;
+
         return $this;
     }
 

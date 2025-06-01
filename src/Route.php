@@ -17,6 +17,13 @@ class Route
         public ?string $className = null,
         public ?string $classMethod = null,
         public ?Closure $closure = null,
+
+        /**
+         * Additional metadata one can use to pass data from RouteLoader to extensions
+         *
+         * @var array<mixed>
+         */
+        public array $meta = [],
     ) {}
 
 
