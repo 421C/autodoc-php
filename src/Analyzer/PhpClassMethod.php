@@ -14,7 +14,7 @@ use ReflectionException;
 use ReflectionMethod;
 
 /**
- * @template TClass of object
+ * @template-covariant TClass of object
  */
 class PhpClassMethod
 {
@@ -22,7 +22,7 @@ class PhpClassMethod
         /**
          * @var PhpClass<TClass>
          */
-        public PhpClass $phpClass,
+        public readonly PhpClass $phpClass,
         public string $methodName,
         public Scope $scope,
 
@@ -96,7 +96,9 @@ class PhpClassMethod
         }
 
         foreach ($this->scope->route->responses ?? [] as $response) {
-            $operation->responses[strval($response['status'] ?? 200)] = new Response(
+            $httpStatusCode = strval($response['status'] ?? 200);
+
+            $operation->responses[$httpStatusCode] = new Response(
                 content: [
                     ($response['contentType'] ?? 'application/json') => new MediaType(($response['body'] ?? new UnknownType)->toSchema($this->scope->config)),
                 ],
@@ -146,6 +148,18 @@ class PhpClassMethod
 
                 if (! ($type instanceof UnknownType)) {
                     return $type;
+                }
+            }
+
+            if (! $methodNodeVisitor->targetMethodExists) {
+                $parentClass = $this->phpClass->getParent();
+
+                if ($parentClass) {
+                    $type = $parentClass->getMethod($this->methodName)->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+
+                    if (! ($type instanceof UnknownType)) {
+                        return $type;
+                    }
                 }
             }
         }

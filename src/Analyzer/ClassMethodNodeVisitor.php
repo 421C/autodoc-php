@@ -33,6 +33,8 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
     /** @var Type[] */
     public array $returnTypes = [];
 
+    public bool $targetMethodExists = false;
+
     private bool $inTargetMethod = false;
 
     private int $currentDepth = 0;
@@ -49,6 +51,8 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
             if (! $this->inTargetMethod) {
                 return NodeVisitor::DONT_TRAVERSE_CHILDREN;
             }
+
+            $this->targetMethodExists = true;
 
             $docComment = $node->getDocComment();
             $phpDocParameters = [];
