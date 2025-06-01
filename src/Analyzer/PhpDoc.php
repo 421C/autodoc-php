@@ -152,6 +152,9 @@ class PhpDoc
             return $arrayType;
         }
 
+        /**
+         * type
+         */
         if ($node instanceof IdentifierTypeNode) {
             return $this->resolveTypeFromIdentifier($node->name);
         }
@@ -629,7 +632,7 @@ class PhpDoc
         $this->parameters = [];
 
         foreach ($this->node->getParamTagValues() as $tag) {
-            $this->parameters[substr($tag->parameterName, 1)] = $this->createUnresolvedType($tag->type);
+            $this->parameters[substr($tag->parameterName, 1)] = $this->createUnresolvedType($tag->type, $tag->description);
         }
 
         return $this->parameters;
