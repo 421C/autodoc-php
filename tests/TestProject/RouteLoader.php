@@ -117,5 +117,56 @@ class RouteLoader extends AbstractRouteLoader
                 ])] function () {}
             ),
         );
+
+        yield new Route(
+            uri: '/api/test/closure4',
+            method: 'get',
+            closure: (
+                /**
+                 * @return array{
+                 *     list: array<array{id: int, name: string}>,
+                 * }
+                 */
+                #[ExpectedOperationSchema([
+                    'summary' => '',
+                    'description' => '',
+                    'responses' => [
+                        200 => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'list' => [
+                                                'type' => 'array',
+                                                'items' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'id' => [
+                                                            'type' => 'integer',
+                                                        ],
+                                                        'name' => [
+                                                            'type' => 'string',
+                                                        ],
+                                                    ],
+                                                    'required' => [
+                                                        'id',
+                                                        'name',
+                                                    ],
+                                                ],
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'list',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'description' => '',
+                        ],
+                    ],
+                ])] function () {}
+            ),
+        );
     }
 }

@@ -53,7 +53,14 @@ use Exception;
  *         enabled: bool,
  *         ignore_dynamic_method_errors: bool,
  *     },
- *     ignore_dynamic_method_errors: bool,
+ *     typescript: array{
+ *         working_directory?: string,
+ *         file_extensions?: string[],
+ *         indent?: string,
+ *         string_quote?: string,
+ *         add_semicolons?: bool,
+ *         show_values_for_scalar_types?: bool,
+ *     },
  * }
  */
 class Config

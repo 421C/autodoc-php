@@ -6,6 +6,10 @@ use AutoDoc\Config;
 
 class BoolType extends Type
 {
+    public function __construct(
+        public ?bool $value = null,
+    ) {}
+
     public function toSchema(?Config $config = null): array
     {
         return array_filter([

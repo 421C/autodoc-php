@@ -5,6 +5,7 @@ namespace AutoDoc\Tests;
 use AutoDoc\Config;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
+use AutoDoc\Tests\Traits\LoadsConfig;
 use AutoDoc\Workspace;
 use Closure;
 use PHPUnit\Framework\Attributes\Test;
@@ -19,19 +20,16 @@ use ReflectionFunction;
  */
 final class OpenApiSchemaTest extends TestCase
 {
-    use ComparesSchemaArrays;
+    use ComparesSchemaArrays, LoadsConfig;
 
     #[Test]
     public function checkOpenApiJsonSchema(): void
     {
-        $config = new Config(require __DIR__ . '/../config/autodoc.php');
+        $config = $this->loadConfig();
 
-        $config->data['route_loader'] = TestProject\RouteLoader::class;
         $config->data['openapi']['show_routes_as_titles'] = false;
         $config->data['openapi']['show_values_for_scalar_types'] = true;
         $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';
-        $config->data['debug']['enabled'] = true;
-        $config->data['debug']['ignore_dynamic_method_errors'] = false;
 
         $workspace = Workspace::getDefault($config);
 

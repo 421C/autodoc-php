@@ -26,10 +26,17 @@ abstract class Type
 
     public bool $required = false;
 
+    public bool $deprecated = false;
+
+    /**
+     * @var array<string, mixed>|string|null
+     */
+    public array|string|null $example = null;
+
     public bool $isEnum = false;
 
 
-    public function unwrapType(): Type
+    public function unwrapType(?Config $config = null): Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
             if (count($this->types) === 1) {
@@ -38,12 +45,14 @@ abstract class Type
                 $type->description = $type->description ?: $this->description;
                 $type->examples = $type->examples ?: $this->examples;
 
-                return $type->unwrapType();
+                return $type->unwrapType($config);
             }
 
             if (empty($this->types)) {
                 return new UnknownType($this->description);
             }
+
+            $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
 
         } else if (is_a($this, UnresolvedType::class)) {
             return $this->resolve();

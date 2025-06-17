@@ -20,9 +20,9 @@ class IntersectionType extends Type
 
     public function toSchema(?Config $config = null): array
     {
-        $this->mergeDuplicateTypes(mergeAsIntersection: true);
+        $this->mergeDuplicateTypes(mergeAsIntersection: true, config: $config);
 
-        $type = $this->unwrapType();
+        $type = $this->unwrapType($config);
 
         if (! ($type instanceof IntersectionType)) {
             return $type->toSchema($config);

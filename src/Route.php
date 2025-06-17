@@ -47,9 +47,9 @@ class Route
         $this->requestBodyTypes[] = $type;
     }
 
-    public function getRequestBodyType(): ?Type
+    public function getRequestBodyType(?Config $config = null): ?Type
     {
-        return (new UnionType($this->requestBodyTypes))->unwrapType();
+        return (new UnionType($this->requestBodyTypes))->unwrapType($config);
     }
 
 

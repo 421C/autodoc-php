@@ -20,9 +20,7 @@ class UnionType extends Type
 
     public function toSchema(?Config $config = null): array
     {
-        $this->mergeDuplicateTypes(false, $config);
-
-        $type = $this->unwrapType();
+        $type = $this->unwrapType($config);
 
         if (! ($type instanceof UnionType)) {
             return $type->toSchema($config);

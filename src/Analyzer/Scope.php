@@ -18,13 +18,10 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\UnresolvedType;
 use AutoDoc\DataTypes\VoidType;
-use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
-use Exception;
 use PhpParser\Comment;
 use PhpParser\Node;
-use Throwable;
 
 class Scope
 {
@@ -90,7 +87,9 @@ class Scope
                 'int' => new IntegerType,
                 'float' => new FloatType,
                 'string' => new StringType,
-                'bool', 'true', 'false' => new BoolType,
+                'true' => new BoolType(true),
+                'false' => new BoolType(false),
+                'bool', 'boolean' => new BoolType,
                 'array', 'iterable' => new ArrayType,
                 'object' => new ObjectType,
                 'null' => new NullType,
@@ -100,14 +99,14 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\Variable) {
-            return $this->getVariableType($node)?->unwrapType() ?? new UnknownType;
+            return $this->getVariableType($node)?->unwrapType($this->config) ?? new UnknownType;
         }
 
         if ($node instanceof Node\Expr\MethodCall) {
             $returnType = $this->getReturnTypeFromExtensions($node);
 
             if ($returnType !== null) {
-                return $returnType->unwrapType();
+                return $returnType->unwrapType($this->config);
             }
 
             $varType = $this->resolveType($node->var);
@@ -121,7 +120,7 @@ class Scope
                     args: PhpFunctionArgument::list($node->args, scope: $this),
                 );
 
-                return $phpClassMethod->getReturnType()->unwrapType();
+                return $phpClassMethod->getReturnType()->unwrapType($this->config);
             }
 
             return new UnknownType;
@@ -131,7 +130,7 @@ class Scope
             $returnType = $this->getReturnTypeFromExtensions($node);
 
             if ($returnType !== null) {
-                return $returnType->unwrapType();
+                return $returnType->unwrapType($this->config);
             }
 
             if ($node->name instanceof Node\Name) {
@@ -141,7 +140,7 @@ class Scope
                     args: PhpFunctionArgument::list($node->args, scope: $this),
                 );
 
-                return $function->getReturnType()->unwrapType();
+                return $function->getReturnType()->unwrapType($this->config);
             }
         }
 
@@ -149,7 +148,7 @@ class Scope
             $returnType = $this->getReturnTypeFromExtensions($node);
 
             if ($returnType !== null) {
-                return $returnType->unwrapType();
+                return $returnType->unwrapType($this->config);
             }
 
             if ($node->class instanceof Node\Name && $node->name instanceof Node\Identifier) {
@@ -161,7 +160,7 @@ class Scope
                         args: PhpFunctionArgument::list($node->args, scope: $this),
                     );
 
-                    return $phpClassMethod->getReturnType()->unwrapType();
+                    return $phpClassMethod->getReturnType()->unwrapType($this->config);
                 }
             }
 
@@ -169,126 +168,7 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\Array_) {
-            $arrayType = new ArrayType;
-            $itemTypes = [];
-
-            foreach ($node->items as $arrayItemNode) {
-                if ($arrayItemNode->unpack) {
-                    try {
-                        $destructuredArrayType = $this->resolveType($arrayItemNode->value);
-
-                        if (! ($destructuredArrayType instanceof ArrayType)) {
-                            throw new Exception('Unexpected ' . PhpClass::basename($destructuredArrayType::class));
-                        }
-
-                        /** @var Node\ArrayItem[] */
-                        $itemsToUnpack = [];
-
-                        if ($destructuredArrayType->shape) {
-                            foreach ($destructuredArrayType->shape as $key => $valueType) {
-                                if (! ($valueType instanceof UnresolvedParserNodeType)) {
-                                    throw new Exception('Unexpected ' . PhpClass::basename($valueType::class));
-                                }
-
-                                if (! ($valueType->node instanceof Node\Expr)) {
-                                    throw new Exception('Unexpected ' . $valueType->node::class);
-                                }
-
-                                $itemsToUnpack[] = new Node\ArrayItem(
-                                    value: $valueType->node,
-                                    key: $key ? (is_int($key) ? new Node\Scalar\Int_($key) : new Node\Scalar\String_($key)) : null,
-                                );
-                            }
-
-                        } else {
-                            if (! $destructuredArrayType->itemType) {
-                                throw new Exception('Unknown array item type');
-                            }
-
-                            if ($destructuredArrayType->itemType instanceof UnionType) {
-                                $destructuredItemTypes = $destructuredArrayType->itemType->types;
-                            } else {
-                                $destructuredItemTypes = [$destructuredArrayType->itemType];
-                            }
-
-                            foreach ($destructuredItemTypes as $destructuredItemType) {
-                                if (! ($destructuredItemType instanceof UnresolvedParserNodeType)) {
-                                    throw new Exception('Unexpected ' . PhpClass::basename($destructuredItemType::class));
-                                }
-
-                                if (! ($destructuredItemType->node instanceof Node\Expr)) {
-                                    throw new Exception('Unexpected ' . $destructuredItemType->node::class);
-                                }
-
-                                $itemsToUnpack[] = new Node\ArrayItem($destructuredItemType->node);
-                            }
-                        }
-
-                    } catch (Throwable $exception) {
-                        if ($this->isDebugModeEnabled()) {
-                            throw new AutoDocException('Error unpacking value: ', $exception);
-                        }
-
-                        // If we can't resolve all array elements, rather than showing incomplete structure,
-                        // do not show it at all to prevent confusion.
-                        return new ArrayType;
-                    }
-
-                } else {
-                    $itemsToUnpack = [$arrayItemNode];
-                }
-
-                foreach ($itemsToUnpack as $item) {
-                    $comments = $item->getComments();
-                    $description = null;
-                    $exampleValues = null;
-                    $itemType = null;
-
-                    foreach ($comments as $comment) {
-                        if ($comment instanceof Comment\Doc) {
-                            $phpDoc = new PhpDoc($comment->getText(), $this);
-
-                            $description = $phpDoc->getText();
-                            $exampleValues = $phpDoc->getExampleValues();
-
-                            foreach ($phpDoc->getVarTags() as $var) {
-                                [$varName, $varType] = $var;
-
-                                if (! $varName) {
-                                    $itemType = $varType;
-                                    break;
-                                }
-                            }
-                        }
-                    }
-
-                    if ($itemType) {
-                        $itemType->description = $itemType->description ?: $description;
-                        $itemType->fallbackType = new UnresolvedParserNodeType($item->value, $this, $description);
-
-                    } else {
-                        $itemType = new UnresolvedParserNodeType($item->value, $this, $description);
-                    }
-
-                    $itemType->examples = $itemType->examples ?: $exampleValues ?: null;
-
-                    $itemTypes[] = $itemType;
-
-                    if ($item->key instanceof Node\Scalar\String_
-                        || $item->key instanceof Node\Scalar\Int_
-                    ) {
-                        $arrayType->shape[$item->key->value] = $itemType;
-                    }
-                }
-            }
-
-            if (! $arrayType->shape) {
-                $itemTypesUnion = new UnionType($itemTypes);
-
-                $arrayType->itemType = $itemTypesUnion->unwrapType();
-            }
-
-            return $arrayType;
+            return (new PhpArray(scope: $this, node: $node))->resolveType();
         }
 
         if ($node instanceof Node\ArrayItem || $node instanceof Node\Arg) {
@@ -307,7 +187,7 @@ class Scope
                         $propertyType = $this->getPropertyTypeFromExtensions($varClass, $propertyName);
 
                         if ($propertyType) {
-                            return $propertyType->unwrapType();
+                            return $propertyType->unwrapType($this->config);
                         }
                     }
 
@@ -315,12 +195,12 @@ class Scope
                         ?? $varType->properties[$propertyName]
                         ?? null;
 
-                    $propertyType = $propertyType?->unwrapType() ?? new UnknownType;
+                    $propertyType = $propertyType?->unwrapType($this->config) ?? new UnknownType;
 
                     if ($propertyType instanceof UnknownType && isset($varClass) && is_string($propertyName)) {
                         $allowPrivateAndProtected = $node->var instanceof Node\Expr\Variable && $node->var->name === 'this';
 
-                        $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType() ?? new UnknownType;
+                        $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType($this->config) ?? new UnknownType;
 
                         if ($propertyType instanceof UnknownType) {
                             $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
@@ -330,10 +210,10 @@ class Scope
                                 $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
 
                                 if ($propertyType) {
-                                    return $propertyType->unwrapType();
+                                    return $propertyType->unwrapType($this->config);
                                 }
 
-                                return $mixinClass->getProperty($propertyName)?->unwrapType() ?? new UnknownType;
+                                return $mixinClass->getProperty($propertyName)?->unwrapType($this->config) ?? new UnknownType;
                             }
                         }
                     }
@@ -362,7 +242,7 @@ class Scope
                     ?? null;
             }
 
-            return $type?->unwrapType() ?? new UnknownType;
+            return $type?->unwrapType($this->config) ?? new UnknownType;
         }
 
         if ($node instanceof Node\Scalar\String_) {
@@ -411,7 +291,7 @@ class Scope
             }
 
             if ($keyword === 'true' || $keyword === 'false') {
-                return new BoolType;
+                return new BoolType($keyword === 'true');
             }
         }
 
@@ -513,6 +393,16 @@ class Scope
             return new StringType($leftString . $rightString);
         }
 
+        if ($node instanceof Node\Expr\BinaryOp\Plus
+            || $node instanceof Node\Expr\BinaryOp\Minus
+            || $node instanceof Node\Expr\BinaryOp\Mul
+            || $node instanceof Node\Expr\BinaryOp\Div
+            || $node instanceof Node\Expr\BinaryOp\Mod
+            || $node instanceof Node\Expr\BinaryOp\Pow
+        ) {
+            return new NumberType;
+        }
+
         return new UnknownType;
     }
 
@@ -531,7 +421,7 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\Variable) {
-            $varType = $this->getVariableType($node)?->unwrapType();
+            $varType = $this->getVariableType($node)?->unwrapType($this->config);
 
             if ($varType instanceof StringType
                 || $varType instanceof IntegerType

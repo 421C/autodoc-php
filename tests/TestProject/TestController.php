@@ -71,7 +71,7 @@ class TestController
                                     'properties' => [
                                         'a' => [
                                             'type' => 'integer',
-                                            'description' => '[StateEnum](#/schemas/StateEnum)',
+                                            'description' => '[StateEnum](#/schemas/StateEnum)' . "\n\n" . 'Description for `a`.',
                                             'enum' => [
                                                 1,
                                                 2,
@@ -110,9 +110,23 @@ class TestController
                                                     'type' => ['integer', 'null'],
                                                 ],
                                             ],
+                                            'required' => [
+                                                'n',
+                                            ],
                                         ],
                                     ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                        'c',
+                                        'd',
+                                        'e',
+                                        'f',
+                                    ],
                                 ],
+                            ],
+                            'required' => [
+                                'data',
                             ],
                         ],
                     ],
@@ -124,6 +138,9 @@ class TestController
     public function route2(): mixed
     {
         $var = [
+            /**
+             * Description for `a`.
+             */
             'a' => StateEnum::Two,
             'b' => null,
             'c' => [1, 2, 3],
@@ -164,6 +181,9 @@ class TestController
                                     ],
                                 ],
                             ],
+                            'required' => [
+                                'n',
+                            ],
                         ],
                     ],
                 ],
@@ -195,6 +215,9 @@ class TestController
                                 'data' => [
                                     'type' => 'null',
                                 ],
+                            ],
+                            'required' => [
+                                'data',
                             ],
                         ],
                     ],
@@ -280,6 +303,9 @@ class TestController
                                         ],
                                     ],
                                 ],
+                            ],
+                            'required' => [
+                                'data',
                             ],
                         ],
                     ],
@@ -412,6 +438,12 @@ class TestController
                                     ],
                                 ],
                             ],
+                            'required' => [
+                                'text',
+                                'encoded',
+                                'count',
+                                'enum',
+                            ],
                         ],
                     ],
                 ],
@@ -492,6 +524,9 @@ class TestController
                                     'type' => ['integer', 'null'],
                                 ],
                             ],
+                            'required' => [
+                                'n',
+                            ],
                         ],
                     ],
                 ],
@@ -522,6 +557,9 @@ class TestController
                                     'type' => ['integer', 'null'],
                                 ],
                             ],
+                            'required' => [
+                                'n',
+                            ],
                         ],
                     ],
                 ],
@@ -534,6 +572,384 @@ class TestController
         return $value;
     }
 
+
+    /**
+     * @request-query filter {type: string[]}
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'parameters' => [
+            [
+                'in' => 'query',
+                'name' => 'filter',
+                'schema' => [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'string',
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route13(): void
+    {
+    }
+
+
+    /**
+     * @request-header Authorization {required: true, description: 'Authorization header'}
+     * @request-header x-state {description: 'Status', deprecated: true, type: StateEnum}
+     * 
+     * @request object{
+     *     data: array<string, array{
+     *         id: int,
+     *         name?: string,
+     *     }>
+     * }
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'parameters' => [
+            [
+                'in' => 'header',
+                'name' => 'Authorization',
+                'description' => 'Authorization header',
+                'required' => true,
+                'schema' => [
+                    'type' => 'string',
+                ],
+            ],
+            [
+                'in' => 'header',
+                'name' => 'x-state',
+                'description' => 'Status',
+                'deprecated' => true,
+                'schema' => [
+                    'description' => '[StateEnum](#/schemas/StateEnum)',
+                    'enum' => [
+                        1,
+                        2,
+                    ],
+                    'type' => 'integer',
+                ],
+            ],
+        ],
+        'requestBody' => [
+            'content' => [
+                'application/json' => [
+                    'schema' => [
+                        'type' => 'object',
+                        'properties' => [
+                            'data' => [
+                                'type' => 'object',
+                                'additionalProperties' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'id' => [
+                                            'type' => 'integer',
+                                        ],
+                                        'name' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'id',
+                                    ],
+                                ],
+                            ],
+                        ],
+                        'required' => [
+                            'data',
+                        ],
+                    ],
+                ],
+            ],
+            'description' => '',
+            'required' => false,
+        ],
+    ])]
+    public function route14(): void
+    {
+    }
+
+
+    /**
+     * @request-cookie CSRF {description: 'CSRF token'}
+     * @request-url-param yoo
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'parameters' => [
+            [
+                'description' => 'CSRF token',
+                'in' => 'cookie',
+                'name' => 'CSRF',
+                'schema' => [
+                    'type' => 'string',
+                ],
+            ],
+            [
+                'in' => 'path',
+                'name' => 'yoo',
+                'schema' => [
+                    'type' => 'string',
+                ],
+            ],
+        ],
+    ])]
+    public function route15(): void
+    {
+    }
+
+
+    /**
+     * @return object{created_at: \DateTimeInterface}&\Traversable<int>
+     * @phpstan-ignore return.missing
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                'created_at' => [
+                                    'format' => 'date-time',
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => [
+                                'created_at',
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route16()
+    {}
+
+
+    /**
+     * @return object{
+     *     id: int,
+     *     name?: string,
+     * } & object{
+     *     name: non-empty-string,
+     *     uuid: string,
+     * }
+     * 
+     * @phpstan-ignore return.missing, return.unresolvableType
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'id' => [
+                                    'type' => 'integer',
+                                ],
+                                'name' => [
+                                    'type' => 'string',
+                                ],
+                                'uuid' => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => [
+                                'id',
+                                'name',
+                                'uuid',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route17()
+    {}
+
+
+    /**
+     * @return array{
+     *     id: int,
+     *     name?: string,
+     * } & array{
+     *     name: non-empty-string,
+     *     uuid: object{x?: int}|\Stringable,
+     * }
+     * 
+     * @phpstan-ignore return.missing, return.unresolvableType
+     */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'id' => [
+                                    'type' => 'integer',
+                                ],
+                                'name' => [
+                                    'type' => 'string',
+                                ],
+                                'uuid' => [
+                                    'anyOf' => [
+                                        [
+                                            'properties' => [
+                                                'x' => [
+                                                    'type' => 'integer',
+                                                ],
+                                            ],
+                                            'type' => 'object',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'id',
+                                'name',
+                                'uuid',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route18()
+    {}
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'count' => [
+                                    'type' => 'integer',
+                                    'const' => 100,
+                                ],
+                                'name' => [
+                                    'const' => 'yoo',
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => [
+                                'count',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route19(): mixed
+    {
+        return [
+            'count' => 100,
+            ...(rand(1, 2) > 1 ? ['name' => 'yoo'] : []),
+        ];
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route20(): mixed
+    {
+        /** @var array{name?: string} */
+        $arr = [];
+
+        return [
+            ...$arr,
+        ];
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'anyOf' => [
+                                    [
+                                        'type' => 'array',
+                                        'items' => [
+                                            'enum' => [
+                                                1,
+                                                4,
+                                            ],
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    [
+                                        'type' => 'number',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route21(): mixed
+    {
+        $pi = 3.14;
+
+        return [
+            [...[1, 4]],
+            ...[$pi, $pi+1],
+        ];
+    }
 
 
     /**

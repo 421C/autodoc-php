@@ -45,8 +45,8 @@ class ArrayType extends Type
             ]);
         }
 
-        $this->keyType = $this->keyType?->unwrapType();
-        $this->itemType = $this->itemType?->unwrapType();
+        $this->keyType = $this->keyType?->unwrapType($config);
+        $this->itemType = $this->itemType?->unwrapType($config);
 
         if ($this->keyType && !($this->keyType instanceof IntegerType)) {
             return array_filter([

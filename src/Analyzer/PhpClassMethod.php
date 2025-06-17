@@ -2,12 +2,14 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Operation;
+use AutoDoc\OpenApi\Parameter;
 use AutoDoc\OpenApi\RequestBody;
 use AutoDoc\OpenApi\Response;
 use ReflectionException;
@@ -61,6 +63,31 @@ class PhpClassMethod
             }
 
             [$operation->summary, $operation->description] = $phpDoc->getSummaryAndDescription();
+
+            $phpDocRequestParams = $phpDoc->getRequestParams();
+
+            $requestBodyType = $phpDocRequestParams['body'];
+
+            foreach (['cookie', 'header', 'path', 'query'] as $location) {
+                foreach ($phpDocRequestParams[$location] as $paramName => $paramType) {
+                    $description = $paramType->description;
+
+                    $paramType->description = null;
+
+                    $schema = $paramType->toSchema($this->scope->config);
+
+                    $description = $description ? trim("{$paramType->description}\n\n{$description}") : $paramType->description;
+
+                    $operation->parameters[] = new Parameter(
+                        name: $paramName,
+                        in: $location,
+                        description: $description,
+                        required: $paramType->required,
+                        deprecated: $paramType->deprecated,
+                        schema: $schema,
+                    );
+                }
+            }
         }
 
         $classFileName = $this->phpClass->getReflection()->getFileName();
@@ -75,21 +102,26 @@ class PhpClassMethod
 
             $this->phpClass->traverse($methodNodeVisitor);
 
-            $requestBodyType = $this->scope->route?->getRequestBodyType();
+            $requestBodyType ??= $this->scope->route?->getRequestBodyType($this->scope->config);
 
             if (! $responseBodyType && $methodNodeVisitor->returnTypes) {
-                $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType();
+                $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
             }
 
         } else if (! $responseBodyType) {
-            $responseBodyType = $phpFunction?->getTypeFromNativeReturnType();
+            $responseBodyType = $phpFunction?->getTypeFromNativeReturnType()?->unwrapType($this->scope->config);
         }
 
-        if ($requestBodyType && !($requestBodyType instanceof UnknownType)) {
-            if (! ($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
+        if ($requestBodyType) {
+            $requestBodyType = $requestBodyType->unwrapType($this->scope->config);
+
+            if (!($requestBodyType instanceof UnknownType) && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
                 $operation->requestBody = new RequestBody(
                     content: [
-                        'application/json' => new MediaType($requestBodyType->toSchema($this->scope->config)),
+                        'application/json' => new MediaType(
+                            schema: $requestBodyType->toSchema($this->scope->config),
+                            type: $requestBodyType,
+                        ),
                     ],
                 );
             }
@@ -97,10 +129,14 @@ class PhpClassMethod
 
         foreach ($this->scope->route->responses ?? [] as $response) {
             $httpStatusCode = strval($response['status'] ?? 200);
+            $type = $response['body'] ?? new UnknownType;
 
             $operation->responses[$httpStatusCode] = new Response(
                 content: [
-                    ($response['contentType'] ?? 'application/json') => new MediaType(($response['body'] ?? new UnknownType)->toSchema($this->scope->config)),
+                    ($response['contentType'] ?? 'application/json') => new MediaType(
+                        schema: $type->toSchema($this->scope->config),
+                        type: $type,
+                    ),
                 ],
             );
         }
@@ -108,7 +144,10 @@ class PhpClassMethod
         if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
             $operation->responses['200'] = new Response(
                 content: [
-                    'application/json' => new MediaType($responseBodyType->toSchema($this->scope->config)),
+                    'application/json' => new MediaType(
+                        schema: $responseBodyType->toSchema($this->scope->config),
+                        type: $responseBodyType,
+                    ),
                 ],
             );
         }
@@ -126,10 +165,16 @@ class PhpClassMethod
         }
 
         if ($usePhpDocIfAvailable) {
-            $typeFromPhpDocReturnTag = $phpFunction->getTypeFromPhpDocReturnTag();
+            $typeFromPhpDocReturnTag = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
 
             if ($typeFromPhpDocReturnTag) {
-                return $typeFromPhpDocReturnTag;
+                $isPlainArray = $typeFromPhpDocReturnTag instanceof ArrayType
+                    && ! $typeFromPhpDocReturnTag->shape
+                    && ! $typeFromPhpDocReturnTag->itemType;
+
+                if (! $isPlainArray) {
+                    return $typeFromPhpDocReturnTag;
+                }
             }
         }
 
@@ -144,7 +189,7 @@ class PhpClassMethod
             $this->phpClass->traverse($methodNodeVisitor);
 
             if ($methodNodeVisitor->returnTypes) {
-                $type = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType();
+                $type = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
 
                 if (! ($type instanceof UnknownType)) {
                     return $type;
@@ -164,7 +209,7 @@ class PhpClassMethod
             }
         }
 
-        return $phpFunction->getTypeFromNativeReturnType() ?? new UnknownType;
+        return $phpFunction->getTypeFromNativeReturnType() ?? $typeFromPhpDocReturnTag ?? new UnknownType;
     }
 
 

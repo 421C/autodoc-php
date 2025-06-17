@@ -23,7 +23,7 @@ trait WithMergeableTypes
     public function mergeDuplicateTypes(bool $mergeAsIntersection = false, ?Config $config = null): void
     {
         foreach ($this->types as $i => $type) {
-            $this->types[$i] = $type->unwrapType();
+            $this->types[$i] = $type->unwrapType($config);
         }
 
         $mergedTypes = [];
@@ -98,19 +98,29 @@ trait WithMergeableTypes
             $keys1 = array_keys($array1->shape);
             $keys2 = array_keys($array2->shape);
 
-            sort($keys1);
-            sort($keys2);
+            if (! $mergeAsIntersection) {
+                sort($keys1);
+                sort($keys2);
 
-            if ($keys1 !== $keys2) {
-                return null;
+                if ($keys1 !== $keys2) {
+                    return null;
+                }
             }
 
             foreach ($array1->shape as $key => $type1) {
+                if ($mergeAsIntersection && !isset($array2->shape[$key])) {
+                    continue;
+                }
+
                 $type2 = $array2->shape[$key];
 
                 $mergedType = $this->mergeTypes($type1, $type2);
 
                 if ($mergedType) {
+                    if ($mergeAsIntersection) {
+                        $mergedType->required = $type1->required || $type2->required;
+                    }
+
                     $array1->shape[$key] = $mergedType;
 
                 } else if ($mergeAsIntersection) {
@@ -118,6 +128,14 @@ trait WithMergeableTypes
 
                 } else {
                     $array1->shape[$key] = new UnionType([$type1, $type2]);
+                }
+            }
+
+            if ($mergeAsIntersection) {
+                foreach ($array2->shape as $key => $type2) {
+                    if (!isset($array1->shape[$key])) {
+                        $array1->shape[$key] = $type2;
+                    }
                 }
             }
 
@@ -147,26 +165,53 @@ trait WithMergeableTypes
         $keys1 = array_keys($object1->properties);
         $keys2 = array_keys($object2->properties);
 
-        sort($keys1);
-        sort($keys2);
+        if ($mergeAsIntersection) {
+            if (empty($keys1)) {
+                return $object2;
+            }
 
-        if ($keys1 !== $keys2) {
-            return null;
+            if (empty($keys2)) {
+                return $object1;
+            }
+
+        } else {
+            sort($keys1);
+            sort($keys2);
+
+            if ($keys1 !== $keys2) {
+                return null;
+            }
         }
 
         foreach ($object1->properties as $key => $type1) {
+            if ($mergeAsIntersection && !isset($object2->properties[$key])) {
+                continue;
+            }
+
             $type2 = $object2->properties[$key];
 
             $mergedType = $this->mergeTypes($type1, $type2);
 
             if ($mergedType) {
+                if ($mergeAsIntersection) {
+                    $mergedType->required = $type1->required || $type2->required;
+                }
+
                 $object1->properties[$key] = $mergedType;
 
             } else if ($mergeAsIntersection) {
-                $object1->properties[$key] = new IntersectionType([$type1, $type2]);
+                $object1->properties[$key] = (new IntersectionType([$type1, $type2]))->setRequired($type1->required || $type2->required);
 
             } else {
                 $object1->properties[$key] = new UnionType([$type1, $type2]);
+            }
+        }
+
+        if ($mergeAsIntersection) {
+            foreach ($object2->properties as $key => $type2) {
+                if (!isset($object1->properties[$key])) {
+                    $object1->properties[$key] = $type2;
+                }
             }
         }
 

@@ -15,6 +15,7 @@ use AutoDoc\DataTypes\UnresolvedType;
 use DateTimeInterface;
 use DOMNode;
 use Exception;
+use JsonSerializable;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitorAbstract;
@@ -73,22 +74,39 @@ class PhpClass
             $returnType = $this->scope->getReturnTypeFromExtensions($this);
 
             if ($returnType !== null) {
-                return $returnType->unwrapType();
+                return $returnType->unwrapType($this->scope->config);
             }
         }
 
         $objectType = new ObjectType(className: $this->className);
 
         if ($this->typeToDisplay) {
-            $objectType->typeToDisplay = $this->typeToDisplay->unwrapType();
+            $objectType->typeToDisplay = $this->typeToDisplay->unwrapType($this->scope->config);
 
         } else if ($this->getReflection()->isEnum()) {
             $objectType->typeToDisplay = (new PhpEnum($this))->resolveType();
 
-        } else if ($this->getReflection()->isSubclassOf(DateTimeInterface::class)) {
+        } else if (is_a($this->className, DateTimeInterface::class, true)) {
             $objectType->typeToDisplay = new StringType(format: 'date-time');
 
-        } else if ($this->getReflection()->isSubclassOf(Stringable::class)) {
+        } else if ($this->getReflection()->isSubclassOf(JsonSerializable::class)) {
+            $toArrayMethod = $this->getMethod('jsonSerialize');
+
+            if ($toArrayMethod->exists()) {
+                $phpDocResultType = $toArrayMethod->getReturnType(doNotAnalyzeBody: true);
+
+                if (! ($phpDocResultType instanceof ArrayType && $phpDocResultType->shape)) {
+                    $analyzedResultType = $toArrayMethod->getReturnType(usePhpDocIfAvailable: false);
+
+                    if (! ($analyzedResultType instanceof UnknownType)) {
+                        return $analyzedResultType->unwrapType($this->scope->config);
+                    }
+                }
+
+                return $phpDocResultType->unwrapType($this->scope->config);
+            }
+
+        } else if (is_a($this->className, Stringable::class, true)) {
             $objectType->typeToDisplay = new StringType;
 
         } else if (is_a($this->className, DOMNode::class, true)) {
@@ -108,7 +126,7 @@ class PhpClass
             $objectType->description = $classPhpDoc->getText();
         }
 
-        $objectType->properties = $this->getPropertiesFromReflection();
+        $objectType->properties = $this->getProperties();
 
         $objectType->constructorArgs = $this->scope->constructorArgs;
 
@@ -134,7 +152,7 @@ class PhpClass
     /**
      * @return array<string, Type>
      */
-    private function getPropertiesFromReflection(bool $onlyPublic = true): array
+    private function getProperties(bool $onlyPublic = true): array
     {
         if ($this->scopeAllowsUsingCache()) {
             if ($onlyPublic) {
@@ -176,6 +194,8 @@ class PhpClass
                 }
             }
 
+            $propertyType->required = true;
+
             if ($propertyPhpDoc) {
                 $propertyType->description = $propertyPhpDoc->getText();
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
@@ -213,7 +233,7 @@ class PhpClass
 
     public function getProperty(string $name, bool $onlyPublic = true): ?Type
     {
-        return $this->getPropertiesFromReflection($onlyPublic)[$name] ?? null;
+        return $this->getProperties($onlyPublic)[$name] ?? null;
     }
 
 
@@ -296,7 +316,7 @@ class PhpClass
         }
 
         if (is_bool($value)) {
-            return new BoolType;
+            return new BoolType($value);
         }
 
         if ($value === null) {
@@ -337,7 +357,7 @@ class PhpClass
         }
 
         if ($parentClass->hasLoadedProperties()) {
-            return $parentClass->getProperty($propertyName)?->unwrapType();
+            return $parentClass->getProperty($propertyName)?->unwrapType($this->scope->config);
         }
 
         return $parentClass->resolvePropertyFromDocComments($propertyName);

@@ -15,11 +15,6 @@ use PhpParser\Node;
 use PHPStan\PhpDocParser\Ast\PhpDoc\GenericTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
-use PHPStan\PhpDocParser\Lexer\Lexer;
-use PHPStan\PhpDocParser\Parser\ConstExprParser;
-use PHPStan\PhpDocParser\Parser\TokenIterator;
-use PHPStan\PhpDocParser\Parser\TypeParser;
-use PHPStan\PhpDocParser\ParserConfig;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 
@@ -87,12 +82,7 @@ class PhpFunction
             );
 
         } else if ($tagValueNode instanceof GenericTagValueNode) {
-            $parserConfig = new ParserConfig([]);
-            $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($tagValueNode->value));
-            $constExprParser = new ConstExprParser($parserConfig);
-            $typeNode = (new TypeParser($parserConfig, $constExprParser))->parse($tokens);
-
-            return $phpDoc->createUnresolvedType($typeNode);
+            return $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tagValueNode->value));
         }
 
         return null;

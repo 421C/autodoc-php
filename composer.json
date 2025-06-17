@@ -26,6 +26,7 @@
             "AutoDoc\\Tests\\": "tests/"
         }
     },
+    "bin": ["bin/openapi-export", "bin/ts-sync"],
     "scripts": {
         "stan": [
             "./vendor/bin/phpstan analyse --memory-limit=2G"

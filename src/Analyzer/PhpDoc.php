@@ -168,7 +168,7 @@ class PhpDoc
                 new NullType,
             ]);
 
-            return $type->unwrapType();
+            return $type->unwrapType($this->scope->config);
         }
 
         /**
@@ -202,7 +202,7 @@ class PhpDoc
 
             $unionType->isEnum = true;
 
-            return $unionType->unwrapType();
+            return $unionType->unwrapType($this->scope->config);
         }
 
         /**
@@ -215,7 +215,7 @@ class PhpDoc
                 $intersectionType->types[] = $this->resolveTypeFromNode($typeNode) ?? new UnknownType;
             }
 
-            return $intersectionType->unwrapType();
+            return $intersectionType->unwrapType($this->scope->config);
         }
 
         /**
@@ -227,7 +227,7 @@ class PhpDoc
                 $this->resolveTypeFromNode($node->else) ?? new UnknownType,
             ]);
 
-            return $type->unwrapType();
+            return $type->unwrapType($this->scope->config);
         }
 
         /**
@@ -264,7 +264,9 @@ class PhpDoc
             'non-empty-string', 'non-falsy-string', 'truthy-string' => new StringType,
             'class-string', 'interface-string', 'trait-string', 'enum-string' => new ClassStringType(classTemplateType: $genericTypeValues[0] ?? null),
             'numeric-string' => new NumberType(isString: true),
-            'bool', 'boolean', 'true', 'false' => new BoolType,
+            'true' => new BoolType(true),
+            'false' => new BoolType(false),
+            'bool', 'boolean' => new BoolType,
             'array', 'associative-array', 'non-empty-array', 'list', 'non-empty-list', 'iterable' => new ArrayType,
             'object' => new ObjectType,
             'scalar' => new UnionType([
@@ -291,7 +293,7 @@ class PhpDoc
             $type = $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTypeAliases()[$identifier] ?? null;
 
             if ($type) {
-                return $type->unwrapType();
+                return $type->unwrapType($this->scope->config);
             }
         }
 
@@ -306,7 +308,7 @@ class PhpDoc
                     $templateTypes[$identifier]->templateTypeValues = $genericTypeValues;
                 }
 
-                return $templateTypes[$identifier]->unwrapType();
+                return $templateTypes[$identifier]->unwrapType($this->scope->config);
             }
         }
 
@@ -459,6 +461,65 @@ class PhpDoc
     public function getResponseTag(): ?PhpDocTagValueNode
     {
         return array_column($this->node->getTagsByName('@response'), 'value')[0] ?? null;
+    }
+
+    /**
+     * @return array{
+     *     body: ?Type,
+     *     cookie: array<string, Type>,
+     *     header: array<string, Type>,
+     *     path: array<string, Type>,
+     *     query: array<string, Type>,
+     * }
+     */
+    public function getRequestParams(): array
+    {
+        $tagTypes = [
+            '@request-query'     => 'query',
+            '@request-header'    => 'header',
+            '@request-cookie'    => 'cookie',
+            '@request-url-param' => 'path',
+        ];
+
+        $requestParams = [];
+
+        foreach ($tagTypes as $tagName => $paramLocation) {
+            foreach ($this->node->getTagsByName($tagName) as $tag) {
+                $param = (new PhpDocRequestParamTag($tag, $this))->resolve();
+
+                if (! $param) {
+                    continue;
+                }
+
+                [$paramName, $paramType] = $param;
+
+                $requestParams[$paramLocation][$paramName] = $paramType;
+            }
+        }
+
+        $requestBodyType = null;
+
+        foreach (['@request-body', '@request'] as $tagName) {
+            $tags = $this->node->getTagsByName($tagName);
+
+            if ($tags) {
+                $requestBodyTag = reset($tags);
+
+                if ($requestBodyTag->value instanceof GenericTagValueNode) {
+                    $requestBodyType = $this->createUnresolvedType($this->createTypeNode($requestBodyTag->value->value));
+
+                    break;
+                }
+            }
+        }
+
+        return [
+            'body'   => $requestBodyType,
+            'cookie' => $requestParams['cookie'] ?? [],
+            'header' => $requestParams['header'] ?? [],
+            'path'   => $requestParams['path'] ?? [],
+            'query'  => $requestParams['query'] ?? [],
+        ];
     }
 
 
@@ -664,6 +725,17 @@ class PhpDoc
             $summaryAndDescription[0],
             $summaryAndDescription[1] ?? '',
         ];
+    }
+
+
+    public function createTypeNode(string $phpDocType): TypeNode
+    {
+        $parserConfig = new ParserConfig([]);
+        $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($phpDocType));
+        $constExprParser = new ConstExprParser($parserConfig);
+        $typeNode = (new TypeParser($parserConfig, $constExprParser))->parse($tokens);
+
+        return $typeNode;
     }
 
 

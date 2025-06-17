@@ -1,0 +1,36 @@
+#!/usr/bin/env php
+<?php
+
+foreach ([$_composer_autoload_path ?? __DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $file) {
+    if (file_exists($file)) {
+        require $file;
+        break;
+    }
+}
+
+$configPath = null;
+$workspaceKey = null;
+
+for ($i=1; $i < count($argv); $i++) { 
+    if (str_starts_with($argv[$i], '--config=')) {
+        $configPath = substr($argv[$i], strlen('--config='));
+
+    } else if ($workspaceKey === null) {
+        $workspaceKey = $argv[$i];
+
+    } else {
+        echo PHP_EOL . 'Too many arguments.' . PHP_EOL . PHP_EOL;
+        exit(1);
+    }
+}
+
+if ($configPath === null) {
+    echo PHP_EOL . 'Config file not specified.' . PHP_EOL . PHP_EOL;
+    exit(1);
+}
+
+$config = new AutoDoc\Config(require $configPath);
+
+$command = new AutoDoc\Commands\ExportOpenApiSchema;
+
+$command($config, $workspaceKey);

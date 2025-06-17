@@ -2,6 +2,7 @@
 
 namespace AutoDoc\OpenApi;
 
+use AutoDoc\DataTypes\Type;
 use JsonSerializable;
 
 /**
@@ -25,6 +26,7 @@ class MediaType implements JsonSerializable
          */
         public ?array $examples = null,
         public mixed $example = null,
+        public ?Type $type = null,
     ) {}
 
     public function jsonSerialize(): mixed
