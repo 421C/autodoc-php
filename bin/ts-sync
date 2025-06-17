@@ -1,0 +1,35 @@
+#!/usr/bin/env php
+<?php
+
+foreach ([$_composer_autoload_path ?? __DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $file) {
+    if (file_exists($file)) {
+        require $file;
+        break;
+    }
+}
+
+$configPath = null;
+$workingDirectory = null;
+
+for ($i=1; $i < count($argv); $i++) { 
+    if (str_starts_with($argv[$i], '--config=')) {
+        $configPath = substr($argv[$i], strlen('--config='));
+
+    } else if ($workingDirectory === null) {
+        $workingDirectory = $argv[$i];
+
+    } else {
+        echo PHP_EOL . 'Too many arguments.' . PHP_EOL . PHP_EOL;
+        exit(1);
+    }
+}
+
+if ($configPath === null && $workingDirectory === null) {
+    echo PHP_EOL . 'Working directory not specified.' . PHP_EOL . PHP_EOL;
+    exit(1);
+}
+
+$configPath ??= __DIR__ . '/../config/autodoc.php';
+$config = new AutoDoc\Config(require $configPath);
+
+(new AutoDoc\Commands\UpdateTypeScriptStructures($config))->run($workingDirectory);

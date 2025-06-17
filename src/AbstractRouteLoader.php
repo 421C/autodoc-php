@@ -66,7 +66,7 @@ abstract class AbstractRouteLoader
     }
 
 
-    protected function routeToOperation(Route $route): ?Operation
+    public function routeToOperation(Route $route): ?Operation
     {
         $operation = null;
 

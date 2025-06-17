@@ -10,6 +10,7 @@ use AutoDoc\Extensions\FuncCallExtension;
 use AutoDoc\Extensions\MethodCallExtension;
 use AutoDoc\Extensions\OperationExtension;
 use AutoDoc\Extensions\StaticCallExtension;
+use AutoDoc\Extensions\TypeScriptExportExtension;
 use AutoDoc\OpenApi\Operation;
 use PhpParser\Node\Expr\FuncCall;
 use PhpParser\Node\Expr\MethodCall;
@@ -51,6 +52,9 @@ class ExtensionHandler
 
                 } else if (is_subclass_of($extensionClass, OperationExtension::class)) {
                     self::$extensions[OperationExtension::class][] = $extensionClass;
+
+                } else if (is_subclass_of($extensionClass, TypeScriptExportExtension::class)) {
+                    self::$extensions[TypeScriptExportExtension::class][] = $extensionClass;
                 }
             }
         }
@@ -146,5 +150,23 @@ class ExtensionHandler
         }
 
         return null;
+    }
+
+    /**
+     * @param PhpClass<object> $phpClass
+     */
+    public function handleTypeScriptExportExtensions(PhpClass $phpClass, Type $type): Type
+    {
+        foreach ($this->getExtensions(TypeScriptExportExtension::class) as $extensionClass) {
+            $extension = new $extensionClass;
+
+            $returnedType = $extension->handle($phpClass, $type);
+
+            if ($returnedType !== null) {
+                $type = $returnedType;
+            }
+        }
+
+        return $type;
     }
 }
