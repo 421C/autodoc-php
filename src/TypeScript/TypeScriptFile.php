@@ -30,11 +30,13 @@ class TypeScriptFile
             throw new Exception('TypeScript file path not specified');
         }
 
-        $lines = file($this->filePath, FILE_IGNORE_NEW_LINES);
+        $contents = file_get_contents($this->filePath);
 
-        if ($lines === false) {
+        if ($contents === false) {
             throw new Exception('Failed to read TypeScript file: ' . $this->filePath);
         }
+
+        $lines = explode("\n", str_replace("\r\n", "\n", $contents));
 
         return $lines;
     }
@@ -70,8 +72,9 @@ class TypeScriptFile
     }
 
 
-    public function processAutodocTags(Scope $scope): void
+    public function processAutodocTags(Scope $scope): int
     {
+        $processedTags = 0;
         $tag = $this->findFirstAutodocTag($scope);
 
         while ($tag !== null) {
@@ -87,7 +90,11 @@ class TypeScriptFile
             );
 
             $tag = $this->findFirstAutodocTag($scope, $newDeclarationIndex + count($newDeclarationLines));
+
+            $processedTags++;
         }
+
+        return $processedTags;
     }
 
 

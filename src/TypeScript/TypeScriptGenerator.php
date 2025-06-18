@@ -248,15 +248,16 @@ class TypeScriptGenerator
                 . ($structureType === 'type' ? '= ' : '');
 
             if ($properties) {
-                $tsLines[] = $declarationHeader . '{';
+                $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
 
+                $tsLines[] = $declarationHeader . '{';
 
                 foreach ($properties as $propertyName => $propertyType) {
                     $propertyBaseIndent = $baseIndent . $indent;
 
                     $tsType = $this->convertAutoDocTypeToTsType($propertyType, $indent, $propertyBaseIndent);
 
-                    $tsLines[] = $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType;
+                    $tsLines[] = $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($addSemicolon ? ';' : '');
                 }
 
                 $tsLines[] = $baseIndent . '}';
@@ -335,7 +336,6 @@ class TypeScriptGenerator
                         return '[' . implode(', ', $tsTypes) . ']';
 
                     } else {
-                        $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
                         $result = '[';
 
                         foreach ($type->shape as $propertyType) {
@@ -442,7 +442,7 @@ class TypeScriptGenerator
 
     private function toTsString(string $input): string
     {
-        $quote = $this->scope->config->data['typescript']['string_quote'] ?? "'";
+        $quote = $this->config->data['typescript']['string_quote'] ?? "'";
 
         $escaped = str_replace('\\', '\\\\', $input);
         $escaped = str_replace($quote, '\\' . $quote, $escaped);

@@ -32,4 +32,8 @@ if ($configPath === null && $workingDirectory === null) {
 $configPath ??= __DIR__ . '/../config/autodoc.php';
 $config = new AutoDoc\Config(require $configPath);
 
-(new AutoDoc\Commands\UpdateTypeScriptStructures($config))->run($workingDirectory);
+$updatedFiles = (new AutoDoc\Commands\UpdateTypeScriptStructures($config))->run($workingDirectory);
+
+foreach ($updatedFiles as $file) {
+    echo 'Updated ' . $file['filePath'] . ' (' . $file['processedTags'] . ' tags)' . PHP_EOL;
+}

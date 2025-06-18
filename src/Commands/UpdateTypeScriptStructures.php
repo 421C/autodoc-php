@@ -22,11 +22,16 @@ class UpdateTypeScriptStructures
 
     /**
      * @param string[] $fileExtensions
+     *
+     * @return iterable<array{
+     *     filePath: string,
+     *     processedTags: int,
+     * }>
      */
     public function run(
         ?string $workingDirectory = null,
         ?array $fileExtensions = null,
-    ): void {
+    ): iterable {
         $workingDirectory ??= $this->config->data['typescript']['working_directory']
             ?? throw new Exception('Working directory not specified');
 
@@ -46,8 +51,16 @@ class UpdateTypeScriptStructures
                 continue;
             }
 
-            $tsFile->processAutodocTags($scope);
-            $tsFile->writeLines();
+            $processedTags = $tsFile->processAutodocTags($scope);
+
+            if ($processedTags > 0) {
+                $tsFile->writeLines();
+
+                yield [
+                    'filePath' => $filePath,
+                    'processedTags' => $processedTags,
+                ];
+            }
         }
     }
 
