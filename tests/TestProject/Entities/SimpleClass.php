@@ -7,4 +7,9 @@ class SimpleClass
     public function __construct(
         public ?int $n = null,
     ) {}
+
+    public function getValue(): ?int
+    {
+        return $this->n;
+    }
 }

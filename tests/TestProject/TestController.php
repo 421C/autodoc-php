@@ -952,6 +952,32 @@ class TestController
     }
 
 
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'description' => '',
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ],
+    ])]
+    public function route22(): mixed
+    {
+        $a = new SimpleClass();
+        $a = $a->getValue();
+
+        return $a;
+    }
+
+
     /**
      * @template TClass of object
      *
