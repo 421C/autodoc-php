@@ -47,9 +47,16 @@ class UnionType extends Type
 
                 $schema = $nullableType->toSchema($config);
 
-                $schema['type'] = [$schema['type'], 'null'];
+                if (isset($schema['type'])) {
+                    $schema['type'] = [$schema['type'], 'null'];
 
-                return $schema;
+                    return $schema;
+
+                } else if (isset($schema['anyOf']) && is_array($schema['anyOf'])) {
+                    $schema['anyOf'][] = ['type' => 'null'];
+
+                    return $schema;
+                }
             }
         }
 
@@ -94,6 +101,8 @@ class UnionType extends Type
             }
         }
 
+        $uniqueTypeSchemas = $this->deepUnique($uniqueTypeSchemas);
+
         $typeSchemas = array_merge(
             array_filter($uniqueTypeSchemas, function ($schema) use ($simpleSchemaTypeNames) {
                 if (empty($schema['type'])) {
@@ -135,5 +144,20 @@ class UnionType extends Type
         return [
             'anyOf' => $typeSchemas,
         ];
+    }
+
+
+    /**
+     * @template T
+     *
+     * @param array<T> $array
+     * @return array<T>
+     */
+    private function deepUnique(array $array): array
+    {
+        $serialized = array_map('serialize', $array);
+        $unique = array_unique($serialized);
+
+        return array_intersect_key($array, $unique);
     }
 }
