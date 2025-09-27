@@ -138,6 +138,14 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
             if ($node->expr instanceof Node\Expr\Assign) {
                 $this->handleAssignment($node->expr->var, $node->expr->expr, $comments);
             }
+
+            if ($this->isOperationEntrypoint && $node->expr instanceof Node\Expr\Throw_) {
+                $responseType = $this->scope->handleThrowExtensions($node->expr->expr);
+
+                if ($responseType !== null) {
+                    $this->returnTypes[] = $responseType;
+                }
+            }
         }
 
         if ($this->analyzeReturnValue && $node instanceof Node\Stmt\Return_) {

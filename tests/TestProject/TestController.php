@@ -7,6 +7,7 @@ use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
+use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
 
 class TestController
 {
@@ -592,15 +593,13 @@ class TestController
             ],
         ],
     ])]
-    public function route13(): void
-    {
-    }
+    public function route13(): void {}
 
 
     /**
      * @request-header Authorization {required: true, description: 'Authorization header'}
      * @request-header x-state {description: 'Status', deprecated: true, type: StateEnum}
-     * 
+     *
      * @request object{
      *     data: array<string, array{
      *         id: int,
@@ -670,9 +669,7 @@ class TestController
             'required' => false,
         ],
     ])]
-    public function route14(): void
-    {
-    }
+    public function route14(): void {}
 
 
     /**
@@ -700,9 +697,7 @@ class TestController
             ],
         ],
     ])]
-    public function route15(): void
-    {
-    }
+    public function route15(): void {}
 
 
     /**
@@ -734,8 +729,7 @@ class TestController
             ],
         ],
     ])]
-    public function route16()
-    {}
+    public function route16() {}
 
 
     /**
@@ -746,7 +740,7 @@ class TestController
      *     name: non-empty-string,
      *     uuid: string,
      * }
-     * 
+     *
      * @phpstan-ignore return.missing, return.unresolvableType
      */
     #[ExpectedOperationSchema([
@@ -781,8 +775,7 @@ class TestController
             ],
         ],
     ])]
-    public function route17()
-    {}
+    public function route17() {}
 
 
     /**
@@ -793,7 +786,7 @@ class TestController
      *     name: non-empty-string,
      *     uuid: object{x?: int}|\Stringable,
      * }
-     * 
+     *
      * @phpstan-ignore return.missing, return.unresolvableType
      */
     #[ExpectedOperationSchema([
@@ -840,8 +833,7 @@ class TestController
             ],
         ],
     ])]
-    public function route18()
-    {}
+    public function route18() {}
 
 
     #[ExpectedOperationSchema([
@@ -947,7 +939,7 @@ class TestController
 
         return [
             [...[1, 4]],
-            ...[$pi, $pi+1],
+            ...[$pi, $pi + 1],
         ];
     }
 
@@ -971,10 +963,55 @@ class TestController
     ])]
     public function route22(): mixed
     {
-        $a = new SimpleClass();
+        $a = new SimpleClass;
         $a = $a->getValue();
 
         return $a;
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'message' => [
+                                            'type' => 'string',
+                                        ],
+                                        'name' => [
+                                            'const' => 'not_found',
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'name',
+                                        'message',
+                                    ],
+                                ],
+                                [
+                                    'const' => 'ok',
+                                    'type' => 'string',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route23(): mixed
+    {
+        if (rand(0, 1)) {
+            throw new NotFoundException;
+        }
+
+        return 'ok';
     }
 
 

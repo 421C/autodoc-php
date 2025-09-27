@@ -2,8 +2,8 @@
 
 namespace AutoDoc\Tests;
 
-use AutoDoc\Config;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Extensions\NotFoundExceptionExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use AutoDoc\Workspace;
@@ -30,6 +30,10 @@ final class OpenApiSchemaTest extends TestCase
         $config->data['openapi']['show_routes_as_titles'] = false;
         $config->data['openapi']['show_values_for_scalar_types'] = true;
         $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';
+
+        $config->data['extensions'] = [
+            NotFoundExceptionExtension::class,
+        ];
 
         $workspace = Workspace::getDefault($config);
 

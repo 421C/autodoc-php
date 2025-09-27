@@ -41,7 +41,7 @@ class PhpVariable
         /** @var int */
         $currentLine = $node->getAttribute('startLine', 0);
         $possibleTypes = [];
-        
+
         // To prevent infinite loop when doing `$a = $a->method()`, need to start checking from the previous line.
         $currentLine--;
 

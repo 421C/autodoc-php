@@ -572,6 +572,11 @@ class Scope
     }
 
 
+    public function handleThrowExtensions(Node\Expr $expr): ?Type
+    {
+        return (new ExtensionHandler($this))->handleThrowExtensions($expr);
+    }
+
     /**
      * @param Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass<object> $classOrExpr
      */
