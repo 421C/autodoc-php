@@ -102,25 +102,51 @@ class Scope
             return $this->getVariableType($node)?->unwrapType($this->config) ?? new UnknownType;
         }
 
-        if ($node instanceof Node\Expr\MethodCall) {
-            $returnType = $this->getReturnTypeFromExtensions($node);
+        if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
+            if ($node instanceof Node\Expr\MethodCall) {
+                $returnType = $this->getReturnTypeFromExtensions($node);
 
-            if ($returnType !== null) {
-                return $returnType->unwrapType($this->config);
+                if ($returnType !== null) {
+                    return $returnType->unwrapType($this->config);
+                }
             }
 
+            $methodName = (string) $this->getRawValueFromNode($node->name);
             $varType = $this->resolveType($node->var);
 
-            if (isset($varType->className) && $node->name instanceof Node\Identifier) {
-                /** @var class-string<object> */
-                $className = $varType->className;
+            $getMethodReturnType = function (ObjectType $varType) use ($methodName, $node) {
+                if (isset($varType->className)) {
+                    /** @var class-string<object> */
+                    $className = $varType->className;
 
-                $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
-                    name: $node->name->name,
-                    args: PhpFunctionArgument::list($node->args, scope: $this),
-                );
+                    $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
+                        name: $methodName,
+                        args: PhpFunctionArgument::list($node->args, scope: $this),
+                    );
 
-                return $phpClassMethod->getReturnType()->unwrapType($this->config);
+                    return $phpClassMethod->getReturnType()->unwrapType($this->config);
+                }
+
+                return new UnknownType;
+            };
+
+            if ($varType instanceof ObjectType) {
+                return $getMethodReturnType($varType);
+
+            } else if ($varType instanceof UnionType) {
+                $returnTypes = [];
+
+                foreach ($varType->types as $type) {
+                    if ($type instanceof ObjectType) {
+                        $returnType = $getMethodReturnType($type);
+
+                        if (! ($returnType instanceof UnknownType)) {
+                            $returnTypes[] = $returnType;
+                        }
+                    }
+                }
+
+                return (new UnionType($returnTypes))->unwrapType($this->config);
             }
 
             return new UnknownType;
@@ -175,51 +201,75 @@ class Scope
             return $this->resolveType($node->value);
         }
 
-        if ($node instanceof Node\Expr\PropertyFetch) {
+        if ($node instanceof Node\Expr\PropertyFetch || $node instanceof Node\Expr\NullsafePropertyFetch) {
             $varType = $this->resolveType($node->var);
 
-            if ($varType instanceof ObjectType) {
-                $propertyName = $this->getRawValueFromNode($node->name);
+            $getPropertyType = function (ObjectType $varType, string $propertyName) use ($node) {
+                if ($varType->className) {
+                    $varClass = $this->getPhpClass($varType->className);
+                    $propertyType = $this->getPropertyTypeFromExtensions($varClass, $propertyName);
 
-                if ($propertyName) {
-                    if ($varType->className && is_string($propertyName)) {
-                        $varClass = $this->getPhpClass($varType->className);
-                        $propertyType = $this->getPropertyTypeFromExtensions($varClass, $propertyName);
-
-                        if ($propertyType) {
-                            return $propertyType->unwrapType($this->config);
-                        }
+                    if ($propertyType) {
+                        return $propertyType->unwrapType($this->config);
                     }
-
-                    $propertyType = $varType->typeToDisplay->properties[$propertyName]
-                        ?? $varType->properties[$propertyName]
-                        ?? null;
-
-                    $propertyType = $propertyType?->unwrapType($this->config) ?? new UnknownType;
-
-                    if ($propertyType instanceof UnknownType && isset($varClass) && is_string($propertyName)) {
-                        $allowPrivateAndProtected = $node->var instanceof Node\Expr\Variable && $node->var->name === 'this';
-
-                        $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType($this->config) ?? new UnknownType;
-
-                        if ($propertyType instanceof UnknownType) {
-                            $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
-
-                            if ($mixinTag) {
-                                $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
-                                $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
-
-                                if ($propertyType) {
-                                    return $propertyType->unwrapType($this->config);
-                                }
-
-                                return $mixinClass->getProperty($propertyName)?->unwrapType($this->config) ?? new UnknownType;
-                            }
-                        }
-                    }
-
-                    return $propertyType;
                 }
+
+                $propertyType = $varType->typeToDisplay->properties[$propertyName]
+                    ?? $varType->properties[$propertyName]
+                    ?? null;
+
+                $propertyType = $propertyType?->unwrapType($this->config) ?? new UnknownType;
+
+                if ($propertyType instanceof UnknownType && isset($varClass)) {
+                    $allowPrivateAndProtected = $node->var instanceof Node\Expr\Variable && $node->var->name === 'this';
+
+                    $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType($this->config) ?? new UnknownType;
+
+                    if ($propertyType instanceof UnknownType) {
+                        $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
+
+                        if ($mixinTag) {
+                            $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
+                            $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
+
+                            if ($propertyType) {
+                                return $propertyType->unwrapType($this->config);
+                            }
+
+                            return $mixinClass->getProperty($propertyName)?->unwrapType($this->config) ?? new UnknownType;
+                        }
+                    }
+                }
+
+                return $propertyType;
+            };
+
+            $propertyName = (string) $this->getRawValueFromNode($node->name);
+
+            if (! $propertyName) {
+                return new UnknownType;
+            }
+
+            if ($varType instanceof ObjectType) {
+                return $getPropertyType($varType, $propertyName);
+
+            } else if ($varType instanceof UnionType) {
+                $types = [];
+
+                foreach ($varType->types as $type) {
+                    if ($type instanceof ObjectType) {
+                        $propType = $getPropertyType($type, $propertyName);
+
+                        if (! ($propType instanceof UnknownType)) {
+                            $types[] = $propType;
+                        }
+
+                    } else if ($type instanceof NullType && $node instanceof Node\Expr\NullsafePropertyFetch) {
+                        $types[] = $type;
+                    }
+                }
+
+                return (new UnionType($types))->unwrapType($this->config);
             }
 
             return new UnknownType;
@@ -228,21 +278,36 @@ class Scope
         if ($node instanceof Node\Expr\ArrayDimFetch && $node->dim) {
             $varType = $this->resolveType($node->var);
             $key = $this->getRawValueFromNode($node->dim);
-            $type = null;
 
-            if ($varType instanceof ArrayType) {
-                $type = $varType->shape[$key]
-                    ?? $varType->itemType
-                    ?? null;
+            $getArrayItemType = function ($varType) use ($key) {
+                $type = null;
 
-            } else if ($varType instanceof ObjectType) {
-                $type = $varType->typeToDisplay->shape[$key]
-                    ?? $varType->typeToDisplay->properties[$key]
-                    ?? $varType->typeToDisplay->itemType
-                    ?? null;
+                if ($varType instanceof ArrayType) {
+                    $type = $varType->shape[$key]
+                        ?? $varType->itemType
+                        ?? null;
+
+                } else if ($varType instanceof ObjectType) {
+                    $type = $varType->typeToDisplay->shape[$key]
+                        ?? $varType->typeToDisplay->properties[$key]
+                        ?? $varType->typeToDisplay->itemType
+                        ?? null;
+                }
+
+                return $type?->unwrapType($this->config) ?? new UnknownType;
+            };
+
+            if ($varType instanceof UnionType) {
+                $types = [];
+
+                foreach ($varType->types as $type) {
+                    $types[] = $getArrayItemType($type);
+                }
+
+                return (new UnionType($types))->unwrapType($this->config);
             }
 
-            return $type?->unwrapType($this->config) ?? new UnknownType;
+            return $getArrayItemType($varType);
         }
 
         if ($node instanceof Node\Scalar\String_) {
