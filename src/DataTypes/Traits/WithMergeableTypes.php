@@ -22,13 +22,26 @@ trait WithMergeableTypes
 {
     public function mergeDuplicateTypes(bool $mergeAsIntersection = false, ?Config $config = null): void
     {
-        foreach ($this->types as $i => $type) {
-            $this->types[$i] = $type->unwrapType($config);
+        $types = [];
+
+        foreach ($this->types as $type) {
+            $type = $type->unwrapType($config);
+
+            if (($mergeAsIntersection && $type instanceof IntersectionType)
+                || (! $mergeAsIntersection && $type instanceof UnionType)
+            ) {
+                foreach ($type->types as $type) {
+                    $types[] = $type;
+                }
+
+            } else {
+                $types[] = $type;
+            }
         }
 
         $mergedTypes = [];
 
-        foreach ($this->types as $type) {
+        foreach ($types as $type) {
             $merged = false;
 
             foreach ($mergedTypes as $i => $existingType) {

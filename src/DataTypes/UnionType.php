@@ -45,6 +45,13 @@ class UnionType extends Type
                     $nullableType->examples = $this->examples;
                 }
 
+                if (! $nullableType->example) {
+                    $nullableType->example = $this->example;
+                }
+
+                $nullableType->required = $nullableType->required || $this->required;
+                $nullableType->deprecated = $nullableType->deprecated || $this->deprecated;
+
                 $schema = $nullableType->toSchema($config);
 
                 if (isset($schema['type'])) {

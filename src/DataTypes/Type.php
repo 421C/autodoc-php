@@ -44,6 +44,10 @@ abstract class Type
 
                 $type->description = $type->description ?: $this->description;
                 $type->examples = $type->examples ?: $this->examples;
+                $type->example = $type->example ?: $this->example;
+
+                $type->required = $type->required || $this->required;
+                $type->deprecated = $type->deprecated || $this->deprecated;
 
                 return $type->unwrapType($config);
             }
