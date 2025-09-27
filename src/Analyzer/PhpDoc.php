@@ -295,6 +295,21 @@ class PhpDoc
             if ($type) {
                 return $type->unwrapType($this->scope->config);
             }
+
+            // The actual context might be within a trait, so we need to check the trait's PHPDoc for type aliases there.
+            foreach ($this->scope->getCurrentPhpClass()?->getReflection()->getTraits() ?? [] as $traitReflection) {
+                $traitDocComment = $traitReflection->getDocComment();
+
+                if ($traitDocComment) {
+                    $traitPhpDoc = new PhpDoc($traitDocComment, $this->scope);
+
+                    $type = $traitPhpDoc->getTypeAliases()[$identifier] ?? null;
+
+                    if ($type) {
+                        return $type->unwrapType($this->scope->config);
+                    }
+                }
+            }
         }
 
         $templateTypes = $this->getTemplateTypes();
