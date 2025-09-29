@@ -143,6 +143,9 @@ class Scope
                         if (! ($returnType instanceof UnknownType)) {
                             $returnTypes[] = $returnType;
                         }
+
+                    } else if ($type instanceof NullType && $node instanceof Node\Expr\NullsafeMethodCall) {
+                        $returnTypes[] = $type;
                     }
                 }
 
