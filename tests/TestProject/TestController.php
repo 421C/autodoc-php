@@ -8,9 +8,12 @@ use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
 use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
+use AutoDoc\Tests\TestProject\Traits\TestTrait;
 
 class TestController
 {
+    use TestTrait;
+
     /**
      * Route 1
      *
@@ -1012,6 +1015,38 @@ class TestController
         }
 
         return 'ok';
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'a' => [
+                                    'type' => 'integer',
+                                ],
+                                'b' => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => [
+                                'a',
+                                'b',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route24(): mixed
+    {
+        return $this->methodFromTrait();
     }
 
 

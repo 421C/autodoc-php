@@ -301,7 +301,7 @@ class PhpDoc
                 $traitDocComment = $traitReflection->getDocComment();
 
                 if ($traitDocComment) {
-                    $traitPhpDoc = new PhpDoc($traitDocComment, $this->scope);
+                    $traitPhpDoc = new PhpDoc($traitDocComment, $this->scope->createChildScope($traitReflection->getName()));
 
                     $type = $traitPhpDoc->getTypeAliases()[$identifier] ?? null;
 
