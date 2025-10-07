@@ -114,9 +114,8 @@ class Scope
             $methodName = (string) $this->getRawValueFromNode($node->name);
             $varType = $this->resolveType($node->var);
 
-            $getMethodReturnType = function (ObjectType $varType) use ($methodName, $node) {
+            $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($methodName, $node) {
                 if (isset($varType->className)) {
-                    /** @var class-string<object> */
                     $className = $varType->className;
 
                     $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
@@ -130,14 +129,14 @@ class Scope
                 return new UnknownType;
             };
 
-            if ($varType instanceof ObjectType) {
+            if ($varType instanceof ObjectType || $varType instanceof ArrayType) {
                 return $getMethodReturnType($varType);
 
             } else if ($varType instanceof UnionType) {
                 $returnTypes = [];
 
                 foreach ($varType->types as $type) {
-                    if ($type instanceof ObjectType) {
+                    if ($type instanceof ObjectType || $type instanceof ArrayType) {
                         $returnType = $getMethodReturnType($type);
 
                         if (! ($returnType instanceof UnknownType)) {
