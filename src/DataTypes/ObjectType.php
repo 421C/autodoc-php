@@ -38,6 +38,9 @@ class ObjectType extends Type
     public function toSchema(?Config $config = null): array
     {
         if ($this->typeToDisplay) {
+            $this->typeToDisplay->required = $this->typeToDisplay->required || $this->required;
+            $this->typeToDisplay->deprecated = $this->typeToDisplay->deprecated || $this->deprecated;
+
             return $this->typeToDisplay->toSchema($config);
         }
 

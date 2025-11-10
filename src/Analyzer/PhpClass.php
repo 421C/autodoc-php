@@ -95,15 +95,16 @@ class PhpClass
             if ($toArrayMethod->exists()) {
                 $phpDocResultType = $toArrayMethod->getReturnType(doNotAnalyzeBody: true);
 
-                if (! ($phpDocResultType instanceof ArrayType && $phpDocResultType->shape)) {
+                if ($phpDocResultType instanceof ArrayType && $phpDocResultType->shape) {
+                    $objectType->typeToDisplay = $phpDocResultType->unwrapType($this->scope->config);
+
+                } else {
                     $analyzedResultType = $toArrayMethod->getReturnType(usePhpDocIfAvailable: false);
 
                     if (! ($analyzedResultType instanceof UnknownType)) {
-                        return $analyzedResultType->unwrapType($this->scope->config);
+                        $objectType->typeToDisplay = $analyzedResultType->unwrapType($this->scope->config);
                     }
                 }
-
-                return $phpDocResultType->unwrapType($this->scope->config);
             }
 
         } else if (is_a($this->className, Stringable::class, true)) {
@@ -120,10 +121,12 @@ class PhpClass
             return $objectType;
         }
 
-        $classPhpDoc = $this->getPhpDoc();
+        if (! ($this->scope->config->data['classes']['remove_description'] ?? false)) {
+            $classPhpDoc = $this->getPhpDoc();
 
-        if ($classPhpDoc) {
-            $objectType->description = $classPhpDoc->getText();
+            if ($classPhpDoc) {
+                $objectType->description = $classPhpDoc->getText();
+            }
         }
 
         $objectType->properties = $this->getProperties();

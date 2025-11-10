@@ -44,6 +44,9 @@ use Exception;
  *     },
  *     schemas?: array<int|class-string, class-string|EnumConfig>,
  *     enum?: EnumConfig,
+ *     classes?: array{
+ *         remove_description?: bool,
+ *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,
  *     extensions: array<class-string>,

@@ -103,6 +103,12 @@ return [
         'generate_description_from_cases' => true,
     ],
 
+    'classes' => [
+        /**
+         * Ignore description from class PHPDoc comment.
+         */
+        'remove_description' => false,
+    ],
     /**
      * Class that will be used to load and analyze routes.
      * This class must extend `AutoDoc\AbstractRouteLoader`.
