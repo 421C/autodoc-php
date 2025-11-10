@@ -498,6 +498,30 @@ class Scope
     }
 
 
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withoutScalarTypeValueMerging(callable $callback): mixed
+    {
+        $initialValues = [
+            'show' => $this->config->data['openapi']['show_values_for_scalar_types'] ?? false,
+            'merge' => $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true,
+        ];
+
+        $this->config->data['openapi']['show_values_for_scalar_types'] = true;
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = false;
+
+        $returnValue = $callback();
+
+        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+
+        return $returnValue;
+    }
+
+
     public function getRawValueFromNode(Node $node): int|string|float|null
     {
         if ($node instanceof Node\Scalar\String_

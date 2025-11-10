@@ -281,8 +281,8 @@ trait WithMergeableTypes
             $t1Values = $type1->getPossibleValues();
             $t2Values = $type2->getPossibleValues();
 
-            if ($t1Values && $t2Values) {
-                $possibleValues = array_values(array_unique(array_merge($t1Values, $t2Values)));
+            if (($t1Values && $t2Values) || ! ($config?->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)) {
+                $possibleValues = array_values(array_unique(array_merge($t1Values ?? [], $t2Values ?? [])));
 
                 $resultType->setEnumValues($possibleValues);
             }

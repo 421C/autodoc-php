@@ -109,6 +109,11 @@ return [
          */
         'remove_description' => false,
     ],
+
+    'arrays' => [
+        'remove_scalar_type_values_when_merging_with_unknown_types' => true,
+    ],
+
     /**
      * Class that will be used to load and analyze routes.
      * This class must extend `AutoDoc\AbstractRouteLoader`.
