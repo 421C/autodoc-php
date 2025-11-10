@@ -9,7 +9,6 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\Exceptions\AutoDocException;
-use Exception;
 use PhpParser\Comment;
 use PhpParser\Node;
 use Throwable;
@@ -44,17 +43,13 @@ class PhpArray
                         }
 
                     } else {
-                        if (! $typeInUnion->itemType) {
-                            throw new Exception('Unknown array item type');
-                        }
-
                         if ($typeInUnion->itemType instanceof UnionType) {
                             $unpackedUnion = $this->unpackArrayItems($typeInUnion->itemType);
 
                             $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedUnion['itemTypes']);
                             $result['shape'] = array_merge($result['shape'], $unpackedUnion['shape']);
 
-                        } else {
+                        } else if ($typeInUnion->itemType) {
                             $result['itemTypes'][] = $typeInUnion->itemType;
                         }
                     }
@@ -69,17 +64,13 @@ class PhpArray
                 $result['shape'] = $type->shape;
 
             } else {
-                if (! $type->itemType) {
-                    throw new Exception('Unknown array item type');
-                }
-
                 if ($type->itemType instanceof UnionType) {
                     $unpackedUnion = $this->unpackArrayItems($type->itemType);
 
                     $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedUnion['itemTypes']);
                     $result['shape'] = array_merge($result['shape'], $unpackedUnion['shape']);
 
-                } else {
+                } else if ($type->itemType) {
                     $result['itemTypes'][] = $type->itemType;
                 }
             }
