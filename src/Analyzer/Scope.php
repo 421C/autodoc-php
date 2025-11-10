@@ -17,7 +17,6 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
-use AutoDoc\DataTypes\UnresolvedType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
@@ -38,7 +37,7 @@ class Scope
         public ?string $methodName = null,
 
         /**
-         * @var array<string, ?UnresolvedType>
+         * @var array<string, ?Type>
          */
         public array $constructorTemplateTypes = [],
 
@@ -46,6 +45,11 @@ class Scope
          * @var array<PhpFunctionArgument>
          */
         public array $constructorArgs = [],
+
+        /**
+         * @var array<string, PhpVariable>
+         */
+        public array $variables = [],
     ) {}
 
 
@@ -545,15 +549,75 @@ class Scope
             return;
         }
 
-        /** @var int */
-        $line = $varNode->getAttribute('startLine', 0);
+        if (! isset($this->variables[$varNode->name])) {
+            $this->variables[$varNode->name] = new PhpVariable;
+        }
 
-        PhpVariable::assign($varNode->name, $line, $type, $this, $depth);
+        $this->variables[$varNode->name]->assignments[$varNode->getStartLine()] = [$type, $depth];
     }
 
     public function getVariableType(Node\Expr\Variable $varNode): ?Type
     {
-        return PhpVariable::find($varNode, $this);
+        if (! is_string($varNode->name)) {
+            return null;
+        }
+
+        if ($varNode->name === 'this') {
+            if ($this->className) {
+                return new ObjectType(className: $this->className);
+            }
+        }
+
+        if (empty($this->variables[$varNode->name])) {
+            return null;
+        }
+
+        krsort($this->variables[$varNode->name]->assignments);
+
+        $currentLine = $varNode->getStartLine();
+        $possibleTypes = [];
+
+        // To prevent infinite loop when doing `$a = $a->method()`, need to start checking from the previous line.
+        $currentLine--;
+
+        while ($currentLine > 0) {
+            if (isset($this->variables[$varNode->name]->assignments[$currentLine])) {
+                [$varType, $depth] = $this->variables[$varNode->name]->assignments[$currentLine];
+
+                $possibleTypes[] = $varType;
+
+                if ($depth === 0) {
+                    break;
+                }
+            }
+
+            $currentLine--;
+        }
+
+        if (count($possibleTypes) > 1) {
+            return new UnionType($possibleTypes);
+        }
+
+        return $possibleTypes[0] ?? null;
+    }
+
+    /**
+     * @param string[]|null $variableNames
+     */
+    public function transferVariablesFrom(Scope $parentScope, ?array $variableNames = null): void
+    {
+        if ($variableNames === null) {
+            foreach ($parentScope->variables as $varName => $phpVariable) {
+                $this->variables[$varName] = $phpVariable;
+            }
+
+        } else {
+            foreach ($variableNames as $varName) {
+                if (isset($parentScope->variables[$varName])) {
+                    $this->variables[$varName] = $parentScope->variables[$varName];
+                }
+            }
+        }
     }
 
 
