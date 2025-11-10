@@ -54,14 +54,37 @@ class TypeScriptFile
     public function findFirstAutodocTag(Scope $scope, int $startLineIndex = 0): ?AutoDocTag
     {
         $lineIndex = $startLineIndex;
+        $currentTag = '';
+        $tagFinished = true;
 
         while (isset($this->lines[$lineIndex])) {
+            if (! $tagFinished) {
+                $indexOfCommentEnd = strpos($this->lines[$lineIndex], '*/');
+
+                if ($indexOfCommentEnd !== false) {
+                    $tagFinished = true;
+                    $currentTag .= "\n" . substr($this->lines[$lineIndex], 0, $indexOfCommentEnd);
+
+                } else {
+                    $currentTag .= "\n" . $this->lines[$lineIndex];
+                    $lineIndex++;
+
+                    continue;
+                }
+            }
+
             if (preg_match('/^[\s\*\/]*@autodoc\s+(.*?)\s*[\s\*\/]*$/', $this->lines[$lineIndex], $matches)) {
+                $currentTag = $matches[1];
+                $tagFinished = str_contains($this->lines[$lineIndex], '*/');
+            }
+
+            if ($currentTag && $tagFinished) {
                 return new AutoDocTag(
                     scope: $scope,
                     tsFile: $this,
                     lineIndex: $lineIndex,
-                    arguments: preg_split('/\s+/', $matches[1], -1, PREG_SPLIT_NO_EMPTY) ?: [],
+                    value: $currentTag,
+                    addExportKeyword: $this->filePath && ! str_ends_with($this->filePath, '.vue'),
                 );
             }
 

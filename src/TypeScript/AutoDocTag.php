@@ -3,6 +3,7 @@
 namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\UnresolvedType;
 
 class AutoDocTag
 {
@@ -10,11 +11,8 @@ class AutoDocTag
         public Scope $scope,
         public TypeScriptFile $tsFile,
         public int $lineIndex,
-
-        /**
-         * @var string[]
-         */
-        public array $arguments,
+        public string $value,
+        public bool $addExportKeyword = true,
     ) {}
 
     /**
@@ -25,7 +23,10 @@ class AutoDocTag
     private string $existingStructureType;
     private string $existingStructureName;
 
-    public bool $addExportKeyword = true;
+    /**
+     * @var UnresolvedType[]
+     */
+    public array $templateTypeValues = [];
 
 
     public function hasExistingDeclaration(): bool

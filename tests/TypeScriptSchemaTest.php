@@ -2,12 +2,11 @@
 
 namespace AutoDoc\Tests;
 
-use AutoDoc\Config;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Tests\Traits\LoadsConfig;
 use AutoDoc\TypeScript\TypeScriptFile;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
-use AutoDoc\Tests\Traits\LoadsConfig;
 
 final class TypeScriptSchemaTest extends TestCase
 {
@@ -20,10 +19,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc ReflectionEnum */
             ',
-
             expected: '
             /** @autodoc ReflectionEnum */
-            export interface ReflectionEnum {
+            interface ReflectionEnum {
                 name: string
             }
             ',
@@ -38,12 +36,11 @@ final class TypeScriptSchemaTest extends TestCase
                 . '/*' . "\n"
                 . '@autodoc AutoDoc\Tests\TestProject\Entities\GenericClass' . "\n"
                 . '*/' . "\n",
-
             expected: ''
                 . '/*' . "\n"
                 . '@autodoc AutoDoc\Tests\TestProject\Entities\GenericClass' . "\n"
                 . '*/' . "\n"
-                . 'export interface GenericClass {' . "\n"
+                . 'interface GenericClass {' . "\n"
                 . '    data: unknown' . "\n"
                 . '}' . "\n",
         );
@@ -59,7 +56,6 @@ final class TypeScriptSchemaTest extends TestCase
             export enum RocketCategoryEnum {}
             export type RocketName = string
             ',
-
             expected: "
                 /*@autodoc AutoDoc\Tests\TestProject\Entities\RocketCategory
             */
@@ -81,7 +77,6 @@ final class TypeScriptSchemaTest extends TestCase
             type SimpleClass = {
             }
             ',
-
             expected: '
             /** @autodoc AutoDoc\Tests\TestProject\Entities\SimpleClass */
             type SimpleClass = {
@@ -116,7 +111,6 @@ final class TypeScriptSchemaTest extends TestCase
             /** @autodoc AutoDoc\OpenApi\InfoObject */
 
             /** @autodoc ReflectionClass */',
-
             expected: '
             yoo
 
@@ -133,7 +127,7 @@ final class TypeScriptSchemaTest extends TestCase
             @autodoc   AutoDoc\Route  
 
             */
-            export interface Route {
+            interface Route {
                 uri: string
                 method: string
                 className: string|null
@@ -143,21 +137,28 @@ final class TypeScriptSchemaTest extends TestCase
                 responses: Array<{
                     status?: number
                     contentType?: string
-                    body?: unknown
+                    body?: {
+                        description: string|null
+                        examples: unknown|null
+                        required: boolean
+                        deprecated: boolean
+                        example: Record<string, unknown>|string|null
+                        isEnum: boolean
+                    }
                 }>
             }
 
             text ...
 
             /** @autodoc AutoDoc\OpenApi\InfoObject */
-            export interface InfoObject {
+            interface InfoObject {
                 title: string
                 version: string
                 description: string
             }
 
             /** @autodoc ReflectionClass */
-            export interface ReflectionClass {
+            interface ReflectionClass {
                 name: string
             }',
         );
@@ -170,10 +171,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc GET /api/test/closure1 */
             ',
-
             expected: '
             /** @autodoc GET /api/test/closure1 */
-            export type Closure1Response = Array<{
+            type Closure1Response = Array<{
                 test: boolean
             }>
             ',
@@ -187,10 +187,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc GET /api/test/closure3 200 */
             ',
-
             expected: '
             /** @autodoc GET /api/test/closure3 200 */
-            export type Closure3Response = number|null
+            type Closure3Response = number|null
             ',
         );
     }
@@ -202,10 +201,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc get /api/test/route9 */
             ',
-
             expected: '
             /** @autodoc get /api/test/route9 */
-            export interface Route9Response {
+            interface Route9Response {
                 text: string
                 encoded: string
                 count: number
@@ -223,7 +221,6 @@ final class TypeScriptSchemaTest extends TestCase
             /** @autodoc GET /api/test/route6 */
             type TypeWithExistingName = number
             ',
-
             expected: "
             /** @autodoc GET /api/test/route6 */
             type TypeWithExistingName = {
@@ -240,10 +237,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc GET /api/test/closure4 */
             ',
-
             expected: '
             /** @autodoc GET /api/test/closure4 */
-            export interface Closure4Response {
+            interface Closure4Response {
                 list: Array<{
                     id: number
                     name: string
@@ -263,7 +259,6 @@ final class TypeScriptSchemaTest extends TestCase
                 {{{}}}
             }
             ',
-
             expected: '
             /** @autodoc GET /api/test/route10 */
             type TestResponseInterface = [0|1, string]
@@ -279,7 +274,6 @@ final class TypeScriptSchemaTest extends TestCase
             /** @autodoc GET /api/test/route16 */
             type TypeWithExistingName = number
             ',
-
             expected: '
             /** @autodoc GET /api/test/route16 */
             type TypeWithExistingName = {
@@ -296,10 +290,9 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc GET /api/test/route18 */
             ',
-
             expected: '
             /** @autodoc GET /api/test/route18 */
-            export type Route18Response = {
+            interface Route18Response {
                 id: number
                 name: string
                 uuid: {
@@ -317,14 +310,127 @@ final class TypeScriptSchemaTest extends TestCase
             input: '
             /** @autodoc GET /api/test/route14 request */
             ',
-
             expected: '
             /** @autodoc GET /api/test/route14 request */
-            export interface Route14Request {
+            interface Route14Request {
                 data: Record<string, {
                     id: number
                     name?: string
                 }>
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function controllerMethodWithClassRepresentingAssocArray(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc GET /api/test/route29 */
+            ',
+            expected: '
+            /** @autodoc GET /api/test/route29 */
+            type Route29Response = Record<string, number>
+            ',
+        );
+    }
+
+    #[Test]
+    public function classRepresentingAssocArray(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray */
+            interface AssocArray = {}
+            ',
+            expected: '
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray */
+            type AssocArray = Record<string, unknown>
+            ',
+        );
+    }
+
+    #[Test]
+    public function classRepresentingAssocArrayWithTemplateType(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /**
+             * @autodoc AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray<array{
+             *     x: int,
+             * }>
+             */
+            ',
+            expected: '
+            /**
+             * @autodoc AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray<array{
+             *     x: int,
+             * }>
+             */
+            type ClassThatRepresentsAssocArray = Record<string, {
+                x: number
+            }>
+            ',
+        );
+    }
+
+    #[Test]
+    public function stringOrNull(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /**
+             * 
+             * @autodoc string|null
+             * 
+             */
+            ',
+            expected: '
+            /**
+             * 
+             * @autodoc string|null
+             * 
+             */
+            type UnnamedType = string|null
+            ',
+        );
+    }
+
+    #[Test]
+    public function objectIntersection(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /**
+             * @autodoc array{
+             *     id: int,
+             *     name?: string,
+             * } & array{
+             *     name: non-empty-string,
+             *     uuid: string,
+             * }
+             * 
+             * Description...
+             */
+            type IntersectionExample = ?
+            ',
+            expected: '
+            /**
+             * @autodoc array{
+             *     id: int,
+             *     name?: string,
+             * } & array{
+             *     name: non-empty-string,
+             *     uuid: string,
+             * }
+             * 
+             * Description...
+             */
+            type IntersectionExample = {
+                id: number
+                name: string
+                uuid: string
             }
             ',
         );

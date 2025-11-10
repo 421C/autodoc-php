@@ -3,6 +3,8 @@
 namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\PhpClass;
+use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -23,41 +25,47 @@ use AutoDoc\Route;
 use Exception;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
-use UnitEnum;
 
 class TypeScriptGenerator
 {
     public function __construct(
         public Config $config,
-    ) {}
+    ) {
+        $this->scope = new Scope($this->config);
+        $this->extensionHandler = new ExtensionHandler($this->scope);
+    }
+
+    private Scope $scope;
+    private ExtensionHandler $extensionHandler;
 
     /**
      * @return string[]
      */
     public function generateTypeScriptDeclaration(AutoDocTag $tag): array
     {
-        if (! isset($tag->arguments[0])) {
+        if (empty($tag->value)) {
             throw new Exception('Missing argument after @autodoc tag');
         }
 
-        if (count($tag->arguments) === 1) {
-            $className = $tag->arguments[0];
+        if (! preg_match('/^(GET|HEAD|POST|PUT|DELETE|PATCH|CONNECT|OPTIONS|TRACE)\s+(.*)/i', $tag->value)) {
+            $phpDoc = new PhpDoc(
+                docComment: '/** ' . ' */',
+                scope: $tag->scope,
+            );
 
-            if (! class_exists($className)) {
-                print_r(get_declared_classes());
+            $type = $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tag->value))->unwrapType($this->config);
 
-                throw new Exception('Class "' . $className . '" not found');
-            }
-
-            return $this->generateTypeScriptDeclarationFromClass($tag, $className);
+            return $this->generateTypeScriptDeclarationFromType($tag, $type);
         }
 
         $indent = $this->config->data['typescript']['indent'] ?? '    ';
         $baseIndent = $tag->getDeclarationIndent();
 
-        $httpMethod = strtoupper($tag->arguments[0]);
-        $routeUri = trim($tag->arguments[1], '/');
-        $responseStatusOrRequestKeyword = $tag->arguments[2] ?? null;
+        $arguments = preg_split('/\s+/', $tag->value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        $httpMethod = strtoupper($arguments[0]);
+        $routeUri = trim($arguments[1], '/');
+        $responseStatusOrRequestKeyword = $arguments[2] ?? null;
 
         $routeLoader = $this->config->getRouteLoader();
         $route = null;
@@ -191,24 +199,38 @@ class TypeScriptGenerator
     }
 
     /**
-     * @param class-string $className
      * @return string[]
      */
-    private function generateTypeScriptDeclarationFromClass(AutoDocTag $tag, string $className): array
+    private function generateTypeScriptDeclarationFromType(AutoDocTag $tag, Type $type): array
     {
         $indent = $this->config->data['typescript']['indent'] ?? '    ';
         $baseIndent = $tag->getDeclarationIndent();
 
-        $phpClass = $tag->scope->getPhpClass($className);
-        $name = $tag->getExistingStructureName() ?? PhpClass::basename($phpClass->className);
+        $name = $tag->getExistingStructureName();
+
+        if ($name === null) {
+            if ($type instanceof ObjectType && $type->className) {
+                $name = PhpClass::basename($type->className);
+
+            } else {
+                $name = 'UnnamedType';
+            }
+        }
+
+        $enumClassName = null;
+
+        if ($type instanceof ObjectType && $type->className) {
+            if (enum_exists($type->className)) {
+                $enumClassName = $type->className;
+            }
+        }
+
         $tsLines = [];
 
-        if ($phpClass->getReflection()->isEnum()) {
-            /** @var PhpClass<UnitEnum> $phpClass */
-
+        if ($enumClassName) {
             $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "enum $name {";
 
-            $reflectionEnum = new ReflectionEnum($phpClass->className);
+            $reflectionEnum = new ReflectionEnum($enumClassName);
 
             foreach ($reflectionEnum->getCases() as $enumCase) {
                 if ($enumCase instanceof ReflectionEnumBackedCase) {
@@ -228,17 +250,36 @@ class TypeScriptGenerator
             $tsLines[] = $baseIndent . '}';
 
         } else {
-            $structureType = $tag->getExistingStructureType() ?? 'interface';
+            if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
+                $phpClass = new PhpClass($type->className, $this->scope);
 
-            $extensionHandler = new ExtensionHandler($tag->scope);
-            $type = $extensionHandler->handleTypeScriptExportExtensions($phpClass, $phpClass->resolveType());
+                $type = $this->extensionHandler->handleTypeScriptExportExtensions($phpClass, $type);
+            }
+
+            if ($type instanceof ObjectType && $type->typeToDisplay) {
+                if ($type->typeToDisplay instanceof ObjectType
+                    || $type->typeToDisplay instanceof ArrayType
+                ) {
+                    $type = $type->typeToDisplay;
+                }
+            }
+
             $properties = [];
 
             if ($type instanceof ObjectType) {
                 $properties = $type->properties;
 
-            } else if ($type instanceof ArrayType && $type->shape) {
-                $properties = $type->shape;
+            } else if ($type instanceof ArrayType) {
+                if ($type->shape) {
+                    $properties = $type->shape;
+                }
+            }
+
+            if ($this->isObjectOrArrayShape($type)) {
+                $structureType = $tag->getExistingStructureType() ?? 'interface';
+
+            } else {
+                $structureType = 'type';
             }
 
             $declarationHeader = $baseIndent
@@ -262,6 +303,13 @@ class TypeScriptGenerator
 
                 $tsLines[] = $baseIndent . '}';
 
+            } else if (! ($type instanceof ObjectType)) {
+                $tsLines[] = $declarationHeader . $this->convertAutoDocTypeToTsType(
+                    type: $type,
+                    indent: $indent,
+                    baseIndent: $baseIndent,
+                );
+
             } else {
                 $tsLines[] = $declarationHeader . '{}';
             }
@@ -274,6 +322,12 @@ class TypeScriptGenerator
     private function convertAutoDocTypeToTsType(Type $type, string $indent, string $baseIndent): string
     {
         $type = $type->unwrapType($this->config);
+
+        if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
+            $phpClass = new PhpClass($type->className, $this->scope);
+
+            $type = $this->extensionHandler->handleTypeScriptExportExtensions($phpClass, $type);
+        }
 
         if ($type instanceof IntegerType || $type instanceof NumberType) {
             if ($type->isEnum || ($this->config->data['typescript']['show_values_for_scalar_types'] ?? true)) {
