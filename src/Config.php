@@ -16,6 +16,7 @@ use Exception;
  *
  * @phpstan-type WorkspaceConfig array{
  *     routes?: string[],
+ *     exact_routes?: string[],
  *     schemas?: array<int|class-string, class-string|EnumConfig>,
  *     enum?: EnumConfig,
  *     export_filename?: string,

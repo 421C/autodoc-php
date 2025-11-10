@@ -123,6 +123,12 @@ abstract class AbstractRouteLoader
             }
         }
 
+        foreach ($this->config->selectedWorkspace['exact_routes'] ?? [] as $exactRoute) {
+            if (trim($route->uri, '/') === trim($exactRoute, '/')) {
+                return true;
+            }
+        }
+
         return false;
     }
 
