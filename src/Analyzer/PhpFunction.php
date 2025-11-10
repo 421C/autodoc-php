@@ -2,19 +2,18 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedClassType;
-use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\UnresolvedReflectionType;
-use AutoDoc\DataTypes\UnresolvedType;
 use PhpParser\Node;
-use PHPStan\PhpDocParser\Ast\PhpDoc\GenericTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
-use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
+use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 
@@ -69,23 +68,7 @@ class PhpFunction
             return null;
         }
 
-        $phpDoc->templateTypes = array_merge(
-            $phpDoc->getTemplateTypes(),
-            $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? [],
-            $this->fillTemplateTypesFromParameters(),
-        );
-
-        if ($tagValueNode instanceof ReturnTagValueNode) {
-            return $phpDoc->createUnresolvedType(
-                typeNode: $tagValueNode->type,
-                description: $tagValueNode->description,
-            );
-
-        } else if ($tagValueNode instanceof GenericTagValueNode) {
-            return $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tagValueNode->value));
-        }
-
-        return null;
+        return $phpDoc->getTypeFromPhpDocTag($tagValueNode, $this->fillTemplateTypesFromParameters());
     }
 
 
@@ -113,7 +96,7 @@ class PhpFunction
     }
 
 
-    private function getParsedArgumentType(string $name): ?UnresolvedParserNodeType
+    private function getParsedArgumentType(string $name): ?Type
     {
         foreach ($this->reflection->getParameters() as $paramIndex => $reflectionParameter) {
             if ($name !== $reflectionParameter->name) {
@@ -124,11 +107,15 @@ class PhpFunction
                 if ($arg->node instanceof Node\Arg) {
                     if ($arg->node->name === null) {
                         if ($paramIndex === $argIndex) {
-                            return new UnresolvedParserNodeType(node: $arg->node->value, scope: $arg->scope);
+                            return $arg->getType();
                         }
 
                     } else if ($arg->node->name->name === $name) {
-                        return new UnresolvedParserNodeType(node: $arg->node->value, scope: $arg->scope);
+                        return $arg->getType();
+                    }
+                } else if ($arg->node instanceof Type) {
+                    if ($paramIndex === $argIndex) {
+                        return $arg->getType();
                     }
                 }
             }
@@ -155,14 +142,15 @@ class PhpFunction
 
 
     /**
-     * @return array<string, ?UnresolvedType>
+     * @return array<string, ?Type>
      */
     public function fillTemplateTypesFromParameters(): array
     {
+        $templateTypes = $this->getPhpDoc()?->getTemplateTypes() ?? [];
         $phpDocParamTypes = $this->getPhpDoc()?->getParameters() ?? [];
 
         if ($this->reflection->getName() === '__construct') {
-            // Need to check not only @param tags but also @var tags for promoted constructor properties.
+            $templateTypes = array_merge($templateTypes, $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? []);
 
             $propNodeVisitor = new ClassConstructorPropertyVisitor($this->scope);
 
@@ -171,30 +159,53 @@ class PhpFunction
             $phpDocParamTypes = array_merge($phpDocParamTypes, $propNodeVisitor->promotedProperties);
         }
 
-        $templateTypes = [];
-
         foreach ($phpDocParamTypes as $name => $unresolvedType) {
-            $resolvedType = $unresolvedType->resolve();
+            $docTypeNode = $unresolvedType->typeNode;
 
-            if ($resolvedType instanceof UnknownType) {
-                $templateTypeName = $unresolvedType->getIdentifier();
+            if ($docTypeNode instanceof IdentifierTypeNode) {
+                if (array_key_exists($docTypeNode->name, $templateTypes)) {
+                    $parsedArgumentType = $this->getParsedArgumentType($name)?->unwrapType($this->scope->config);
 
-                if ($templateTypeName) {
-                    $templateTypes[$templateTypeName] = $this->getParsedArgumentType($name);
+                    if ($parsedArgumentType) {
+                        $templateTypes[$docTypeNode->name] = $parsedArgumentType;
+                    }
                 }
-            }
 
-            if ($resolvedType instanceof ClassStringType) {
-                if (isset($resolvedType->classTemplateType)) {
-                    $templateTypeName = $resolvedType->classTemplateType->getIdentifier();
+            } else if ($docTypeNode instanceof GenericTypeNode && $docTypeNode->genericTypes) {
+                if (in_array($docTypeNode->type->name, ['array', 'iterable', 'list', 'non-empty-array', 'non-empty-list'])) {
 
-                    if ($templateTypeName) {
-                        $parameterValue = $this->getParsedArgumentType($name)?->resolve();
+                    if (isset($docTypeNode->genericTypes[0], $docTypeNode->genericTypes[1])) {
+                        $keyType = $docTypeNode->genericTypes[0];
+                        $itemType = $docTypeNode->genericTypes[1];
 
-                        if ($parameterValue instanceof ClassStringType) {
-                            $templateTypes[$templateTypeName] = new UnresolvedClassType($parameterValue->className, $this->scope);
+                    } else {
+                        $keyType = null;
+                        $itemType = $docTypeNode->genericTypes[0] ?? null;
+                    }
+
+                    if ($itemType instanceof IdentifierTypeNode && array_key_exists($itemType->name, $templateTypes)) {
+                        $argumentType = $this->getParsedArgumentType($name)?->unwrapType($this->scope->config);
+
+                        if ($argumentType instanceof ArrayType) {
+                            $argumentType->convertShapeToTypePair($this->scope->config);
+
+                            $templateTypes[$itemType->name] = $argumentType->itemType;
                         }
                     }
+
+                } else if ($docTypeNode->type->name === 'class-string') {
+                    $paramName = $docTypeNode->genericTypes[0]->name ?? null;
+
+                    if ($paramName && array_key_exists($paramName, $templateTypes)) {
+                        $parameterValue = $this->getParsedArgumentType($name)?->unwrapType($this->scope->config);
+
+                        if ($parameterValue instanceof ClassStringType) {
+                            $templateTypes[$paramName] = new UnresolvedClassType($parameterValue->className, $this->scope);
+                        }
+                    }
+
+                } else {
+                    dd($docTypeNode, 76767);
                 }
             }
         }

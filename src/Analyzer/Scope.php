@@ -5,6 +5,7 @@ namespace AutoDoc\Analyzer;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
+use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
@@ -92,6 +93,7 @@ class Scope
                 'bool', 'boolean' => new BoolType,
                 'array', 'iterable' => new ArrayType,
                 'object' => new ObjectType,
+                'callable' => new CallableType,
                 'null' => new NullType,
                 'void' => new VoidType,
                 default => new UnknownType,
@@ -169,6 +171,13 @@ class Scope
                 );
 
                 return $function->getReturnType()->unwrapType($this->config);
+
+            } else {
+                $functionNodeType = $this->resolveType($node->name);
+
+                if ($functionNodeType instanceof CallableType) {
+                    return $functionNodeType->getReturnType(PhpFunctionArgument::list($node->args, scope: $this));
+                }
             }
         }
 
@@ -470,6 +479,17 @@ class Scope
             return new NumberType;
         }
 
+        if ($node instanceof Node\Expr\ArrowFunction
+            || $node instanceof Node\Expr\Closure
+        ) {
+            return new CallableType(
+                anonymousFunction: new PhpAnonymousFunction(
+                    node: $node,
+                    scope: $this,
+                ),
+            );
+        }
+
         return new UnknownType;
     }
 
@@ -559,6 +579,10 @@ class Scope
         }
 
         if (! $this->className) {
+            if (class_exists($name)) {
+                return $name;
+            }
+
             return null;
         }
 

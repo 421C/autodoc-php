@@ -2,18 +2,23 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use PhpParser\Node;
 
 class PhpFunctionArgument
 {
     public function __construct(
-        public Node\Arg|Node\VariadicPlaceholder $node,
+        public Node\Arg|Node\VariadicPlaceholder|Type $node,
         public Scope $scope,
     ) {}
 
-    public function getType(): ?UnresolvedParserNodeType
+    public function getType(): ?Type
     {
+        if ($this->node instanceof Type) {
+            return $this->node;
+        }
+
         if ($this->node instanceof Node\Arg) {
             return new UnresolvedParserNodeType(node: $this->node->value, scope: $this->scope);
         }

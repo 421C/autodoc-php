@@ -1050,6 +1050,180 @@ class TestController
     }
 
 
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'integer',
+                                'const' => 1,
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route25(): mixed
+    {
+        $a = 1;
+
+        $closure = function () use ($a) {
+            return [
+                $a,
+            ];
+        };
+
+        return $closure();
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'number' => [
+                                    'type' => 'number',
+                                    'format' => 'float',
+                                    'const' => 42.1,
+                                ],
+                            ],
+                            'required' => [
+                                'number',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route26(): mixed
+    {
+        $x = 42.1;
+
+        $closure = function ($number) {
+            return (object) [
+                'number' => $number,
+            ];
+        };
+
+        return $closure($x);
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'const' => 2,
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'const' => '%',
+                                    'type' => 'string',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route27(): mixed
+    {
+        $arrowFn = fn ($data) => $data['x'] > 5 ? $data['y'] : $data['z'];
+
+        return $arrowFn([
+            'x' => 1,
+            'y' => 2,
+            'z' => '%',
+        ]);
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'a' => [
+                                    'properties' => [
+                                        'a' => [
+                                            'type' => 'boolean',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                                'b' => [
+                                    'properties' => [
+                                        'b' => [
+                                            'type' => 'boolean',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'b',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                                'c' => [
+                                    'const' => 15,
+                                    'type' => 'integer',
+                                ],
+                                'd' => [
+                                    'type' => 'boolean',
+                                ],
+                            ],
+                            'required' => [
+                                'a',
+                                'b',
+                                'c',
+                                'd',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route28(): mixed
+    {
+        $outerVar = true;
+        $arrowFn = fn ($key) => [$key => $outerVar];
+
+        return [
+            'a' => $arrowFn('a'),
+            'b' => $arrowFn('b'),
+            'c' => (function () {
+                $outerVar = 15;
+
+                return $outerVar;
+            })(),
+            'd' => (function () use ($outerVar) {
+                return $outerVar;
+            })(),
+        ];
+    }
     /**
      * @template TClass of object
      *

@@ -478,6 +478,32 @@ class PhpDoc
         return array_column($this->node->getTagsByName('@response'), 'value')[0] ?? null;
     }
 
+
+    /**
+     * @param array<string, ?Type> $templateTypes
+     */
+    public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode, array $templateTypes = []): ?UnresolvedPhpDocType
+    {
+        $this->templateTypes = array_merge(
+            $this->getTemplateTypes(),
+            $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? [],
+            $templateTypes,
+        );
+
+        if ($tagValueNode instanceof ReturnTagValueNode) {
+            return $this->createUnresolvedType(
+                typeNode: $tagValueNode->type,
+                description: $tagValueNode->description,
+            );
+
+        } else if ($tagValueNode instanceof GenericTagValueNode) {
+            return $this->createUnresolvedType($this->createTypeNode($tagValueNode->value));
+        }
+
+        return null;
+    }
+
+
     /**
      * @return array{
      *     body: ?Type,
@@ -644,6 +670,12 @@ class PhpDoc
         }
 
         return null;
+    }
+
+
+    public function getAutodocTag(): ?PhpDocTagValueNode
+    {
+        return array_column($this->node->getTagsByName('@autodoc'), 'value')[0] ?? null;
     }
 
 
