@@ -263,7 +263,11 @@ class PhpDoc
     private function resolveTypeFromIdentifier(string $identifier, array $genericTypeValues = []): ?Type
     {
         $type = match ($identifier) {
-            'int', 'integer', 'positive-int', 'negative-int', 'non-positive-int', 'non-negative-int', 'non-zero-int' => new IntegerType,
+            'int', 'integer', 'non-zero-int' => new IntegerType,
+            'positive-int' => new IntegerType(minimum: 1),
+            'negative-int' => new IntegerType(maximum: -1),
+            'non-positive-int' => new IntegerType(maximum: 0),
+            'non-negative-int' => new IntegerType(minimum: 0),
             'float', 'double' => new FloatType,
             'string', 'lowercase-string', 'uppercase-string', 'literal-string',
             'non-empty-lowercase-string', 'non-empty-uppercase-string', 'non-empty-literal-string',
@@ -273,7 +277,9 @@ class PhpDoc
             'true' => new BoolType(true),
             'false' => new BoolType(false),
             'bool', 'boolean' => new BoolType,
-            'array', 'associative-array', 'non-empty-array', 'list', 'non-empty-list', 'iterable' => new ArrayType,
+            'array', 'list', 'iterable' => new ArrayType,
+            'non-empty-array', 'non-empty-list' => new ArrayType(minItems: 1),
+            'associative-array' => new ObjectType,
             'object' => new ObjectType,
             'scalar' => new UnionType([
                 new IntegerType,
