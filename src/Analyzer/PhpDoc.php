@@ -109,9 +109,15 @@ class PhpDoc
              * array<keyType, itemType>
              */
             if ($type instanceof ArrayType) {
-                if (count($genericTypeValues) == 2) {
+                if (isset($genericTypeValues[0], $genericTypeValues[1])) {
                     $type->keyType = $genericTypeValues[0];
-                    $type->itemType = $genericTypeValues[1] ?? new UnknownType;
+                    $type->itemType = $genericTypeValues[1];
+
+                    if ($type->itemType->typeNode instanceof IdentifierTypeNode
+                        && isset($this->scope->constructorTemplateTypes[$type->itemType->typeNode->name])
+                    ) {
+                        $type->itemType = $this->scope->constructorTemplateTypes[$type->itemType->typeNode->name];
+                    }
 
                 } else {
                     $type->itemType = $genericTypeValues[0];
@@ -357,7 +363,7 @@ class PhpDoc
             $identifier = $varType->getIdentifier();
 
             if ($identifier && isset($this->scope->constructorTemplateTypes[$identifier])) {
-                return $this->scope->constructorTemplateTypes[$identifier]->resolve();
+                return $this->scope->constructorTemplateTypes[$identifier]->unwrapType();
             }
 
             return $varType->resolve();

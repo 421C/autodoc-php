@@ -69,4 +69,30 @@ class ArrayType extends Type
             ]);
         }
     }
+
+
+    public function convertShapeToTypePair(?Config $config = null): self
+    {
+        if ($this->shape) {
+            $keyTypes = [];
+            $itemTypes = [];
+
+            foreach ($this->shape as $key => $value) {
+                if (is_int($key)) {
+                    $keyTypes[] = new IntegerType($key);
+
+                } else {
+                    $keyTypes[] = new StringType($key);
+                }
+
+                $itemTypes[] = $value;
+            }
+
+            $this->keyType = (new UnionType($keyTypes))->unwrapType($config);
+            $this->itemType = (new UnionType($itemTypes))->unwrapType($config);
+            $this->shape = [];
+        }
+
+        return $this;
+    }
 }

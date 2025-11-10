@@ -3,6 +3,8 @@
 namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
@@ -87,11 +89,21 @@ class PhpArray
     }
 
 
-    public function resolveType(): ArrayType
+    public function resolveType(): Type
     {
         try {
             $arrayType = new ArrayType;
+            $keyTypes = [];
             $itemTypes = [];
+
+            if (! $this->node->items) {
+                return $arrayType;
+            }
+
+            /** @var array{array<int|string>, Type}[] */
+            $keysWithVariants = [];
+
+            $hasAtLeastOneUnknownKey = false;
 
             foreach ($this->node->items as $arrayItemNode) {
                 if ($arrayItemNode->unpack) {
@@ -138,18 +150,108 @@ class PhpArray
 
                     $itemTypes[] = $itemType;
 
-                    if ($arrayItemNode->key instanceof Node\Scalar\String_
-                        || $arrayItemNode->key instanceof Node\Scalar\Int_
-                    ) {
+                    if ($arrayItemNode->key instanceof Node\Scalar\Int_) {
                         $arrayType->shape[$arrayItemNode->key->value] = $itemType;
+                        $keyTypes[] = new IntegerType($arrayItemNode->key->value);
+
+                    } else if ($arrayItemNode->key instanceof Node\Scalar\String_) {
+                        $arrayType->shape[$arrayItemNode->key->value] = $itemType;
+                        $keyTypes[] = new StringType($arrayItemNode->key->value);
+
+                    } else {
+                        $keyType = $arrayItemNode->key ? $this->scope->resolveType($arrayItemNode->key) : new IntegerType;
+                        $keyTypes[] = $keyType;
+
+                        if ($keyType instanceof StringType || $keyType instanceof IntegerType) {
+                            $keyVariants = $keyType->getPossibleValues() ?? [];
+
+                            if (count($keyVariants) === 1) {
+                                $arrayType->shape[$keyVariants[0]] = $itemType;
+
+                            } else if ($keyVariants) {
+                                $keysWithVariants[] = [$keyVariants, $itemType];
+
+                            } else {
+                                $hasAtLeastOneUnknownKey = true;
+                            }
+
+                        } else if ($keyType instanceof UnionType) {
+                            $keyVariants = [];
+
+                            foreach ($keyType->types as $keyType) {
+                                if ($keyType instanceof StringType) {
+                                    $possibleValues = $keyType->getPossibleValues();
+
+                                    if ($possibleValues) {
+                                        $keyVariants = array_merge($keyVariants, $possibleValues);
+
+                                    } else {
+                                        $hasAtLeastOneUnknownKey = true;
+                                    }
+                                }
+                            }
+
+                            $keysWithVariants[] = [$keyVariants, $itemType];
+                        }
                     }
                 }
             }
 
-            if (! $arrayType->shape) {
-                $itemTypesUnion = new UnionType($itemTypes);
+            if ($hasAtLeastOneUnknownKey) {
+                $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
 
-                $arrayType->itemType = $itemTypesUnion->unwrapType($this->scope->config);
+                if ($keyTypes) {
+                    $arrayType->keyType = (new UnionType($keyTypes))->unwrapType($this->scope->config);
+                }
+
+                $arrayType->shape = [];
+
+                return $arrayType;
+            }
+
+            if ($keysWithVariants) {
+                $unionType = new UnionType;
+
+                foreach ($keysWithVariants as $keyIndex => $keyWithVariants) {
+                    [$keyVariants, $itemType] = $keyWithVariants;
+
+                    foreach ($keyVariants as $keyVariant) {
+                        $variantShapes = [];
+
+                        foreach ($keysWithVariants as $otherKeyIndex => $otherKeyWithVariants) {
+                            if ($keyIndex !== $otherKeyIndex) {
+                                [$otherKeyVariants, $otherItemType] = $otherKeyWithVariants;
+
+                                foreach ($otherKeyVariants as $otherKeyVariant) {
+                                    $variantShapes[] = [
+                                        $keyVariant => $itemType,
+                                        $otherKeyVariant => $otherItemType,
+                                    ];
+                                }
+                            }
+                        }
+
+                        if (! $variantShapes) {
+                            $variantShapes[] = [
+                                $keyVariant => $itemType,
+                            ];
+                        }
+
+                        foreach ($variantShapes as $variantShape) {
+                            $unionType->types[] = new ArrayType(shape: array_merge($arrayType->shape, $variantShape));
+                        }
+                    }
+                }
+
+                return $unionType->unwrapType($this->scope->config);
+            }
+
+            if (! $arrayType->shape) {
+                $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
+
+                if ($keyTypes) {
+                    $arrayType->keyType = (new UnionType($keyTypes))->unwrapType($this->scope->config);
+                }
             }
 
             return $arrayType;

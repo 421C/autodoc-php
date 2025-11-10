@@ -3,8 +3,10 @@
 namespace AutoDoc\Tests\TestProject;
 
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
+use AutoDoc\Tests\TestProject\Entities\RocketCategory;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
 use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
@@ -1224,6 +1226,247 @@ class TestController
             })(),
         ];
     }
+
+
+    /** @phpstan-ignore missingType.generics */
+    #[ExpectedOperationSchema([
+        'summary' => '',
+        'description' => '',
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'additionalProperties' => [
+                                'enum' => [
+                                    1,
+                                    2,
+                                ],
+                                'type' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route29(): ClassThatRepresentsAssocArray
+    {
+        return new ClassThatRepresentsAssocArray([
+            'a' => 1,
+            'b' => 2,
+        ]);
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 1,
+                                            'type' => 'integer',
+                                        ],
+                                        'b' => [
+                                            'const' => 2,
+                                            'type' => 'integer',
+                                        ],
+                                        'c' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                        'c',
+                                    ],
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 1,
+                                            'type' => 'integer',
+                                        ],
+                                        'b' => [
+                                            'const' => 2,
+                                            'type' => 'integer',
+                                        ],
+                                        'd' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                        'd',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route30(): mixed
+    {
+        $cOrD = rand(1, 0) ? 'c' : 'd';
+
+        return [
+            'a' => 1,
+            'b' => 2,
+            $cOrD => 100,
+        ];
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 5,
+                                            'type' => 'integer',
+                                        ],
+                                        'c' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 5,
+                                            'type' => 'integer',
+                                        ],
+                                        'd' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'b' => [
+                                            'const' => 5,
+                                            'type' => 'integer',
+                                        ],
+                                        'c' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'b' => [
+                                            'const' => 5,
+                                            'type' => 'integer',
+                                        ],
+                                        'd' => [
+                                            'const' => 100,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route31(): mixed
+    {
+        $aOrB = rand(1, 0) ? 'a' : 'b';
+        $cOrD = rand(1, 0) ? 'c' : 'd';
+
+        return [
+            $aOrB => 5,
+            $cOrD => 100,
+        ];
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                15 => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'anyOf' => [
+                                            [
+                                                'const' => 4.21,
+                                                'format' => 'float',
+                                                'type' => 'number',
+                                            ],
+                                            [
+                                                'description' => '[RocketCategory](#/schemas/RocketCategory)',
+                                                'enum' => [
+                                                    'Big',
+                                                    'Small',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                            [
+                                                'type' => 'boolean',
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                15,
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route32(): mixed
+    {
+        $i = 15;
+
+        return [
+            $i => [
+                'a' => 4.21,
+                'b' => true,
+                strtolower('C') => RocketCategory::Big,
+            ],
+        ];
+    }
+
+
     /**
      * @template TClass of object
      *

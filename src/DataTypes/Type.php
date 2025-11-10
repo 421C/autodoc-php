@@ -59,7 +59,7 @@ abstract class Type
             $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
 
         } else if (is_a($this, UnresolvedType::class)) {
-            return $this->resolve();
+            return $this->resolve()->unwrapType($config);
         }
 
         return $this;

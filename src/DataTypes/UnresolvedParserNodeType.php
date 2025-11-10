@@ -34,7 +34,7 @@ class UnresolvedParserNodeType extends UnresolvedType
 
                 } else {
                     if ($type->itemType) {
-                        $type->itemType = new UnionType([$type->itemType->unwrapType($this->scope->config), $valueType]);
+                        $type->itemType = (new UnionType([$type->itemType, $valueType]))->unwrapType($this->scope->config);
 
                     } else {
                         $type->itemType = $valueType;

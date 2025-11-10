@@ -407,10 +407,10 @@ class Scope
 
             $phpClass = $this->getPhpClassInDeeperScope($className);
 
-            $templateTypes = $phpClass->getPhpDoc()?->getTemplateTypes();
-
-            $phpClass->scope->constructorArgs = PhpFunctionArgument::list($node->args, scope: $this);
             $phpClass->isFinalResponse = $isFinalResponse;
+            $phpClass->scope->constructorArgs = PhpFunctionArgument::list($node->args, scope: $this);
+
+            $templateTypes = $phpClass->getPhpDoc()?->getTemplateTypes();
 
             if ($templateTypes) {
                 $constructor = $phpClass->getMethod('__construct', $phpClass->scope->constructorArgs)->getPhpFunction();
@@ -597,13 +597,20 @@ class Scope
      */
     public function createChildScope(?string $className = null, ?string $methodName = null): Scope
     {
-        return new Scope(
+        $scope = new Scope(
             config: $this->config,
             depth: $this->depth + 1,
             route: $this->route,
             className: $className,
             methodName: $methodName,
         );
+
+        if ($this->className && $this->className === $className) {
+            $scope->constructorArgs = $this->constructorArgs;
+            $scope->constructorTemplateTypes = $this->constructorTemplateTypes;
+        }
+
+        return $scope;
     }
 
     /**
