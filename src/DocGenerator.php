@@ -32,7 +32,7 @@ class DocGenerator
 
         $openApi->servers[] = new Server(
             $config->data['api']['domain'] ?? '',
-            $config->data['api']['description'] ?? '',
+            '',
         );
 
         $openApi->components['schemas'] = $this->getSchemaComponents($config);
