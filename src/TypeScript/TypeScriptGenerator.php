@@ -85,7 +85,7 @@ class TypeScriptGenerator
                 $tsLines = $this->generateTypeScriptDeclarationFromRequestBody($tag, $operation, $route);
 
             } else {
-                if ($responseStatusOrRequestKeyword) {
+                if ($responseStatusOrRequestKeyword && ! str_contains($responseStatusOrRequestKeyword, '{')) {
                     $httpStatus = $responseStatusOrRequestKeyword;
 
                 } else {
@@ -93,7 +93,7 @@ class TypeScriptGenerator
                 }
 
                 if ($httpStatus === null) {
-                    $this->error($tag, 'Response not found for route "' . $httpMethod . ' /' . trim($route->uri, '/') . '"');
+                    $tag->reportError('Response not found for route "' . $httpMethod . ' /' . trim($route->uri, '/') . '"');
 
                 } else {
                     $tsLines = $this->generateTypeScriptDeclarationFromResponse($tag, $operation, $route, $httpStatus);
@@ -101,7 +101,7 @@ class TypeScriptGenerator
             }
 
         } else {
-            $this->error($tag, 'Route "' . $httpMethod . ' /' . $routeUri . '" not found');
+            $tag->reportError('Route "' . $httpMethod . ' /' . $routeUri . '" not found');
         }
 
         return $tsLines;
@@ -125,7 +125,7 @@ class TypeScriptGenerator
             }
 
             if ($this->isObjectOrArrayShape($type)) {
-                $structureType = $tag->getExistingStructureType() ?? 'interface';
+                $structureType = $tag->getExistingStructureType() ?? 'type';
 
             } else {
                 $structureType = 'type';
@@ -139,13 +139,15 @@ class TypeScriptGenerator
                 . ($structureType === 'type' ? '= ' : '');
 
             $tsLines[] = $baseIndent . $declarationHeader . $this->convertAutoDocTypeToTsType(
+                tag: $tag,
                 type: $type,
                 indent: $indent,
                 baseIndent: $baseIndent,
+                isRootLevel: true,
             );
 
         } else {
-            $this->error($tag, 'Request body not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
+            $tag->reportError('Request body not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
         }
 
         return $tsLines;
@@ -172,7 +174,7 @@ class TypeScriptGenerator
             }
 
             if ($this->isObjectOrArrayShape($type)) {
-                $structureType = $tag->getExistingStructureType() ?? 'interface';
+                $structureType = $tag->getExistingStructureType() ?? 'type';
 
             } else {
                 $structureType = 'type';
@@ -186,13 +188,15 @@ class TypeScriptGenerator
                 . ($structureType === 'type' ? '= ' : '');
 
             $tsLines[] = $baseIndent . $declarationHeader . $this->convertAutoDocTypeToTsType(
+                tag: $tag,
                 type: $type,
                 indent: $indent,
                 baseIndent: $baseIndent,
+                isRootLevel: true,
             );
 
         } else {
-            $this->error($tag, 'Response status "' . $httpStatus . '" not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
+            $tag->reportError('Response status "' . $httpStatus . '" not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
         }
 
         return $tsLines;
@@ -275,8 +279,19 @@ class TypeScriptGenerator
                 }
             }
 
+            if (! empty($tag->options['omit'])) {
+                foreach ($tag->options['omit'] as $omit) {
+                    if (isset($properties[$omit])) {
+                        unset($properties[$omit]);
+
+                    } else {
+                        $tag->reportError('Property "' . $omit . '" not found in exported type');
+                    }
+                }
+            }
+
             if ($this->isObjectOrArrayShape($type)) {
-                $structureType = $tag->getExistingStructureType() ?? 'interface';
+                $structureType = $tag->getExistingStructureType() ?? 'type';
 
             } else {
                 $structureType = 'type';
@@ -296,7 +311,7 @@ class TypeScriptGenerator
                 foreach ($properties as $propertyName => $propertyType) {
                     $propertyBaseIndent = $baseIndent . $indent;
 
-                    $tsType = $this->convertAutoDocTypeToTsType($propertyType, $indent, $propertyBaseIndent);
+                    $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
                     $tsLines[] = $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($addSemicolon ? ';' : '');
                 }
@@ -305,6 +320,7 @@ class TypeScriptGenerator
 
             } else if (! ($type instanceof ObjectType)) {
                 $tsLines[] = $declarationHeader . $this->convertAutoDocTypeToTsType(
+                    tag: $tag,
                     type: $type,
                     indent: $indent,
                     baseIndent: $baseIndent,
@@ -319,7 +335,7 @@ class TypeScriptGenerator
     }
 
 
-    private function convertAutoDocTypeToTsType(Type $type, string $indent, string $baseIndent): string
+    private function convertAutoDocTypeToTsType(AutoDocTag $tag, Type $type, string $indent, string $baseIndent, bool $isRootLevel = false): string
     {
         $type = $type->unwrapType($this->config);
 
@@ -384,7 +400,7 @@ class TypeScriptGenerator
         if ($type instanceof ArrayType) {
             if ($type->shape) {
                 if (array_is_list($type->shape) && !in_array(false, array_column($type->shape, 'required'))) {
-                    $tsTypes = array_map(fn ($value) => $this->convertAutoDocTypeToTsType($value, $indent, $baseIndent), $type->shape);
+                    $tsTypes = array_map(fn ($value) => $this->convertAutoDocTypeToTsType($tag, $value, $indent, $baseIndent), $type->shape);
 
                     if (count($type->shape) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
                         return '[' . implode(', ', $tsTypes) . ']';
@@ -395,7 +411,7 @@ class TypeScriptGenerator
                         foreach ($type->shape as $propertyType) {
                             $propertyBaseIndent = $baseIndent . $indent;
 
-                            $tsType = $this->convertAutoDocTypeToTsType($propertyType, $indent, $propertyBaseIndent);
+                            $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
                             $result .= "\n" . $propertyBaseIndent . $tsType . ',';
                         }
@@ -404,13 +420,24 @@ class TypeScriptGenerator
                     }
                 }
 
+                if ($isRootLevel && isset($tag->options['omit'])) {
+                    $properties = array_filter($type->shape, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+
+                } else {
+                    $properties = $type->shape;
+                }
+
+                if (! $properties) {
+                    return '{}';
+                }
+
                 $result = '{';
 
-                foreach ($type->shape as $propertyName => $propertyType) {
+                foreach ($properties as $propertyName => $propertyType) {
                     $propertyBaseIndent = $baseIndent . $indent;
                     $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
 
-                    $tsType = $this->convertAutoDocTypeToTsType($propertyType, $indent, $propertyBaseIndent);
+                    $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
                     $result .= "\n" . $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($addSemicolon ? ';' : '');
                 }
@@ -423,7 +450,7 @@ class TypeScriptGenerator
             $keyType = $type->keyType?->unwrapType($this->config);
             $itemType = $type->itemType?->unwrapType($this->config);
 
-            $tsItemType = $this->convertAutoDocTypeToTsType($itemType ?? new UnknownType, $indent, $baseIndent);
+            $tsItemType = $this->convertAutoDocTypeToTsType($tag, $itemType ?? new UnknownType, $indent, $baseIndent);
 
             if ($keyType && !($keyType instanceof IntegerType)) {
                 return 'Record<string, ' . $tsItemType . '>';
@@ -438,20 +465,27 @@ class TypeScriptGenerator
 
         if ($type instanceof ObjectType) {
             if ($type->typeToDisplay) {
-                return $this->convertAutoDocTypeToTsType($type->typeToDisplay, $indent, $baseIndent);
+                return $this->convertAutoDocTypeToTsType($tag, $type->typeToDisplay, $indent, $baseIndent, $isRootLevel);
             }
 
-            if (! $type->properties) {
+            if ($isRootLevel && isset($tag->options['omit'])) {
+                $properties = array_filter($type->properties, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+
+            } else {
+                $properties = $type->properties;
+            }
+
+            if (! $properties) {
                 return '{}';
             }
 
             $result = '{';
 
-            foreach ($type->properties as $propertyName => $propertyType) {
+            foreach ($properties as $propertyName => $propertyType) {
                 $propertyBaseIndent = $baseIndent . $indent;
                 $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
 
-                $tsType = $this->convertAutoDocTypeToTsType($propertyType, $indent, $propertyBaseIndent);
+                $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
                 $result .= "\n" . $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($addSemicolon ? ';' : '');
             }
@@ -464,7 +498,7 @@ class TypeScriptGenerator
         if ($type instanceof UnionType) {
             $type->mergeDuplicateTypes(config: $this->config);
 
-            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($type, $indent, $baseIndent), $type->types);
+            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent), $type->types);
 
             return implode('|', array_unique($types));
         }
@@ -472,7 +506,7 @@ class TypeScriptGenerator
         if ($type instanceof IntersectionType) {
             $type->mergeDuplicateTypes(mergeAsIntersection: true, config: $this->config);
 
-            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($type, $indent, $baseIndent), $type->types);
+            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent), $type->types);
 
             return implode('&', array_unique($types));
         }
@@ -508,13 +542,5 @@ class TypeScriptGenerator
         );
 
         return $quote . $escaped . $quote;
-    }
-
-    private function error(AutoDocTag $tag, string $message): void
-    {
-        $file = $tag->tsFile->filePath;
-        $line = $tag->lineIndex + 1;
-
-        echo $message . " [$file:$line]\n";
     }
 }

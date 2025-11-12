@@ -2,7 +2,10 @@
 
 namespace AutoDoc\TypeScript;
 
+use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\UnresolvedType;
 
 class AutoDocTag
@@ -13,7 +16,35 @@ class AutoDocTag
         public int $lineIndex,
         public string $value,
         public bool $addExportKeyword = true,
-    ) {}
+    ) {
+        if (preg_match('/^(.*)\s+(\{.*\})\s*/s', $value, $matches)) {
+            $this->value = $matches[1];
+
+            $optionsString = $matches[2];
+            $phpDoc = new PhpDoc('/** ' . ' */', $this->scope);
+
+            $optionsType = $phpDoc->createUnresolvedType($phpDoc->createTypeNode('array' . $optionsString))->resolve();
+
+            if (! $optionsType instanceof ArrayType || empty($optionsType->shape)) {
+                $this->reportError('Failed to parse @autodoc tag options: ' . $optionsString);
+
+                return;
+            }
+
+            foreach ($optionsType->shape as $key => $optionType) {
+                $optionType = $optionType->unwrapType($this->scope->config);
+
+                if ($key === 'omit') {
+                    if ($optionType instanceof StringType && $optionType->value) {
+                        $this->options[$key] = $optionType->getPossibleValues() ?? [];
+                    }
+
+                } else {
+                    $this->reportError('Unknown tag option: ' . $key);
+                }
+            }
+        }
+    }
 
     /**
      * @var string[]
@@ -27,6 +58,13 @@ class AutoDocTag
      * @var UnresolvedType[]
      */
     public array $templateTypeValues = [];
+
+    /**
+     * @var array{
+     *     omit?: string[],
+     * }
+     */
+    public array $options = [];
 
 
     public function hasExistingDeclaration(): bool
@@ -115,5 +153,14 @@ class AutoDocTag
     public function generateTypeScriptDeclaration(): array
     {
         return (new TypeScriptGenerator($this->scope->config))->generateTypeScriptDeclaration($this);
+    }
+
+
+    public function reportError(string $message): void
+    {
+        $file = $this->tsFile->filePath;
+        $line = $this->lineIndex + 1;
+
+        echo $message . " [$file:$line]\n";
     }
 }

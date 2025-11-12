@@ -1467,6 +1467,26 @@ class TestController
     }
 
 
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'boolean',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route33(): bool
+    {
+        return true;
+    }
+
+
     /**
      * @template TClass of object
      *

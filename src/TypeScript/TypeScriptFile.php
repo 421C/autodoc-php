@@ -79,13 +79,23 @@ class TypeScriptFile
             }
 
             if ($currentTag && $tagFinished) {
-                return new AutoDocTag(
+                $tag = new AutoDocTag(
                     scope: $scope,
                     tsFile: $this,
                     lineIndex: $lineIndex,
                     value: $currentTag,
                     addExportKeyword: $this->filePath && ! str_ends_with($this->filePath, '.vue'),
                 );
+
+                if ($tag->addExportKeyword) {
+                    $indent = $tag->getDeclarationIndent();
+
+                    if ($indent) {
+                        $tag->addExportKeyword = false;
+                    }
+                }
+
+                return $tag;
             }
 
             $lineIndex++;
@@ -138,11 +148,22 @@ class TypeScriptFile
 
     private function getStructureLineCount(int $startIndex): int
     {
+        if (! isset($this->lines[$startIndex])) {
+            return 0;
+        }
+
+        if (trim($this->lines[$startIndex]) === '') {
+            return 0;
+        }
+
+        if (! str_contains($this->lines[$startIndex], '{')) {
+            return 1;
+        }
+
         $braceLevel = 0;
         $inBlockComment = false;
         $inString = false;
         $stringChar = '';
-        $started = false;
         $lineCount = 0;
 
         for ($lineIndex = $startIndex; $lineIndex < count($this->lines); $lineIndex++) {
@@ -198,27 +219,14 @@ class TypeScriptFile
 
                 if ($char === '{') {
                     $braceLevel++;
-                    $started = true;
 
                 } else if ($char === '}') {
                     $braceLevel--;
-
-                    if ($braceLevel === 0 && $started) {
-                        return $lineCount;
-                    }
                 }
             }
 
-            // Handle single-line type declarations like: `type A = string;`
-            if (!$started && preg_match('/^\s*(type|interface|enum)\b/', $line)) {
-                if (! str_contains($line, '{')) {
-                    return $lineCount;
-                }
-            }
-
-            // If started but no braces at all (single line definition without block)
-            if ($started && $braceLevel === 0) {
-                return $lineCount - 1;
+            if ($braceLevel === 0) {
+                return $lineCount;
             }
         }
 

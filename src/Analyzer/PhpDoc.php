@@ -792,9 +792,13 @@ class PhpDoc
         $parserConfig = new ParserConfig([]);
         $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($phpDocType));
         $constExprParser = new ConstExprParser($parserConfig);
-        $typeNode = (new TypeParser($parserConfig, $constExprParser))->parse($tokens);
 
-        return $typeNode;
+        try {
+            return (new TypeParser($parserConfig, $constExprParser))->parse($tokens);
+
+        } catch (Throwable $exception) {
+            throw new AutoDocException('Error parsing type "' . $phpDocType . '": ', $exception);
+        }
     }
 
 
