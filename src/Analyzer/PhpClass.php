@@ -68,17 +68,25 @@ class PhpClass
     private array $ast;
 
 
-    public function resolveType(bool $useExtensions = true): Type
+    public function resolveType(bool $useExtensions = true): ObjectType
     {
+        $objectType = new ObjectType(className: $this->className);
+
         if ($useExtensions) {
             $returnType = $this->scope->getReturnTypeFromExtensions($this);
 
             if ($returnType !== null) {
-                return $returnType->unwrapType($this->scope->config);
+                $returnType = $returnType->unwrapType($this->scope->config);
+
+                if ($returnType instanceof ObjectType) {
+                    return $returnType;
+                }
+
+                $objectType->typeToDisplay = $returnType;
+
+                return $objectType;
             }
         }
-
-        $objectType = new ObjectType(className: $this->className);
 
         if ($this->typeToDisplay) {
             $objectType->typeToDisplay = $this->typeToDisplay->unwrapType($this->scope->config);
@@ -114,7 +122,7 @@ class PhpClass
             return $objectType;
 
         } else if (is_a($this->className, SplFixedArray::class, true)) {
-            return new ArrayType;
+            $objectType->typeToDisplay = new ArrayType;
         }
 
         if ($this->scope->depth > $this->scope->config->data['max_depth']) {
