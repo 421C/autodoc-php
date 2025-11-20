@@ -61,6 +61,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->handleParameters($node->params, $node->getDocComment());
             $this->scope->transferVariablesFrom($this->parentScope);
 
+            $this->scope->className = $this->parentScope->className;
+
             $this->returnTypes = [
                 new UnresolvedParserNodeType(
                     node: $node->expr,
