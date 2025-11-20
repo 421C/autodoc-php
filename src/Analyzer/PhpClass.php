@@ -418,6 +418,24 @@ class PhpClass
         );
     }
 
+    /**
+     * @return class-string[]
+     */
+    public function getTraits(): array
+    {
+        $traitUsesRecursive = function ($trait) use (&$traitUsesRecursive): array {
+            $traits = class_uses($trait) ?: [];
+
+            foreach ($traits as $trait) {
+                $traits += $traitUsesRecursive($trait);
+            }
+
+            return $traits;
+        };
+
+        return $traitUsesRecursive($this->className);
+    }
+
 
     public function traverse(NodeVisitorAbstract $nodeVisitor): bool
     {
@@ -463,6 +481,12 @@ class PhpClass
             $traversed = $this->traverse($nameResolver);
 
             if ($traversed) {
+                // Add name aliases from traits since some PHPDoc comments might be
+                // defined in traits but resolved in class context.
+                foreach ($this->getTraits() as $traitName) {
+                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($nameResolver);
+                }
+
                 $this->nameResolver = $nameResolver;
             }
         }

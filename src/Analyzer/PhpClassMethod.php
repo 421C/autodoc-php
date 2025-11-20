@@ -194,17 +194,25 @@ class PhpClassMethod
                 if (! ($type instanceof UnknownType)) {
                     return $type;
                 }
-            }
 
-            if (! $methodNodeVisitor->targetMethodExists) {
+            } else if (! $methodNodeVisitor->targetMethodExists) {
+                foreach ($this->phpClass->getReflection()->getTraits() as $traitName => $traitReflection) {
+                    /** @var class-string $traitName */
+
+                    $returnValue = $this->scope
+                        ->getPhpClassInDeeperScope($traitName)
+                        ->getMethod($this->methodName)
+                        ->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+
+                    if (! ($returnValue instanceof UnknownType)) {
+                        return $returnValue;
+                    }
+                }
+
                 $parentClass = $this->phpClass->getParent();
 
                 if ($parentClass) {
-                    $type = $parentClass->getMethod($this->methodName)->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
-
-                    if (! ($type instanceof UnknownType)) {
-                        return $type;
-                    }
+                    return $parentClass->getMethod($this->methodName)->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
                 }
             }
         }

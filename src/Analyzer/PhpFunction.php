@@ -203,9 +203,6 @@ class PhpFunction
                             $templateTypes[$paramName] = new UnresolvedClassType($parameterValue->className, $this->scope);
                         }
                     }
-
-                } else {
-                    dd($docTypeNode, 76767);
                 }
             }
         }

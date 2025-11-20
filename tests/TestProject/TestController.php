@@ -1853,6 +1853,123 @@ class TestController
 
         return compact($arr, 'arr', [[['key']]]);
     }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'properties' => [
+                                    'category' => [
+                                        'description' => '[RocketCategory](#/schemas/RocketCategory)',
+                                        'enum' => [
+                                            'Big',
+                                            'Small',
+                                        ],
+                                        'type' => 'string',
+                                    ],
+                                    'id' => [
+                                        'type' => 'integer',
+                                    ],
+                                    'is_flying' => [
+                                        'type' => 'boolean',
+                                    ],
+                                    'launch_date' => [
+                                        'format' => 'date-time',
+                                        'type' => [
+                                            'string',
+                                            'null',
+                                        ],
+                                    ],
+                                    'name' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'required' => [
+                                    'id',
+                                    'name',
+                                    'category',
+                                    'launch_date',
+                                    'is_flying',
+                                ],
+                                'type' => 'object',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route40(): mixed
+    {
+        return $this->methodFromTraitThatReturnsRockets();
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'category' => [
+                                            'description' => '[RocketCategory](#/schemas/RocketCategory)',
+                                            'enum' => [
+                                                'Big',
+                                                'Small',
+                                            ],
+                                            'type' => 'string',
+                                        ],
+                                        'id' => [
+                                            'type' => 'integer',
+                                        ],
+                                        'is_flying' => [
+                                            'type' => 'boolean',
+                                        ],
+                                        'launch_date' => [
+                                            'format' => 'date-time',
+                                            'type' => [
+                                                'string',
+                                                'null',
+                                            ],
+                                        ],
+                                        'name' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'id',
+                                        'name',
+                                        'category',
+                                        'launch_date',
+                                        'is_flying',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route41(): mixed
+    {
+        return $this->methodFromTraitThatReturnsArraysOfRocketsWithPhpDocOnly();
+    }
+
+
     /**
      * @template TClass of object
      *
