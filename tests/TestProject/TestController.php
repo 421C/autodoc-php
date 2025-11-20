@@ -1487,6 +1487,372 @@ class TestController
     }
 
 
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'items' => [
+                                'properties' => [
+                                    'arr' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'a' => [
+                                                'type' => 'integer',
+                                            ],
+                                            'b' => [
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'a',
+                                            'b',
+                                        ],
+                                    ],
+                                    'number' => [
+                                        'enum' => [
+                                            1,
+                                            2,
+                                            3,
+                                        ],
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'required' => [
+                                    'number',
+                                    'arr',
+                                ],
+                                'type' => 'object',
+                            ],
+                            'type' => 'array',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route34(): mixed
+    {
+        $numbers = [1, 2, 3];
+
+        $result = array_map(
+            fn ($number) => [
+                'number' => $number,
+                'arr' => $this->methodFromTrait(),
+            ],
+            $numbers,
+        );
+
+        /** @phpstan-ignore arrayValues.list */
+        return array_values($result);
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'type' => 'integer',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                        3,
+                                        4,
+                                        5,
+                                        6,
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route35(): mixed
+    {
+        return array_map(null, [1, 2, 3], [4, 5, 6]);
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'array',
+                                'items' => [
+                                    'anyOf' => [
+                                        [
+                                            'enum' => [
+                                                1,
+                                                2,
+                                                3,
+                                            ],
+                                            'type' => 'integer',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                            'enum' => [
+                                                'a',
+                                                'b',
+                                                'c',
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route36(): mixed
+    {
+        $arr = ['a' => 1, 'b' => 2, 'c' => 3];
+
+        return array_map(function ($value, $key) {
+            return [$value, $key];
+        }, $arr, array_keys($arr));
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'flip' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'enum' => [
+                                            'a',
+                                            'b',
+                                            'c',
+                                        ],
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'flip2' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'enum' => [
+                                            1,
+                                            2,
+                                            3,
+                                        ],
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'filter' => [
+                                    'items' => [
+                                        'enum' => [
+                                            'x',
+                                            'c',
+                                            'y',
+                                        ],
+                                        'type' => 'string',
+                                    ],
+                                    'type' => 'array',
+                                ],
+                                'mergeItems' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'anyOf' => [
+                                            [
+                                                'enum' => [
+                                                    1,
+                                                    2,
+                                                    3,
+                                                ],
+                                                'type' => 'integer',
+                                            ],
+                                            [
+                                                'enum' => [
+                                                    'x',
+                                                    'y',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                                'mergeShape' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 1,
+                                            'type' => 'integer',
+                                        ],
+                                        'b' => [
+                                            'const' => 2,
+                                            'type' => 'integer',
+                                        ],
+                                        'c' => [
+                                            'const' => 3,
+                                            'type' => 'integer',
+                                        ],
+                                        'd' => [
+                                            'const' => 4.1,
+                                            'format' => 'float',
+                                            'type' => 'number',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                        'c',
+                                        'd',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'flip',
+                                'flip2',
+                                'filter',
+                                'mergeShape',
+                                'mergeItems',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route37(): mixed
+    {
+        $arr = ['a' => 1, 'b' => 2, 'c' => 3];
+
+        return [
+            'flip' => array_flip($arr),
+            'flip2' => array_flip(array_flip($arr)),
+            'filter' => array_filter(['x', 'c', rand() ? null : 'y']),
+            'mergeShape' => array_merge($arr, [
+                'd' => 4.1,
+            ]),
+            'mergeItems' => array_merge($arr, ['x', 'x', 'y']),
+        ];
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                'arr' => [
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 1,
+                                            'type' => 'integer',
+                                        ],
+                                        'b' => [
+                                            'const' => 2,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                                'val' => [
+                                    'anyOf' => [
+                                        [
+                                            'enum' => [
+                                                1,
+                                                2,
+                                            ],
+                                            'type' => 'integer',
+                                        ],
+                                        [
+                                            'type' => 'boolean',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route38(): mixed
+    {
+        /** @phpstan-ignore arrayFilter.same */
+        $arr = array_filter(['a' => 1, 'b' => 2]);
+
+        $val = reset($arr);
+
+        return compact('val', 'arr');
+    }
+
+
+    #[ExpectedOperationSchema([
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'a' => [
+                                    'type' => 'number',
+                                ],
+                                'arr' => [
+                                    'items' => [
+                                        'const' => 'a',
+                                        'type' => 'string',
+                                    ],
+                                    'type' => 'array',
+                                ],
+                                'key' => [
+                                    'type' => [
+                                        'integer',
+                                        'null',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route39(): mixed
+    {
+        $a = 100 * 100;
+        $name = 'a';
+
+        $arr = [$name];
+        $key = array_key_first($arr);
+
+        return compact($arr, 'arr', [[['key']]]);
+    }
     /**
      * @template TClass of object
      *

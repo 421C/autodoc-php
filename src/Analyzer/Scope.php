@@ -522,6 +522,30 @@ class Scope
     }
 
 
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withScalarTypeValueMerging(callable $callback): mixed
+    {
+        $initialValues = [
+            'show' => $this->config->data['openapi']['show_values_for_scalar_types'] ?? false,
+            'merge' => $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true,
+        ];
+
+        $this->config->data['openapi']['show_values_for_scalar_types'] = false;
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = true;
+
+        $returnValue = $callback();
+
+        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+
+        return $returnValue;
+    }
+
+
     public function getRawValueFromNode(Node $node): int|string|float|null
     {
         if ($node instanceof Node\Scalar\String_
@@ -791,5 +815,95 @@ class Scope
     public function isDebugModeEnabled(): bool
     {
         return $this->config->data['debug']['enabled'];
+    }
+
+
+    public function __toString(): string
+    {
+        $toString = function (mixed $value, bool $basename = false): string {
+            if (is_null($value)) {
+                return 'null';
+            }
+
+            if (is_bool($value)) {
+                return $value ? 'true' : 'false';
+            }
+
+            if (is_string($value)) {
+                return "'" . $value . "'";
+            }
+
+            if (is_scalar($value)) {
+                return (string) $value;
+            }
+
+            if (is_object($value)) {
+                return ($basename ? PhpClass::basename($value::class) : $value::class) . '#' . spl_object_id($value);
+            }
+
+            return gettype($value);
+        };
+
+        $scopeInfo = 'Scope#' . spl_object_id($this) . "\n";
+
+        foreach (get_object_vars($this) as $key => $value) {
+            if ($key === 'config') {
+                $scopeInfo .= '    ' . $key . ': ' . $toString($this->config, true) . "\n";
+
+                continue;
+            }
+
+            if ($key === 'route') {
+                $scopeInfo .= '    ' . $key . ': '
+                    . $toString($this->route, true)
+                    . ' ' . strtoupper($this->route->method ?? '')
+                    . ' ' . ($this->route->uri ?? '')
+                    . "\n";
+
+                continue;
+            }
+
+            if ($key === 'constructorTemplateTypes') {
+                $scopeInfo .= '    ' . $key . ':' . "\n";
+
+                foreach ($this->constructorTemplateTypes as $name => $type) {
+                    $scopeInfo .= '        '
+                        . $name
+                        . ' -> ' . $toString($type, true)
+                        . "\n";
+                }
+
+                continue;
+            }
+
+            if ($key === 'constructorArgs') {
+                $scopeInfo .= '    ' . $key . ':' . "\n";
+
+                foreach ($this->constructorArgs as $arg) {
+                    $scopeInfo .= '        '
+                        . $toString($arg->node)
+                        . "\n";
+                }
+
+                continue;
+            }
+
+            if ($key === 'variables') {
+                $scopeInfo .= '    ' . $key . ':' . "\n";
+
+                foreach ($this->variables as $name => $phpvar) {
+                    $scopeInfo .= '        '
+                        . $toString($phpvar, true)
+                        . ' $' . $name
+                        . ' -> [' . implode(', ', array_map(fn ($assignment) => $toString($assignment[0]), $phpvar->assignments)) . ']' . "\n";
+                }
+
+                continue;
+            }
+
+            $scopeInfo .= '    ' . $key . ': ' . $toString($value) . "\n";
+        }
+
+        return $scopeInfo;
     }
 }

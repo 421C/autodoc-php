@@ -71,26 +71,54 @@ class ArrayType extends Type
     }
 
 
-    public function convertShapeToTypePair(?Config $config = null): self
+    public function convertShapeToTypePair(?Config $config = null, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
             $keyTypes = [];
             $itemTypes = [];
 
+            $showValuesForScalarTypes = $config?->data['openapi']['show_values_for_scalar_types'] ?? false;
+
             foreach ($this->shape as $key => $value) {
                 if (is_int($key)) {
-                    $keyTypes[] = new IntegerType($key);
+                    $keyTypes[] = new IntegerType($showValuesForScalarTypes ? $key : null);
 
                 } else {
-                    $keyTypes[] = new StringType($key);
+                    $keyTypes[] = new StringType($showValuesForScalarTypes ? $key : null);
                 }
 
-                $itemTypes[] = $value;
+                $itemTypes[] = $value->unwrapType($config);
             }
 
-            $this->keyType = (new UnionType($keyTypes))->unwrapType($config);
-            $this->itemType = (new UnionType($itemTypes))->unwrapType($config);
+            $this->keyType = (new UnionType($keyTypes))->unwrapType($config)->unwrapType($config);
+            $this->itemType = (new UnionType($itemTypes))->unwrapType($config)->unwrapType($config);
             $this->shape = [];
+        }
+
+        if ($removePossibleItemValues) {
+            $removeItemValues = function (Type $type) use (&$removeItemValues): Type {
+                if ($type instanceof IntegerType
+                    || $type instanceof FloatType
+                    || $type instanceof NumberType
+                    || $type instanceof StringType
+                ) {
+                    $type->value = null;
+                }
+
+                if ($type instanceof UnionType || $type instanceof IntersectionType) {
+                    $type->types = array_map($removeItemValues, $type->types);
+                }
+
+                return $type;
+            };
+
+            if ($this->itemType) {
+                $this->itemType = $removeItemValues($this->itemType);
+            }
+
+            if ($this->keyType) {
+                $this->keyType = $removeItemValues($this->keyType);
+            }
         }
 
         return $this;

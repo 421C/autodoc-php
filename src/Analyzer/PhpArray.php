@@ -170,7 +170,7 @@ class PhpArray
                             $keyVariants = [];
 
                             foreach ($keyType->types as $keyType) {
-                                if ($keyType instanceof StringType) {
+                                if ($keyType instanceof StringType || $keyType instanceof IntegerType) {
                                     $possibleValues = $keyType->getPossibleValues();
 
                                     if ($possibleValues) {

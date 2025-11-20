@@ -5,6 +5,7 @@ namespace AutoDoc;
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
+use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
 use AutoDoc\Extensions\ClassExtension;
 use AutoDoc\Extensions\FuncCallExtension;
 use AutoDoc\Extensions\MethodCallExtension;
@@ -38,6 +39,8 @@ class ExtensionHandler
     {
         if (! isset(self::$extensions)) {
             self::$extensions = [];
+
+            self::$extensions[FuncCallExtension::class][] = ArrayFuncCall::class;
 
             foreach ($this->scope->config->data['extensions'] ?? [] as $extensionClass) {
                 if (is_subclass_of($extensionClass, MethodCallExtension::class)) {
