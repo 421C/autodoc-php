@@ -348,6 +348,9 @@ class ArrayFuncCall extends FuncCallExtension
         foreach ($varNames as $varName) {
             $varTypes[$varName] = $scope->getVariableType(new Node\Expr\Variable($varName, [
                 'startLine' => $funcCall->getStartLine(),
+                'endLine' => $funcCall->getEndLine(),
+                'startFilePos' => $funcCall->getStartFilePos(),
+                'endFilePos' => $funcCall->getEndFilePos(),
             ])) ?? new UnknownType;
         }
 

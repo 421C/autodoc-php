@@ -8,7 +8,7 @@ class PhpVariable
 {
     public function __construct(
         /**
-         * @var array<int, array{Type, int}>
+         * @var array<int, array{Type, int, int, int}>
          */
         public array $assignments = [],
     ) {}

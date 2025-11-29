@@ -608,8 +608,14 @@ class Scope
 
             $type = new UnresolvedParserNodeType(node: $valueNode, scope: $this);
 
+            /** @var int */
+            $endFilePos = $valueNode->getAttribute('endFilePos');
+
         } else {
             $type = $valueNode;
+
+            /** @var int */
+            $endFilePos = $varNode->getAttribute('endFilePos');
         }
 
         if (! is_string($varNode->name)) {
@@ -620,7 +626,15 @@ class Scope
             $this->variables[$varNode->name] = new PhpVariable;
         }
 
-        $this->variables[$varNode->name]->assignments[$varNode->getStartLine()] = [$type, $depth];
+        /** @var int */
+        $startFilePos = $varNode->getAttribute('startFilePos');
+
+        $this->variables[$varNode->name]->assignments[$varNode->getStartLine()] = [
+            $type,
+            $depth,
+            $startFilePos,
+            $endFilePos,
+        ];
     }
 
     public function getVariableType(Node\Expr\Variable $varNode): ?Type
@@ -641,20 +655,20 @@ class Scope
 
         krsort($this->variables[$varNode->name]->assignments);
 
+        $varNodeStartLinePos = $varNode->getAttribute('startFilePos');
         $currentLine = $varNode->getStartLine();
         $possibleTypes = [];
 
-        // To prevent infinite loop when doing `$a = $a->method()`, need to start checking from the previous line.
-        $currentLine--;
-
         while ($currentLine > 0) {
             if (isset($this->variables[$varNode->name]->assignments[$currentLine])) {
-                [$varType, $depth] = $this->variables[$varNode->name]->assignments[$currentLine];
+                [$varType, $depth, $assignmentStartFilePos, $assignmentEndFilePos] = $this->variables[$varNode->name]->assignments[$currentLine];
 
-                $possibleTypes[] = $varType;
+                if ($varNodeStartLinePos > $assignmentEndFilePos) {
+                    $possibleTypes[] = $varType;
 
-                if ($depth === 0) {
-                    break;
+                    if ($depth === 0) {
+                        break;
+                    }
                 }
             }
 
@@ -833,7 +847,7 @@ class Scope
 
     public function isDebugModeEnabled(): bool
     {
-        return $this->config->data['debug']['enabled'];
+        return $this->config->data['debug']['enabled'] ?? false;
     }
 
 

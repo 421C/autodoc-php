@@ -72,6 +72,9 @@ trait AnalyzesFunctionNodes
 
                     $varNode = new Variable($varName, [
                         'startLine' => $comment->getStartLine(),
+                        'endLine' => $comment->getEndLine(),
+                        'startFilePos' => $comment->getStartFilePos(),
+                        'endFilePos' => $comment->getEndFilePos(),
                     ]);
 
                     // /** @var {varType} $varName */
