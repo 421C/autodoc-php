@@ -4,10 +4,12 @@ namespace AutoDoc\Tests\Attributes;
 
 use Attribute;
 
-#[Attribute]
+#[Attribute(Attribute::TARGET_METHOD | Attribute::TARGET_FUNCTION | Attribute::IS_REPEATABLE)]
 class ExpectedOperationSchema
 {
     public function __construct(
+        public string $testMethod,
+
         /**
          * @var array<string, mixed>
          */

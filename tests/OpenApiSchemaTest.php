@@ -2,12 +2,13 @@
 
 namespace AutoDoc\Tests;
 
+use AutoDoc\Config;
+use AutoDoc\Route;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Extensions\NotFoundExceptionExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use AutoDoc\Workspace;
-use Closure;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
@@ -23,17 +24,41 @@ final class OpenApiSchemaTest extends TestCase
     use ComparesSchemaArrays, LoadsConfig;
 
     #[Test]
-    public function checkOpenApiJsonSchema(): void
+    public function showValuesForScalarTypes(): void
     {
-        $config = $this->loadConfig();
+        $config = self::loadConfig();
 
         $config->data['openapi']['show_routes_as_titles'] = false;
         $config->data['openapi']['show_values_for_scalar_types'] = true;
-        $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';
 
         $config->data['extensions'] = [
             NotFoundExceptionExtension::class,
         ];
+
+        $this->checkOpenApiJsonSchema($config, __FUNCTION__);
+    }
+
+
+    #[Test]
+    public function resolvePartialArrayShapes(): void
+    {
+        $config = self::loadConfig();
+
+        $config->data['openapi']['show_routes_as_titles'] = false;
+        $config->data['openapi']['show_values_for_scalar_types'] = false;
+        $config->data['arrays']['resolve_partial_shapes'] = true;
+
+        $config->data['extensions'] = [
+            NotFoundExceptionExtension::class,
+        ];
+
+        $this->checkOpenApiJsonSchema($config, __FUNCTION__);
+    }
+
+
+    private function checkOpenApiJsonSchema(Config $config, string $testMethod): void
+    {
+        $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';
 
         $workspace = Workspace::getDefault($config);
 
@@ -45,70 +70,46 @@ final class OpenApiSchemaTest extends TestCase
         $this->assertNotNull($schema);
 
         foreach ($config->getRouteLoader()->getRoutes() as $route) {
-            if ($route->className && $route->classMethod) {
-                $this->assertClassMethodMatchesOperationSchema(
-                    schema: $schema,
-                    className: $route->className,
-                    classMethod: $route->classMethod,
-                    uri: $route->uri,
-                    method: $route->method,
-                );
+            $this->assertTrue(isset($schema['paths'][$route->uri][$route->method]), 'Operation schema not found.');
 
-            } else if ($route->closure) {
-                $this->assertClosureMatchesOperationSchema(
-                    schema: $schema,
-                    closure: $route->closure,
-                    uri: $route->uri,
-                    method: $route->method,
-                );
-
-            } else {
-                $this->fail();
-            }
+            $this->assertOperationSchemaMatchesExpected(
+                schema: $schema,
+                route: $route,
+                testMethod: $testMethod,
+            );
         }
     }
 
 
     /**
      * @param Schema $schema
-     * @param class-string $className
      */
-    private function assertClassMethodMatchesOperationSchema(array $schema, string $className, string $classMethod, string $uri, string $method): void
+    private function assertOperationSchemaMatchesExpected(array $schema, Route $route, string $testMethod): void
     {
-        $this->assertTrue(isset($schema['paths'][$uri][$method]), 'Operation schema not found.');
+        if ($route->className && $route->classMethod) {
+            $reflectionClass = new ReflectionClass($route->className);
 
-        $reflectionClass = new ReflectionClass($className);
+            $expectedSchemaAttributes = $reflectionClass->getMethod($route->classMethod)->getAttributes(ExpectedOperationSchema::class);
 
-        $expectedSchemaAttribute = $reflectionClass->getMethod($classMethod)->getAttributes(ExpectedOperationSchema::class)[0] ?? null;
+        } else if ($route->closure) {
+            $reflectionFunction = new ReflectionFunction($route->closure);
 
+            $expectedSchemaAttributes = $reflectionFunction->getAttributes(ExpectedOperationSchema::class);
 
-        /** @var array<string, mixed> */
-        $expected = $expectedSchemaAttribute?->getArguments()[0] ?? [];
+        } else {
+            $this->fail();
+        }
 
-        /** @var array<string, mixed> */
-        $actual = $schema['paths'][$uri][$method];
+        foreach ($expectedSchemaAttributes as $attribute) {
+            if ($testMethod === $attribute->getArguments()[0]) {
+                /** @var array<string, mixed> */
+                $expected = $attribute->getArguments()[1] ?? [];
 
+                /** @var array<string, mixed> */
+                $actual = $schema['paths'][$route->uri][$route->method];
 
-        $this->assertSchemaArraysMatch($expected, $actual, $uri, $method);
-    }
-
-
-    /**
-     * @param Schema $schema
-     */
-    private function assertClosureMatchesOperationSchema(array $schema, Closure $closure, string $uri, string $method): void
-    {
-        $reflectionFunction = new ReflectionFunction($closure);
-
-        $expectedSchemaAttribute = $reflectionFunction->getAttributes(ExpectedOperationSchema::class)[0] ?? null;
-
-        /** @var array<string, mixed> */
-        $expected = $expectedSchemaAttribute?->getArguments()[0] ?? [];
-
-        /** @var array<string, mixed> */
-        $actual = $schema['paths'][$uri][$method];
-
-
-        $this->assertSchemaArraysMatch($expected, $actual, $uri, $method);
+                $this->assertSchemaArraysMatch($expected, $actual, $route->uri, $route->method);
+            }
+        }
     }
 }

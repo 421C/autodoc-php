@@ -546,6 +546,25 @@ class Scope
     }
 
 
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withPartialArraysResolvingAsShapes(callable $callback): mixed
+    {
+        $initialValue = $this->config->data['arrays']['resolve_partial_shapes'] ?? false;
+
+        $this->config->data['arrays']['resolve_partial_shapes'] = true;
+
+        $returnValue = $callback();
+
+        $this->config->data['arrays']['resolve_partial_shapes'] = $initialValue;
+
+        return $returnValue;
+    }
+
+
     public function getRawValueFromNode(Node $node): int|string|float|null
     {
         if ($node instanceof Node\Scalar\String_

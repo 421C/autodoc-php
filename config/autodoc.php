@@ -113,6 +113,12 @@ return [
 
     'arrays' => [
         'remove_scalar_type_values_when_merging_with_unknown_types' => true,
+
+        /**
+         * Force arrays to be resolved as shapes if there is at least one known key.
+         * If disabled, arrays will be resolved as shapes only if all keys are known.
+         */
+        'resolve_partial_shapes' => false,
     ],
 
     /**

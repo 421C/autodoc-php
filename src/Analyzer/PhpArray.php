@@ -96,6 +96,9 @@ class PhpArray
 
             $hasAtLeastOneUnknownKey = false;
 
+            $resolvePartialArrayShapes = $this->scope->config->data['arrays']['resolve_partial_shapes'] ?? false;
+            $autoIncrementIndex = 0;
+
             foreach ($this->node->items as $arrayItemNode) {
                 if ($arrayItemNode->unpack) {
                     $unpackedArray = $this->unpackArrayItems($this->scope->resolveType($arrayItemNode->value));
@@ -144,10 +147,16 @@ class PhpArray
                     if ($arrayItemNode->key instanceof Node\Scalar\Int_) {
                         $arrayType->shape[$arrayItemNode->key->value] = $itemType;
                         $keyTypes[] = new IntegerType($arrayItemNode->key->value);
+                        $autoIncrementIndex = max($autoIncrementIndex, $arrayItemNode->key->value + 1);
 
                     } else if ($arrayItemNode->key instanceof Node\Scalar\String_) {
                         $arrayType->shape[$arrayItemNode->key->value] = $itemType;
                         $keyTypes[] = new StringType($arrayItemNode->key->value);
+
+                    } else if ($resolvePartialArrayShapes && ! $arrayItemNode->key) {
+                        $arrayType->shape[$autoIncrementIndex] = $itemType;
+                        $keyTypes[] = new IntegerType($autoIncrementIndex);
+                        $autoIncrementIndex++;
 
                     } else {
                         $keyType = $arrayItemNode->key ? $this->scope->resolveType($arrayItemNode->key) : new IntegerType;
@@ -188,7 +197,7 @@ class PhpArray
                 }
             }
 
-            if ($hasAtLeastOneUnknownKey) {
+            if ($hasAtLeastOneUnknownKey && !$resolvePartialArrayShapes) {
                 $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
 
                 if ($keyTypes) {
@@ -237,7 +246,7 @@ class PhpArray
                 return $unionType->unwrapType($this->scope->config);
             }
 
-            if (! $arrayType->shape) {
+            if (! $arrayType->shape && ! $resolvePartialArrayShapes) {
                 $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
 
                 if ($keyTypes) {

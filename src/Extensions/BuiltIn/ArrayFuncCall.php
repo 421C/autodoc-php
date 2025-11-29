@@ -136,6 +136,7 @@ class ArrayFuncCall extends FuncCallExtension
         $arrayType = $scope->resolveType($arrayArg->value);
 
         if ($arrayType instanceof ArrayType) {
+            $arrayType->convertShapeToTypePair($scope->config);
             $arrayType->keyType = null;
 
             return $arrayType;

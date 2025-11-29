@@ -61,6 +61,7 @@ use Exception;
  *     },
  *     arrays?: array{
  *         remove_scalar_type_values_when_merging_with_unknown_types?: bool,
+ *         resolve_partial_shapes?: bool,
  *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,

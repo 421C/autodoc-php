@@ -26,7 +26,7 @@ class TestController
      *     data?: string,
      * }
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Route 1',
         'description' => 'Reads response schema from `@return` tag.',
         'responses' => [
@@ -62,7 +62,7 @@ class TestController
     /**
      * Route 2
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Route 2',
         'description' => '',
         'responses' => [
@@ -170,7 +170,7 @@ class TestController
      *
      * @phpstan-ignore missingType.return
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Route 3',
         'description' => '',
         'responses' => [
@@ -208,7 +208,7 @@ class TestController
     /**
      * Route 4
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Route 4',
         'description' => '',
         'responses' => [
@@ -243,7 +243,7 @@ class TestController
      *
      * @phpstan-ignore missingType.iterableValue
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Route 5',
         'description' => '',
         'responses' => [
@@ -284,7 +284,7 @@ class TestController
     /**
      * @phpstan-ignore missingType.return
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -334,7 +334,7 @@ class TestController
      *
      * @phpstan-ignore return.missing
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -382,7 +382,7 @@ class TestController
      *
      * @phpstan-ignore return.missing
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -417,7 +417,7 @@ class TestController
     public function route8() {}
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -475,7 +475,7 @@ class TestController
      *
      * @response TVal
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -516,7 +516,7 @@ class TestController
     /**
      * @param SimpleClass $value
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -549,7 +549,7 @@ class TestController
     /**
      * @param $value Property description that is not going to be visible in response schema.
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -582,7 +582,7 @@ class TestController
     /**
      * @request-query filter {type: string[]}
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'parameters' => [
@@ -612,7 +612,7 @@ class TestController
      *     }>
      * }
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'parameters' => [
@@ -681,7 +681,7 @@ class TestController
      * @request-cookie CSRF {description: 'CSRF token'}
      * @request-url-param yoo
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'parameters' => [
@@ -709,7 +709,7 @@ class TestController
      * @return object{created_at: \DateTimeInterface}&\Traversable<int>
      * @phpstan-ignore return.missing
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -748,7 +748,7 @@ class TestController
      *
      * @phpstan-ignore return.missing, return.unresolvableType
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -794,7 +794,7 @@ class TestController
      *
      * @phpstan-ignore return.missing, return.unresolvableType
      */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -841,7 +841,7 @@ class TestController
     public function route18() {}
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'description' => '',
@@ -877,7 +877,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'description' => '',
@@ -907,7 +907,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'description' => '',
@@ -949,7 +949,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'description' => '',
@@ -975,7 +975,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1020,7 +1020,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1052,7 +1052,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1084,7 +1084,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1122,7 +1122,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1157,7 +1157,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1229,7 +1229,7 @@ class TestController
 
 
     /** @phpstan-ignore missingType.generics */
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => '',
         'description' => '',
         'responses' => [
@@ -1261,7 +1261,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1332,7 +1332,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1411,7 +1411,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1467,7 +1467,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1487,7 +1487,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1550,7 +1550,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1584,7 +1584,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1631,7 +1631,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1753,7 +1753,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1811,7 +1811,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1855,7 +1855,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1911,7 +1911,7 @@ class TestController
     }
 
 
-    #[ExpectedOperationSchema([
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
                 'content' => [
@@ -1967,6 +1967,127 @@ class TestController
     public function route41(): mixed
     {
         return $this->methodFromTraitThatReturnsArraysOfRocketsWithPhpDocOnly();
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'additionalProperties' => [
+                                'type' => 'integer',
+                                'enum' => [
+                                    123,
+                                    456,
+                                ],
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                0 => [
+                                    'type' => 'integer',
+                                ],
+                                'a' => [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'required' => [
+                                'a',
+                                0,
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route42(): mixed
+    {
+        return (object) [
+            'a' => 123,
+            456,
+        ];
+    }
+
+
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route43(): mixed
+    {
+        $numbers = [
+            'a' => 1,
+            'b' => 2,
+        ];
+
+        $numbers = array_values(
+            $numbers,
+        );
+
+        return $numbers;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'items' => [
+                                'type' => 'string',
+                            ],
+                            'type' => 'array',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route44(): mixed
+    {
+        $str = 'test';
+        $str = mb_strtolower($str);
+
+        $str = $str . $str;
+
+        $str = [
+            $str,
+            $str,
+        ];
+
+        return $str;
     }
 
 
