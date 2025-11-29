@@ -41,7 +41,7 @@ class ClassMethodNodeVisitor extends NodeVisitorAbstract
     public function enterNode(Node $node)
     {
         if ($node instanceof Node\Stmt\ClassMethod) {
-            $this->inTargetMethod = $node->name->toString() === $this->methodName;
+            $this->inTargetMethod = strcasecmp($node->name->toString(), $this->methodName) === 0;
 
             if (! $this->inTargetMethod) {
                 return NodeVisitor::DONT_TRAVERSE_CHILDREN;
