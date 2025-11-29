@@ -228,7 +228,7 @@ class PhpClassMethod
 
         } catch (ReflectionException $exception) {
             if ($this->scope->isDebugModeEnabled()) {
-                if ($this->scope->config->data['debug']['ignore_dynamic_method_errors'] === false) {
+                if (($this->scope->config->data['debug']['ignore_dynamic_method_errors'] ?? true) === false) {
                     throw $exception;
                 }
             }

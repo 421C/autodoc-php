@@ -9,6 +9,7 @@ class TypeScriptFile
 {
     public function __construct(
         public ?string $filePath = null,
+        private ?TypeScriptGenerator $generator = null,
     ) {
         if ($this->filePath) {
             $this->lines = $this->readLines();
@@ -107,11 +108,13 @@ class TypeScriptFile
 
     public function processAutodocTags(Scope $scope): int
     {
+        $generator = $this->generator ?? new TypeScriptGenerator($scope->config);
+
         $processedTags = 0;
         $tag = $this->findFirstAutodocTag($scope);
 
         while ($tag !== null) {
-            $newDeclarationLines = $tag->generateTypeScriptDeclaration();
+            $newDeclarationLines = $generator->generateTypeScriptDeclaration($tag);
             $commentLinesAfterTag = $this->getCommentLinesAfterTag($tag);
 
             $newDeclarationIndex = $tag->lineIndex + count($commentLinesAfterTag) + 1;

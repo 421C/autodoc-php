@@ -4,10 +4,17 @@ namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
+use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedType;
+use Exception;
 
+/**
+ * @phpstan-import-type TypeScriptConfig from Config
+ */
 class AutoDocTag
 {
     public function __construct(
@@ -37,6 +44,62 @@ class AutoDocTag
                 if ($key === 'omit') {
                     if ($optionType instanceof StringType && $optionType->value) {
                         $this->options[$key] = $optionType->getPossibleValues() ?? [];
+
+                    } else {
+                        $this->reportError('The value of `omit` tag must be a string or union of strings.');
+                    }
+
+                } else if ($key === 'only') {
+                    if ($optionType instanceof StringType && $optionType->value) {
+                        $this->options[$key] = $optionType->getPossibleValues() ?? [];
+
+                    } else {
+                        $this->reportError('The value of `only` tag must be a string or union of strings.');
+                    }
+
+                } else if ($key === 'from') {
+                    if ($optionType instanceof StringType && is_string($optionType->value)) {
+                        if (class_exists($optionType->value) || interface_exists($optionType->value) || trait_exists($optionType->value)) {
+                            $this->options[$key] = $optionType->value;
+                            $this->scope = $this->scope->createChildScope($optionType->value);
+
+                        } else {
+                            $this->reportError('The value of `from` tag is not a valid class name.');
+                        }
+
+                    } else if (($optionType instanceof ObjectType || $optionType instanceof ArrayType) && $optionType->className) {
+                        $this->options[$key] = $optionType->className;
+                        $this->scope = $this->scope->createChildScope($optionType->className);
+
+                    } else {
+                        $this->reportError('The value of `from` tag must be a string or a class type identifier.');
+                    }
+
+                } else if ($key === 'with') {
+                    if ($optionType instanceof ObjectType && $optionType->properties) {
+                        $this->options[$key] = $optionType->properties;
+
+                    } else if ($optionType instanceof ArrayType && $optionType->shape) {
+                        $this->options[$key] = $optionType->shape;
+
+                    } else {
+                        $this->reportError('The value of `with` tag must be an object or array shape.');
+                    }
+
+                } else if ($key === 'mode') {
+                    if ($optionType instanceof StringType && is_string($optionType->value)) {
+                        $this->options[$key] = $optionType->value;
+
+                    } else {
+                        $this->reportError('The value of `mode` tag must be a string.');
+                    }
+
+                } else if ($key === 'as') {
+                    if ($optionType instanceof StringType && is_string($optionType->value)) {
+                        $this->options[$key] = $optionType->value;
+
+                    } else {
+                        $this->reportError('The value of `as` tag must be a string.');
                     }
 
                 } else {
@@ -62,9 +125,19 @@ class AutoDocTag
     /**
      * @var array{
      *     omit?: string[],
+     *     only?: string[],
+     *     from?: class-string,
+     *     with?: array<int|string, Type>,
+     *     mode?: string,
+     *     as?: string,
      * }
      */
     public array $options = [];
+
+    /**
+     * @var TypeScriptConfig
+     */
+    private array $config;
 
 
     public function hasExistingDeclaration(): bool
@@ -148,11 +221,35 @@ class AutoDocTag
 
 
     /**
-     * @return string[]
+     * @template K of key-of<TypeScriptConfig>
+     * @param K $key
+     * @return (K is 'path_prefixes' ? iterable<string, string> : TypeScriptConfig[K])
      */
-    public function generateTypeScriptDeclaration(): array
+    public function getConfig(string $key): mixed
     {
-        return (new TypeScriptGenerator($this->scope->config))->generateTypeScriptDeclaration($this);
+        if (! isset($this->config)) {
+            $this->config = $this->scope->config->getTypeScriptConfig($this->options['mode'] ?? null);
+        }
+
+        $defaults = [
+            'working_directory' => null,
+            'file_extensions' => ['ts', 'tsx', 'vue'],
+            'indent' => '    ',
+            'string_quote' => "'",
+            'add_semicolons' => false,
+            'show_values_for_scalar_types' => true,
+            'save_types_in_single_file' => null,
+            'modes' => [],
+            'path_prefixes' => fn () => [],
+        ];
+
+        $value = $this->config[$key] ?? $defaults[$key];
+
+        if (is_callable($value)) {
+            return $value();
+        }
+
+        return $value;
     }
 
 
@@ -161,6 +258,6 @@ class AutoDocTag
         $file = $this->tsFile->filePath;
         $line = $this->lineIndex + 1;
 
-        echo $message . " [$file:$line]\n";
+        throw new Exception($message . ($file ? " [$file:$line]" : ''));
     }
 }

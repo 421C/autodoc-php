@@ -51,9 +51,10 @@ return [
 
         /**
          * When enabled, will attempt to read possible values for returned scalar types.
-         * Disabled by default because it is not guaranteed that all possible values will be detected.
+         * It is not guaranteed that all possible values will be detected, so depending on
+         * your project you might want to disable this.
          */
-        'show_values_for_scalar_types' => false,
+        'show_values_for_scalar_types' => true,
 
         /**
          * When enabled, will use pattern instead of format for numeric string types.
@@ -155,14 +156,60 @@ return [
     ],
 
     /**
-     * Read `@autodoc` tags in typescript code and export typescript schemas.
+     * Read `@autodoc` tags in TypeScript code and export specified structures as TypeScript types.
      */
     'typescript' => [
         'working_directory' => null, // '/path/to/your/typescript/code',
         'file_extensions' => ['ts', 'tsx', 'vue'],
+
         'indent' => '    ',
         'string_quote' => "'",
         'add_semicolons' => false,
+
+        /**
+         * When enabled, will attempt to read possible values for returned scalar types.
+         * It is not guaranteed that all possible values will be detected, so depending on
+         * your project you might want to disable this.
+         */
         'show_values_for_scalar_types' => true,
+
+        /**
+         * Specify a full path to a file where all TypeScript types will be saved.
+         * Set to `null` to export types right after their `@autodoc` comments.
+         */
+        'save_types_in_single_file' => null,
+
+        /**
+         * Custom modes that can be applied to specific TypeScript exports.
+         * For example below, you can specify `{mode: 'document-types'}` in your `@autodoc` tag to export types to a separate file.
+         * Options supported in mode definitions: 'save_types_in_single_file', 'show_values_for_scalar_types', 'indent', 'string_quote', 'add_semicolons'.
+         *
+         * @example [
+         *     'document-types' => [
+         *         'save_types_in_single_file' => '/path/to/your/document/types.ts',
+         *     ],
+         * ]
+         */
+        'modes' => [],
+
+        /**
+         * Path prefixes from your TypeScript project. Used when generating `import(path).Type` statements.
+         * @see https://www.typescriptlang.org/tsconfig/#paths
+         */
+        'path_prefixes' => function () {
+            // Load path prefixes from tsconfig.json
+            $tsConfigPath = __DIR__ . '/../tsconfig.json';
+
+            if (file_exists($tsConfigPath)) {
+                foreach (json_decode(file_get_contents($tsConfigPath), true)['compilerOptions']['paths'] ?? [] as $prefix => $path) {
+                    $prefix = str_ends_with($prefix, '/*') ? substr($prefix, 0, -2) : $prefix;
+                    $path = str_ends_with($path, '/*') ? substr($path, 0, -2) : $path;
+
+                    yield $prefix => $path;
+                }
+            }
+
+            return [];
+        },
     ],
 ];

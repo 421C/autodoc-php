@@ -5,6 +5,7 @@ namespace AutoDoc\Commands;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\TypeScript\TypeScriptFile;
+use AutoDoc\TypeScript\TypeScriptGenerator;
 use Exception;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -26,6 +27,8 @@ class UpdateTypeScriptStructures
      * @return iterable<array{
      *     filePath: string,
      *     processedTags: int,
+     * } | array{
+     *     error: Throwable|string,
      * }>
      */
     public function run(
@@ -40,13 +43,16 @@ class UpdateTypeScriptStructures
         $files = $this->getFiles($workingDirectory, $fileExtensions);
 
         $scope = new Scope($this->config);
+        $generator = new TypeScriptGenerator($this->config);
 
         foreach ($files as $filePath) {
             try {
-                $tsFile = new TypeScriptFile($filePath);
+                $tsFile = new TypeScriptFile($filePath, $generator);
 
-            } catch (Throwable $e) {
-                $this->log($e->getMessage());
+            } catch (Throwable $exception) {
+                yield [
+                    'error' => $exception,
+                ];
 
                 continue;
             }
@@ -62,6 +68,8 @@ class UpdateTypeScriptStructures
                 ];
             }
         }
+
+        $generator->overwriteGeneratedFiles();
     }
 
     /**

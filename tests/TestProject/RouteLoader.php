@@ -32,7 +32,7 @@ class RouteLoader extends AbstractRouteLoader
          *
          * @return array<object{test: bool}>
          */
-        $closure1 = #[ExpectedOperationSchema([
+        $closure1 = #[ExpectedOperationSchema('showValuesForScalarTypes', [
             'summary' => 'Closure test 1',
             'description' => 'Description...',
             'responses' => [
@@ -61,7 +61,7 @@ class RouteLoader extends AbstractRouteLoader
         ])] function () {};
 
 
-        $closure2 = #[ExpectedOperationSchema([
+        $closure2 = #[ExpectedOperationSchema('showValuesForScalarTypes', [
             'responses' => [
                 200 => [
                     'content' => [
@@ -96,7 +96,7 @@ class RouteLoader extends AbstractRouteLoader
                 /**
                  * @return int|float|null
                  */
-                #[ExpectedOperationSchema([
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
                     'summary' => '',
                     'description' => '',
                     'responses' => [
@@ -127,7 +127,7 @@ class RouteLoader extends AbstractRouteLoader
                  *     list: array<array{id: int, name: string}>,
                  * }
                  */
-                #[ExpectedOperationSchema([
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
                     'summary' => '',
                     'description' => '',
                     'responses' => [

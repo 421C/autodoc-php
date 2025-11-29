@@ -4,7 +4,6 @@ namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\PhpDoc;
-use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -29,14 +28,16 @@ use ReflectionEnumBackedCase;
 class TypeScriptGenerator
 {
     public function __construct(
-        public Config $config,
-    ) {
-        $this->scope = new Scope($this->config);
-        $this->extensionHandler = new ExtensionHandler($this->scope);
-    }
+        /**
+         * @deprecated
+         */
+        public ?Config $config2 = null,
+    ) {}
 
-    private Scope $scope;
-    private ExtensionHandler $extensionHandler;
+    /**
+     * @var array<string, string[]>
+     */
+    private array $filesToGenerate = [];
 
     /**
      * @return string[]
@@ -53,12 +54,12 @@ class TypeScriptGenerator
                 scope: $tag->scope,
             );
 
-            $type = $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tag->value))->unwrapType($this->config);
+            $type = $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tag->value))->unwrapType($tag->scope->config);
 
             return $this->generateTypeScriptDeclarationFromType($tag, $type);
         }
 
-        $indent = $this->config->data['typescript']['indent'] ?? '    ';
+        $indent = $tag->getConfig('indent');
         $baseIndent = $tag->getDeclarationIndent();
 
         $arguments = preg_split('/\s+/', $tag->value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
@@ -67,7 +68,7 @@ class TypeScriptGenerator
         $routeUri = trim($arguments[1], '/');
         $responseStatusOrRequestKeyword = $arguments[2] ?? null;
 
-        $routeLoader = $this->config->getRouteLoader();
+        $routeLoader = $tag->scope->config->getRouteLoader();
         $route = null;
         $operation = null;
 
@@ -112,7 +113,7 @@ class TypeScriptGenerator
      */
     private function generateTypeScriptDeclarationFromRequestBody(AutoDocTag $tag, Operation $operation, Route $route): array
     {
-        $indent = $this->config->data['typescript']['indent'] ?? '    ';
+        $indent = $tag->getConfig('indent');
         $baseIndent = $tag->getDeclarationIndent();
 
         $tsLines = [];
@@ -121,7 +122,7 @@ class TypeScriptGenerator
             $type = $operation->requestBody->content['application/json']->type;
 
             if ($type instanceof ObjectType && $type->typeToDisplay) {
-                $type = $type->typeToDisplay->unwrapType($this->config);
+                $type = $type->typeToDisplay->unwrapType($tag->scope->config);
             }
 
             if ($this->isObjectOrArrayShape($type)) {
@@ -132,19 +133,31 @@ class TypeScriptGenerator
             }
 
             $name = $tag->getExistingStructureName() ?? $this->toPascalCase(basename($route->uri) . 'Request');
+            $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
-            $declarationHeader = ($tag->addExportKeyword ? 'export ' : '')
-                . $structureType . ' '
-                . $name . ' '
-                . ($structureType === 'type' ? '= ' : '');
-
-            $tsLines[] = $baseIndent . $declarationHeader . $this->convertAutoDocTypeToTsType(
+            $typeDefinition = $this->convertAutoDocTypeToTsType(
                 tag: $tag,
                 type: $type,
                 indent: $indent,
                 baseIndent: $baseIndent,
                 isRootLevel: true,
             );
+
+            $importStatement = null;
+            $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
+
+            if ($writeInSeparateTsFile) {
+                $this->prepareDeclarationToBeWrittenToFile(
+                    $tag,
+                    $tag->options['as'] ?? $name,
+                    $writeInSeparateTsFile,
+                    $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
+                );
+
+                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
+            }
+
+            $tsLines[] = $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
 
         } else {
             $tag->reportError('Request body not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
@@ -158,7 +171,7 @@ class TypeScriptGenerator
      */
     private function generateTypeScriptDeclarationFromResponse(AutoDocTag $tag, Operation $operation, Route $route, int|string $httpStatus): array
     {
-        $indent = $this->config->data['typescript']['indent'] ?? '    ';
+        $indent = $tag->getConfig('indent');
         $baseIndent = $tag->getDeclarationIndent();
 
         $tsLines = [];
@@ -167,10 +180,10 @@ class TypeScriptGenerator
             && $operation->responses[$httpStatus] instanceof Response
             && isset($operation->responses[$httpStatus]->content['application/json']->type)
         ) {
-            $type = $operation->responses[$httpStatus]->content['application/json']->type->unwrapType($this->config);
+            $type = $operation->responses[$httpStatus]->content['application/json']->type->unwrapType($tag->scope->config);
 
             if ($type instanceof ObjectType && $type->typeToDisplay) {
-                $type = $type->typeToDisplay->unwrapType($this->config);
+                $type = $type->typeToDisplay->unwrapType($tag->scope->config);
             }
 
             if ($this->isObjectOrArrayShape($type)) {
@@ -181,19 +194,31 @@ class TypeScriptGenerator
             }
 
             $name = $tag->getExistingStructureName() ?? $this->toPascalCase(basename($route->uri) . 'Response');
+            $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
-            $declarationHeader = ($tag->addExportKeyword ? 'export ' : '')
-                . $structureType . ' '
-                . $name . ' '
-                . ($structureType === 'type' ? '= ' : '');
-
-            $tsLines[] = $baseIndent . $declarationHeader . $this->convertAutoDocTypeToTsType(
+            $typeDefinition = $this->convertAutoDocTypeToTsType(
                 tag: $tag,
                 type: $type,
                 indent: $indent,
                 baseIndent: $baseIndent,
                 isRootLevel: true,
             );
+
+            $importStatement = null;
+            $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
+
+            if ($writeInSeparateTsFile) {
+                $this->prepareDeclarationToBeWrittenToFile(
+                    $tag,
+                    $tag->options['as'] ?? $name,
+                    $writeInSeparateTsFile,
+                    $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
+                );
+
+                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
+            }
+
+            $tsLines[] = $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
 
         } else {
             $tag->reportError('Response status "' . $httpStatus . '" not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
@@ -207,7 +232,7 @@ class TypeScriptGenerator
      */
     private function generateTypeScriptDeclarationFromType(AutoDocTag $tag, Type $type): array
     {
-        $indent = $this->config->data['typescript']['indent'] ?? '    ';
+        $indent = $tag->getConfig('indent');
         $baseIndent = $tag->getDeclarationIndent();
 
         $name = $tag->getExistingStructureName();
@@ -215,6 +240,9 @@ class TypeScriptGenerator
         if ($name === null) {
             if ($type instanceof ObjectType && $type->className) {
                 $name = PhpClass::basename($type->className);
+
+            } else if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $tag->value)) {
+                $name = $tag->value;
 
             } else {
                 $name = 'UnnamedType';
@@ -229,14 +257,22 @@ class TypeScriptGenerator
             }
         }
 
+        $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
         $tsLines = [];
 
         if ($enumClassName) {
-            $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "enum $name {";
-
             $reflectionEnum = new ReflectionEnum($enumClassName);
+            $enumCaseDefinitions = [];
 
             foreach ($reflectionEnum->getCases() as $enumCase) {
+                if (isset($tag->options['only']) && ! in_array($enumCase->name, $tag->options['only'])) {
+                    continue;
+                }
+
+                if (isset($tag->options['omit']) && in_array($enumCase->name, $tag->options['omit'])) {
+                    continue;
+                }
+
                 if ($enumCase instanceof ReflectionEnumBackedCase) {
                     $value = $enumCase->getBackingValue();
 
@@ -245,19 +281,39 @@ class TypeScriptGenerator
                 }
 
                 if (is_string($value)) {
-                    $value = $this->toTsString($value);
+                    $value = $this->toTsString($value, $tag->getConfig('string_quote'));
                 }
 
-                $tsLines[] = "{$baseIndent}{$indent}{$enumCase->name} = $value,";
+                $enumCaseDefinitions[] = "{$baseIndent}{$indent}{$enumCase->name} = $value,";
             }
 
-            $tsLines[] = $baseIndent . '}';
+            $typeDefinition = $enumCaseDefinitions
+                ? '{' . "\n" . implode("\n", $enumCaseDefinitions) . "\n" . $baseIndent . '}'
+                : '{}';
+
+            $importStatement = null;
+
+            if ($writeInSeparateTsFile) {
+                $this->prepareDeclarationToBeWrittenToFile(
+                    $tag,
+                    $tag->options['as'] ?? $name,
+                    $writeInSeparateTsFile,
+                    $baseIndent . 'export enum ' . ($tag->options['as'] ?? $name) . ' ' . $typeDefinition,
+                );
+
+                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
+
+                $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "type $name = " . $importStatement;
+
+            } else {
+                $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "enum $name " . $typeDefinition;
+            }
 
         } else {
             if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
-                $phpClass = new PhpClass($type->className, $this->scope);
+                $phpClass = new PhpClass($type->className, $tag->scope);
 
-                $type = $this->extensionHandler->handleTypeScriptExportExtensions($phpClass, $type);
+                $type = (new ExtensionHandler($tag->scope))->handleTypeScriptExportExtensions($phpClass, $type);
             }
 
             if ($type instanceof ObjectType && $type->typeToDisplay) {
@@ -268,67 +324,41 @@ class TypeScriptGenerator
                 }
             }
 
-            $properties = [];
-
             if ($type instanceof ObjectType) {
-                $properties = $type->properties;
-
-            } else if ($type instanceof ArrayType) {
-                if ($type->shape) {
-                    $properties = $type->shape;
-                }
+                $type->typeToDisplay = null;
             }
 
-            if (! empty($tag->options['omit'])) {
-                foreach ($tag->options['omit'] as $omit) {
-                    if (isset($properties[$omit])) {
-                        unset($properties[$omit]);
-
-                    } else {
-                        $tag->reportError('Property "' . $omit . '" not found in exported type');
-                    }
-                }
-            }
-
-            if ($this->isObjectOrArrayShape($type)) {
+            if ($this->isObjectOrArrayShape($type) && !$writeInSeparateTsFile) {
                 $structureType = $tag->getExistingStructureType() ?? 'type';
 
             } else {
                 $structureType = 'type';
             }
 
-            $declarationHeader = $baseIndent
-                . ($tag->addExportKeyword ? 'export ' : '')
-                . $structureType . ' '
-                . $name . ' '
-                . ($structureType === 'type' ? '= ' : '');
+            $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
-            if ($properties) {
-                $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
+            $typeDefinition = $this->convertAutoDocTypeToTsType(
+                tag: $tag,
+                type: $type,
+                indent: $indent,
+                baseIndent: $baseIndent,
+                isRootLevel: true,
+            );
 
-                $tsLines[] = $declarationHeader . '{';
+            $importStatement = null;
 
-                foreach ($properties as $propertyName => $propertyType) {
-                    $propertyBaseIndent = $baseIndent . $indent;
-
-                    $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
-
-                    $tsLines[] = $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($addSemicolon ? ';' : '');
-                }
-
-                $tsLines[] = $baseIndent . '}';
-
-            } else if (! ($type instanceof ObjectType)) {
-                $tsLines[] = $declarationHeader . $this->convertAutoDocTypeToTsType(
-                    tag: $tag,
-                    type: $type,
-                    indent: $indent,
-                    baseIndent: $baseIndent,
+            if ($writeInSeparateTsFile) {
+                $this->prepareDeclarationToBeWrittenToFile(
+                    $tag,
+                    $tag->options['as'] ?? $name,
+                    $writeInSeparateTsFile,
+                    $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
                 );
 
-            } else {
-                $tsLines[] = $declarationHeader . '{}';
+                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
             }
+
+            $tsLines[] = $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
         }
 
         return $tsLines;
@@ -337,16 +367,16 @@ class TypeScriptGenerator
 
     private function convertAutoDocTypeToTsType(AutoDocTag $tag, Type $type, string $indent, string $baseIndent, bool $isRootLevel = false): string
     {
-        $type = $type->unwrapType($this->config);
+        $type = $type->unwrapType($tag->scope->config);
 
         if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
-            $phpClass = new PhpClass($type->className, $this->scope);
+            $phpClass = new PhpClass($type->className, $tag->scope);
 
-            $type = $this->extensionHandler->handleTypeScriptExportExtensions($phpClass, $type);
+            $type = (new ExtensionHandler($tag->scope))->handleTypeScriptExportExtensions($phpClass, $type);
         }
 
         if ($type instanceof IntegerType || $type instanceof NumberType) {
-            if ($type->isEnum || ($this->config->data['typescript']['show_values_for_scalar_types'] ?? true)) {
+            if ($type->isEnum || $tag->getConfig('show_values_for_scalar_types')) {
                 $values = $type->getPossibleValues();
 
                 if ($values) {
@@ -362,7 +392,7 @@ class TypeScriptGenerator
         }
 
         if ($type instanceof FloatType) {
-            if ($type->isEnum || ($this->config->data['typescript']['show_values_for_scalar_types'] ?? true)) {
+            if ($type->isEnum || $tag->getConfig('show_values_for_scalar_types')) {
                 $values = $type->getPossibleValues();
 
                 if ($values) {
@@ -374,11 +404,11 @@ class TypeScriptGenerator
         }
 
         if ($type instanceof StringType) {
-            if ($type->isEnum || ($this->config->data['typescript']['show_values_for_scalar_types'] ?? true)) {
+            if ($type->isEnum || $tag->getConfig('show_values_for_scalar_types')) {
                 $values = $type->getPossibleValues();
 
                 if ($values) {
-                    return implode('|', array_map(fn ($value) => $this->toTsString($value), $values));
+                    return implode('|', array_map(fn ($value) => $this->toTsString($value, $tag->getConfig('string_quote')), $values));
                 }
             }
 
@@ -420,11 +450,22 @@ class TypeScriptGenerator
                     }
                 }
 
-                if ($isRootLevel && isset($tag->options['omit'])) {
-                    $properties = array_filter($type->shape, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+                $properties = $type->shape;
 
-                } else {
-                    $properties = $type->shape;
+                if ($isRootLevel) {
+                    if (isset($tag->options['only'])) {
+                        $properties = array_filter($properties, fn ($name) => in_array($name, $tag->options['only']), ARRAY_FILTER_USE_KEY);
+                    }
+
+                    if (! empty($tag->options['with'])) {
+                        foreach ($tag->options['with'] as $propName => $propType) {
+                            $properties[$propName] = $propType;
+                        }
+                    }
+
+                    if (isset($tag->options['omit'])) {
+                        $properties = array_filter($properties, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+                    }
                 }
 
                 if (! $properties) {
@@ -435,7 +476,7 @@ class TypeScriptGenerator
 
                 foreach ($properties as $propertyName => $propertyType) {
                     $propertyBaseIndent = $baseIndent . $indent;
-                    $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
+                    $addSemicolon = $tag->getConfig('add_semicolons');
 
                     $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
@@ -447,8 +488,8 @@ class TypeScriptGenerator
                 return $result;
             }
 
-            $keyType = $type->keyType?->unwrapType($this->config);
-            $itemType = $type->itemType?->unwrapType($this->config);
+            $keyType = $type->keyType?->unwrapType($tag->scope->config);
+            $itemType = $type->itemType?->unwrapType($tag->scope->config);
 
             $tsItemType = $this->convertAutoDocTypeToTsType($tag, $itemType ?? new UnknownType, $indent, $baseIndent);
 
@@ -468,11 +509,22 @@ class TypeScriptGenerator
                 return $this->convertAutoDocTypeToTsType($tag, $type->typeToDisplay, $indent, $baseIndent, $isRootLevel);
             }
 
-            if ($isRootLevel && isset($tag->options['omit'])) {
-                $properties = array_filter($type->properties, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+            $properties = $type->properties;
 
-            } else {
-                $properties = $type->properties;
+            if ($isRootLevel) {
+                if (isset($tag->options['only'])) {
+                    $properties = array_filter($properties, fn ($name) => in_array($name, $tag->options['only']), ARRAY_FILTER_USE_KEY);
+                }
+
+                if (! empty($tag->options['with'])) {
+                    foreach ($tag->options['with'] as $propName => $propType) {
+                        $properties[$propName] = $propType;
+                    }
+                }
+
+                if (isset($tag->options['omit'])) {
+                    $properties = array_filter($properties, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
+                }
             }
 
             if (! $properties) {
@@ -483,7 +535,7 @@ class TypeScriptGenerator
 
             foreach ($properties as $propertyName => $propertyType) {
                 $propertyBaseIndent = $baseIndent . $indent;
-                $addSemicolon = $this->config->data['typescript']['add_semicolons'] ?? false;
+                $addSemicolon = $tag->getConfig('add_semicolons');
 
                 $tsType = $this->convertAutoDocTypeToTsType($tag, $propertyType, $indent, $propertyBaseIndent);
 
@@ -496,17 +548,17 @@ class TypeScriptGenerator
         }
 
         if ($type instanceof UnionType) {
-            $type->mergeDuplicateTypes(config: $this->config);
+            $type->mergeDuplicateTypes(config: $tag->scope->config);
 
-            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent), $type->types);
+            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent, $isRootLevel), $type->types);
 
             return implode('|', array_unique($types));
         }
 
         if ($type instanceof IntersectionType) {
-            $type->mergeDuplicateTypes(mergeAsIntersection: true, config: $this->config);
+            $type->mergeDuplicateTypes(mergeAsIntersection: true, config: $tag->scope->config);
 
-            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent), $type->types);
+            $types = array_map(fn (Type $type) => $this->convertAutoDocTypeToTsType($tag, $type, $indent, $baseIndent, $isRootLevel), $type->types);
 
             return implode('&', array_unique($types));
         }
@@ -528,10 +580,8 @@ class TypeScriptGenerator
         return $input;
     }
 
-    private function toTsString(string $input): string
+    private function toTsString(string $input, string $quote): string
     {
-        $quote = $this->config->data['typescript']['string_quote'] ?? "'";
-
         $escaped = str_replace('\\', '\\\\', $input);
         $escaped = str_replace($quote, '\\' . $quote, $escaped);
 
@@ -542,5 +592,93 @@ class TypeScriptGenerator
         );
 
         return $quote . $escaped . $quote;
+    }
+
+
+    private function generateDeclarationHeader(bool $export, string $name, string $structureType): string
+    {
+        return ($export ? 'export ' : '')
+            . $structureType . ' '
+            . $name . ' '
+            . ($structureType === 'type' ? '= ' : '');
+    }
+
+    private function prepareDeclarationToBeWrittenToFile(AutoDocTag $tag, string $name, string $filePath, string $typeDefinition): void
+    {
+        $fullPath = null;
+
+        foreach ($tag->getConfig('path_prefixes') as $prefix => $basePath) {
+            if (str_starts_with($filePath, $prefix)) {
+                $fullPath = $basePath . substr($filePath, strlen($prefix));
+                break;
+            }
+        }
+
+        if ($fullPath === null) {
+            $tag->reportError('No matching path prefix found for path "' . $filePath . '". Check your path_prefixes configuration.');
+
+            return;
+        }
+
+        if (isset($this->filesToGenerate[$fullPath][$name])) {
+            $tag->reportError('Type "' . $name . '" is already exported in file "' . $fullPath . '". Use `as` option to export type with a different name.');
+
+            return;
+        }
+
+        $this->filesToGenerate[$fullPath][$name] = $typeDefinition;
+    }
+
+    private function generateImportStatement(AutoDocTag $tag, string $name, string $filePath): string
+    {
+        return 'import(' . $this->toTsString($filePath, $tag->getConfig('string_quote')) . ').' . ($tag->options['as'] ?? $name);
+    }
+
+    public function overwriteGeneratedFiles(): void
+    {
+        $filePrefix = '/**' . "\n"
+            . ' * This file is auto-generated by PHP AutoDoc.' . "\n"
+            . ' * Documentation: https://phpautodoc.com/docs/typescript' . "\n"
+            . ' */' . "\n\n";
+
+        foreach ($this->filesToGenerate as $filePath => $typeDefinitions) {
+            file_put_contents($filePath, $filePrefix . implode("\n\n", array_map($this->normalizeIndent(...), $typeDefinitions)));
+        }
+    }
+
+    private function normalizeIndent(string $text): string
+    {
+        $lines = explode("\n", $text);
+        $indents = [];
+
+        foreach ($lines as $i => $line) {
+            if (trim($line) === '') {
+                continue;
+            }
+
+            if (preg_match('/^([ \t]+)(?=\S)/', $line, $m)) {
+                $indents[] = $m[1];
+            } else {
+                return $text;
+            }
+        }
+
+        if (empty($indents)) {
+            return $text;
+        }
+
+        $common = $indents[0];
+
+        foreach ($indents as $indent) {
+            while (! str_starts_with($indent, $common)) {
+                $common = substr($common, 0, -1);
+            }
+
+            if ($common === '') {
+                return $text;
+            }
+        }
+
+        return preg_replace('/^' . preg_quote($common, '/') . '/m', '', $text) ?? $text;
     }
 }

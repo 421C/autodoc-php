@@ -24,6 +24,18 @@ use Exception;
  *     request_methods?: string[],
  * }
  *
+ * @phpstan-type TypeScriptConfig array{
+ *     working_directory?: string,
+ *     file_extensions?: string[],
+ *     indent?: string,
+ *     string_quote?: string,
+ *     add_semicolons?: bool,
+ *     show_values_for_scalar_types?: bool,
+ *     save_types_in_single_file?: string|null,
+ *     modes?: array<string, array<string, mixed>>,
+ *     path_prefixes?: callable(): array<string, string>,
+ * }
+ *
  * @phpstan-type ConfigArray array{
  *     api: array{
  *         title?: string,
@@ -56,18 +68,11 @@ use Exception;
  *     use_cache: bool,
  *     memory_limit: ?string,
  *     max_depth: int,
- *     debug: array{
+ *     debug?: array{
  *         enabled: bool,
  *         ignore_dynamic_method_errors: bool,
  *     },
- *     typescript: array{
- *         working_directory?: string,
- *         file_extensions?: string[],
- *         indent?: string,
- *         string_quote?: string,
- *         add_semicolons?: bool,
- *         show_values_for_scalar_types?: bool,
- *     },
+ *     typescript?: TypeScriptConfig,
  * }
  */
 class Config
@@ -128,6 +133,18 @@ class Config
         }
 
         return $schemas;
+    }
+
+
+    /**
+     * @return TypeScriptConfig
+     */
+    public function getTypeScriptConfig(?string $mode = null): array
+    {
+        /** @var TypeScriptConfig */
+        $modeConfig = $mode ? ($this->data['typescript']['modes'][$mode] ?? []) : [];
+
+        return array_merge($this->data['typescript'] ?? [], $modeConfig);
     }
 
 

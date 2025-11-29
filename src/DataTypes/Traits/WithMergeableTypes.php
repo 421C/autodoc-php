@@ -59,7 +59,26 @@ trait WithMergeableTypes
             }
         }
 
-        $this->types = $mergedTypes;
+        /**
+         * Move NullType to the end of type list, so that it looks better in TS export.
+         */
+        $nonNullTypes = [];
+        $nullType = null;
+
+        foreach ($mergedTypes as $type) {
+            if ($type instanceof NullType) {
+                $nullType = $type;
+
+            } else {
+                $nonNullTypes[] = $type;
+            }
+        }
+
+        $this->types = $nonNullTypes;
+
+        if ($nullType) {
+            $this->types[] = $nullType;
+        }
     }
 
 
