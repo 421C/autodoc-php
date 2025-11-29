@@ -57,7 +57,7 @@ class PhpEnum
             [$title, $type->description] = $enumPhpDoc->getSummaryAndDescription();
 
             if ($enumConfig['remove_description'] ?? false) {
-                $type->description = '';
+                $type->description = null;
             }
         }
 
@@ -78,7 +78,7 @@ class PhpEnum
                 $typeForEnumComponent = clone $type;
 
                 if ($enumConfig['generate_description_from_cases'] ?? false) {
-                    $typeForEnumComponent->description = trim($typeForEnumComponent->description . "\n\n" . $this->generateDescriptionFromCases());
+                    $typeForEnumComponent->addDescription($this->generateDescriptionFromCases());
                     $typeForEnumComponent->setEnumValues([]);
                 }
 
@@ -86,7 +86,7 @@ class PhpEnum
             }
 
             if ($enumConfig['create_links'] ?? false) {
-                $type->description = rtrim("[$title](#/schemas/" . urlencode($enumName) . ")\n\n" . $type->description);
+                $type->addDescription("[$title](#/schemas/" . urlencode($enumName) . ')', prepend: true);
             }
         }
 

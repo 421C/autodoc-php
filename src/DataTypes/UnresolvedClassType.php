@@ -4,12 +4,12 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\Scope;
 
-/**
- * @property class-string $className
- */
 class UnresolvedClassType extends UnresolvedType
 {
     public function __construct(
+        /**
+         * @var class-string
+         */
         public ?string $className,
         public Scope $scope,
         public ?string $description = null,
@@ -33,12 +33,12 @@ class UnresolvedClassType extends UnresolvedType
             $resolvedType = $phpClass->resolveType();
 
         } else {
-            $resolvedType = new ObjectType(className: $this->className);
+            $resolvedType = new ObjectType;
         }
 
-        $resolvedType->description = $resolvedType->description ?: $this->description;
-        $resolvedType->examples = $resolvedType->examples ?: $this->examples;
-        $resolvedType->required = $resolvedType->required ?: $this->required;
+        $resolvedType->addDescription($this->description);
+        $resolvedType->examples = $this->examples ?: $resolvedType->examples;
+        $resolvedType->required = $this->required ?: $resolvedType->required;
 
         return $resolvedType;
     }

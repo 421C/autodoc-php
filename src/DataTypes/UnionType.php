@@ -37,17 +37,10 @@ class UnionType extends Type
             }
 
             if ($nullableType) {
-                if (! $nullableType->description) {
-                    $nullableType->description = $this->description;
-                }
+                $nullableType->addDescription($this->description);
 
-                if (! $nullableType->examples) {
-                    $nullableType->examples = $this->examples;
-                }
-
-                if (! $nullableType->example) {
-                    $nullableType->example = $this->example;
-                }
+                $nullableType->examples = $nullableType->examples ?: $this->examples;
+                $nullableType->example = $nullableType->example ?: $this->example;
 
                 $nullableType->required = $nullableType->required || $this->required;
                 $nullableType->deprecated = $nullableType->deprecated || $this->deprecated;

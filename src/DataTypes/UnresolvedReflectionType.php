@@ -17,6 +17,10 @@ class UnresolvedReflectionType extends UnresolvedType
 
     public function resolve(): Type
     {
-        return Type::resolveFromReflection($this->reflection, $this->scope);
+        $type = Type::resolveFromReflection($this->reflection, $this->scope);
+
+        $type->addDescription($this->description);
+
+        return $type;
     }
 }

@@ -42,9 +42,9 @@ abstract class Type
             if (count($this->types) === 1) {
                 $type = $this->types[0];
 
-                $type->description = $type->description ?: $this->description;
-                $type->examples = $type->examples ?: $this->examples;
-                $type->example = $type->example ?: $this->example;
+                $type->addDescription($this->description);
+                $type->examples = $this->examples ?: $type->examples;
+                $type->example = $this->example ?: $type->example;
 
                 $type->required = $type->required || $this->required;
                 $type->deprecated = $type->deprecated || $this->deprecated;
@@ -85,6 +85,19 @@ abstract class Type
 
         if (property_exists($this, 'value')) {
             $this->value = $values;
+        }
+
+        return $this;
+    }
+
+
+    public function addDescription(?string $description, bool $prepend = false): self
+    {
+        if ($prepend) {
+            $this->description = trim($description . "\n\n" . $this->description) ?: null;
+
+        } else {
+            $this->description = trim($this->description . "\n\n" . $description) ?: null;
         }
 
         return $this;

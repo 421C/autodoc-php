@@ -48,14 +48,7 @@ class UnresolvedParserNodeType extends UnresolvedType
             }
         }
 
-        if ($this->description) {
-            if ($type->description) {
-                $type->description = $type->description . "\n\n" . $this->description;
-
-            } else {
-                $type->description = $this->description;
-            }
-        }
+        $type->addDescription($this->description);
 
         $type->examples = $type->examples ?: $this->examples;
 

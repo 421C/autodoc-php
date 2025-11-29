@@ -105,7 +105,7 @@ class PhpArray
 
                 } else {
                     $comments = $arrayItemNode->getComments();
-                    $description = null;
+                    $phpDocDescription = null;
                     $exampleValues = null;
                     $typeFromPhpDoc = null;
 
@@ -113,7 +113,7 @@ class PhpArray
                         if ($comment instanceof Comment\Doc) {
                             $phpDoc = new PhpDoc($comment->getText(), $this->scope);
 
-                            $description = $phpDoc->getText();
+                            $phpDocDescription = $phpDoc->getText();
                             $exampleValues = $phpDoc->getExampleValues();
 
                             foreach ($phpDoc->getVarTags() as $var) {
@@ -127,10 +127,10 @@ class PhpArray
                         }
                     }
 
-                    $itemType = new UnresolvedParserNodeType($arrayItemNode->value, $this->scope, $description);
+                    $itemType = new UnresolvedParserNodeType($arrayItemNode->value, $this->scope, $phpDocDescription);
 
                     if ($typeFromPhpDoc) {
-                        $typeFromPhpDoc->description = $itemType->description ?: $description;
+                        $typeFromPhpDoc->addDescription($itemType->description, prepend: true);
                         $typeFromPhpDoc->fallbackType = $itemType;
 
                         $itemType = $typeFromPhpDoc;
