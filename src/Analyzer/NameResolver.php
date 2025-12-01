@@ -52,7 +52,7 @@ class NameResolver extends NodeVisitorAbstract
     public function enterNode(Node $node)
     {
         if ($node instanceof Node\Stmt\Namespace_) {
-            $this->namespace = $node->name?->toString();
+            $this->namespace ??= $node->name?->toString();
 
             foreach ($node->stmts as $stmt) {
                 if ($stmt instanceof Node\Stmt\Use_) {
