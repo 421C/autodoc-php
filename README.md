@@ -1,18 +1,29 @@
 # PHP autodoc
 
-PHP autodoc automatically generates OpenAPI 3.1.0 documentation for your PHP projects by analyzing your codebase. This ensures your API docs are always up-to-date and easy to maintain.
+PHP autodoc automatically generates up-to-date OpenAPI 3.1.0 documentation and TypeScript types directly from your PHP code – no PHPDoc annotations required.
 
-In Laravel projects, [autodoc-laravel](https://github.com/421C/autodoc-laravel) offers seamless integration with routes, request validation, database models, API resources, and more.
+Instead of relying on manually written comments, PHP autodoc reads your actual PHP code and native types to extract accurate type information. PHPDoc annotations are supported if present, but completely optional.
+
+For Laravel projects, [autodoc-laravel](https://github.com/421C/autodoc-laravel) offers seamless integration with routes, request validation, database models, API resources, and more.
 
 **Visit [phpautodoc.com](https://phpautodoc.com) to see full documentation.**
 
 
+## TypeScript export
+
+Keep your frontend and backend in sync – define your types once in PHP and let PHP autodoc generate the matching TypeScript types automatically.
+
+PHP autodoc supports exporting enums, classes, PHPStan type aliases, request/response structures and even custom PHPDoc type expressions as TypeScript types. [PHP autodoc-laravel](https://github.com/421C/autodoc-laravel) extends this functionality by offering support for Laravel models and other Laravel-specific structures that need custom handling.
+
+See [TypeScript section in our documentation](https://phpautodoc.com) for more info and examples.
+
+
 ## How it works?
 
-PHP autodoc uses PHP parser and PHPDoc parser to analyze your code and convert it into `AutoDoc\DataTypes\Type` objects. These objects can be used in your [custom PHP autodoc extensions](https://phpautodoc.com/docs/extensions) and are also utilized in generating OpenAPI 3.1.0 schemas. If you are using a static analysis tool like [PHPStan](https://phpstan.org/), you will find that autodoc works well without any changes to your codebase.
+PHP autodoc uses PHP parser and PHPDoc parser to analyze your code and convert it into `AutoDoc\DataTypes\Type` objects. These objects can be used in your [custom PHP autodoc extensions](https://phpautodoc.com/docs/extensions) and are also utilized in generating OpenAPI 3.1.0 schemas and TypeScript types. If you are using a static analysis tool like [PHPStan](https://phpstan.org/), you will find that autodoc works well without any changes to your codebase.
+
 
 ## Installation
-
 
 ### Using Laravel
 
