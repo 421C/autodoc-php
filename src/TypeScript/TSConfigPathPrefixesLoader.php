@@ -63,8 +63,6 @@ class TSConfigPathPrefixesLoader
                 $targetPath = realpath("$rootDir/$baseUrl/$target");
 
                 if ($targetPath) {
-                    dump("$prefix => $targetPath");
-
                     yield $prefix => $targetPath;
 
                 } else {
