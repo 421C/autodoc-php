@@ -33,7 +33,8 @@ use Exception;
  *     show_values_for_scalar_types?: bool,
  *     save_types_in_single_file?: string|null,
  *     modes?: array<string, array<string, mixed>>,
- *     path_prefixes?: callable(): array<string, string>,
+ *     path_prefixes?: class-string<object&callable(Config $config): array<string, string>>|callable(Config $config): array<string, string>,
+ *     tsconfig_path?: string,
  * }
  *
  * @phpstan-type ConfigArray array{

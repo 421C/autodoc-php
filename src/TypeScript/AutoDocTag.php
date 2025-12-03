@@ -245,8 +245,25 @@ class AutoDocTag
 
         $value = $this->config[$key] ?? $defaults[$key];
 
+        if ($key === 'path_prefixes') {
+            if (is_string($value)) {
+                if (class_exists($value) && method_exists($value, '__invoke')) {
+                    $value = (new $value)(...);
+
+                } else {
+                    throw new Exception("Error: path_prefixes in autodoc config is not an invokable class name or callable. '$value' given.");
+                }
+            }
+
+            if (! is_callable($value)) {
+                $type = gettype($value);
+
+                throw new Exception("Error: path_prefixes in autodoc config is of type $type. It must be an invokable class name or a function of type `callable(Config \$config): iterable<string, string>`.");
+            }
+        }
+
         if (is_callable($value)) {
-            return $value();
+            return $value($this->scope->config);
         }
 
         return $value;

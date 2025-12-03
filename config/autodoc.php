@@ -200,22 +200,16 @@ return [
 
         /**
          * Path prefixes from your TypeScript project. Used when generating `import(path).Type` statements.
-         * @see https://www.typescriptlang.org/tsconfig/#paths
+         * Expects either a function of invokable class that returns an iterable of prefix => path pairs.
+         *
+         * @var (callable(AutoDoc\Config): iterable) | class-string<object&callable(AutoDoc\Config): iterable>
          */
-        'path_prefixes' => function () {
-            // Load path prefixes from tsconfig.json
-            $tsConfigPath = __DIR__ . '/../tsconfig.json';
+        'path_prefixes' => AutoDoc\TypeScript\TSConfigPathPrefixesLoader::class,
 
-            if (file_exists($tsConfigPath)) {
-                foreach (json_decode(file_get_contents($tsConfigPath), true)['compilerOptions']['paths'] ?? [] as $prefix => $path) {
-                    $prefix = str_ends_with($prefix, '/*') ? substr($prefix, 0, -2) : $prefix;
-                    $path = str_ends_with($path, '/*') ? substr($path, 0, -2) : $path;
-
-                    yield $prefix => $path;
-                }
-            }
-
-            return [];
-        },
+        /**
+         * Specify a full path to a tsconfig.json file.
+         * Required only if you use the built-in TSConfigPathPrefixesLoader in `path_prefixes` option.
+         */
+        'tsconfig_path' => __DIR__ . '/../tsconfig.json',
     ],
 ];
