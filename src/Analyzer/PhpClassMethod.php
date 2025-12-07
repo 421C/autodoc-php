@@ -131,10 +131,11 @@ class PhpClassMethod
         foreach ($this->scope->route->responses ?? [] as $response) {
             $httpStatusCode = strval($response['status'] ?? 200);
             $type = $response['body'] ?? new UnknownType;
+            $contentType = $response['contentType'] ?? $type->getContentType();
 
             $operation->responses[$httpStatusCode] = new Response(
                 content: [
-                    ($response['contentType'] ?? 'application/json') => new MediaType(
+                    $contentType => new MediaType(
                         schema: $type->toSchema($this->scope->config),
                         type: $type,
                     ),
@@ -143,9 +144,11 @@ class PhpClassMethod
         }
 
         if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
+            $contentType = $responseBodyType->getContentType();
+
             $operation->responses['200'] = new Response(
                 content: [
-                    'application/json' => new MediaType(
+                    $contentType => new MediaType(
                         schema: $responseBodyType->toSchema($this->scope->config),
                         type: $responseBodyType,
                     ),

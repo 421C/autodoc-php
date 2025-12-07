@@ -1471,7 +1471,7 @@ class TestController
         'responses' => [
             200 => [
                 'content' => [
-                    'application/json' => [
+                    'text/plain' => [
                         'schema' => [
                             'type' => 'boolean',
                         ],

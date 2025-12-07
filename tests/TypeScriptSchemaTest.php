@@ -308,6 +308,7 @@ final class TypeScriptSchemaTest extends TestCase
                         deprecated: boolean
                         example: Record<string, unknown>|string|null
                         isEnum: boolean
+                        contentType: string|null
                     }
                 }>
             }

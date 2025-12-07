@@ -35,6 +35,8 @@ abstract class Type
 
     public bool $isEnum = false;
 
+    public ?string $contentType = null;
+
 
     public function unwrapType(?Config $config = null): Type
     {
@@ -144,5 +146,24 @@ abstract class Type
         } else {
             return new UnknownType;
         }
+    }
+
+    public function getContentType(): string
+    {
+        if ($this->contentType) {
+            return $this->contentType;
+        }
+
+        if ($this instanceof StringType
+            || $this instanceof IntegerType
+            || $this instanceof FloatType
+            || $this instanceof NumberType
+            || $this instanceof BoolType
+            || $this instanceof NullType
+        ) {
+            return 'text/plain';
+        }
+
+        return 'application/json';
     }
 }
