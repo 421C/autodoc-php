@@ -109,8 +109,20 @@ class PhpClassMethod
                 $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
             }
 
-        } else if (! $responseBodyType) {
-            $responseBodyType = $phpFunction?->getTypeFromNativeReturnType()?->unwrapType($this->scope->config);
+        }
+
+        $responseBodyType = $responseBodyType?->unwrapType($this->scope->config);
+
+        if (! $responseBodyType
+            || $responseBodyType instanceof UnknownType
+            || ($responseBodyType instanceof ObjectType && empty($responseBodyType->properties) && !$responseBodyType->typeToDisplay)
+            || ($responseBodyType instanceof ArrayType && empty($responseBodyType->shape) && !$responseBodyType->itemType)
+        ) {
+            $nativeReturnType = $phpFunction?->getTypeFromNativeReturnType()?->unwrapType($this->scope->config);
+
+            if ($nativeReturnType) {
+                $responseBodyType = $nativeReturnType;
+            }
         }
 
         if ($requestBodyType) {
