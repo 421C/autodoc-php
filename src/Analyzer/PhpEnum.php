@@ -51,12 +51,14 @@ class PhpEnum
             }
         }
 
+        $removeDescriptions = $enumConfig['remove_description'] ?? false;
+
         $title = null;
 
         if ($enumPhpDoc) {
             [$title, $type->description] = $enumPhpDoc->getSummaryAndDescription();
 
-            if ($enumConfig['remove_description'] ?? false) {
+            if ($removeDescriptions) {
                 $type->description = null;
             }
         }
@@ -78,6 +80,10 @@ class PhpEnum
                 $typeForEnumComponent = clone $type;
 
                 if ($enumConfig['generate_description_from_cases'] ?? false) {
+                    if (! $removeDescriptions && $title) {
+                        $typeForEnumComponent->addDescription($title, prepend: true);
+                    }
+
                     $typeForEnumComponent->addDescription($this->generateDescriptionFromCases());
                     $typeForEnumComponent->setEnumValues([]);
                 }
@@ -113,7 +119,7 @@ class PhpEnum
         $enumCaseHtmlDescriptions = [];
 
         foreach ($enumCaseNodeVisitor->caseDescriptions as $caseValue => $caseDescription) {
-            $enumCaseHtmlDescriptions[] = '<span class="sl-bg-canvas-tint sl-rounded sl-border" style="text-align:center;min-width:42px;height:18px;display:inline-block;margin-right:6px;margin-bottom:6px;">' . $caseValue . '</span>' . trim($caseDescription);
+            $enumCaseHtmlDescriptions[] = '<span class="sl-bg-canvas-tint sl-rounded sl-border" style="text-align:center;min-width:42px;height:18px;display:inline-block;margin-right:6px;margin-bottom:6px;padding-left:2px;padding-right:2px;">' . $caseValue . '</span>' . trim($caseDescription);
         }
 
         return '<br><pre>' . implode('<br>', $enumCaseHtmlDescriptions) . '</pre><br>';
