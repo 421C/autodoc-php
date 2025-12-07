@@ -180,19 +180,19 @@ return [
         'show_values_for_scalar_types' => true,
 
         /**
-         * Specify a full path to a file where all TypeScript types will be saved.
+         * Specify a path to a file where all TypeScript types will be saved.
          * Set to `null` to export types right after their `@autodoc` comments.
          */
         'save_types_in_single_file' => null,
 
         /**
          * Custom modes that can be applied to specific TypeScript exports.
-         * For example below, you can specify `{mode: 'document-types'}` in your `@autodoc` tag to export types to a separate file.
+         * For example below, you can specify `{mode: 'export'}` in your `@autodoc` tag to export types to a separate file.
          * Options supported in mode definitions: 'save_types_in_single_file', 'show_values_for_scalar_types', 'indent', 'string_quote', 'add_semicolons'.
          *
          * @example [
-         *     'document-types' => [
-         *         'save_types_in_single_file' => '/path/to/your/document/types.ts',
+         *     'export' => [
+         *         'save_types_in_single_file' => '@/path/to/your/exported-types.ts',
          *     ],
          * ]
          */
@@ -211,5 +211,17 @@ return [
          * Required only if you use the built-in TSConfigPathPrefixesLoader in `path_prefixes` option.
          */
         'tsconfig_path' => __DIR__ . '/../tsconfig.json',
+
+        /**
+         * Export request and response schemas as TypeScript types.
+         *
+         * @example [
+         *     '@/exported-types/document-requests-and-responses.ts' => [
+         *         'routes' => ['/api/document'],
+         *         'request_methods' => ['get', 'post'],
+         *     ],
+         * ]
+         */
+        'export_http_requests_and_responses' => [],
     ],
 ];

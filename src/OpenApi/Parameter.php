@@ -2,6 +2,7 @@
 
 namespace AutoDoc\OpenApi;
 
+use AutoDoc\DataTypes\Type;
 use JsonSerializable;
 
 /**
@@ -27,6 +28,7 @@ class Parameter implements JsonSerializable
          * @var ?array<string, mixed>
          */
         public ?array $schema = null,
+        public ?Type $type = null,
 
         /**
          * @var ?array<string, MediaType>

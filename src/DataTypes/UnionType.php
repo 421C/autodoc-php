@@ -83,10 +83,12 @@ class UnionType extends Type
                         foreach ($schema['type'] as $subTypeName) {
                             if (is_array($subTypeName)) {
                                 foreach ($subTypeName as $name) {
-                                    $simpleSchemaTypeNames[$name] = 1;
+                                    if (is_string($name)) {
+                                        $simpleSchemaTypeNames[$name] = 1;
+                                    }
                                 }
 
-                            } else {
+                            } else if (is_string($subTypeName)) {
                                 $simpleSchemaTypeNames[$subTypeName] = 1;
                             }
                         }

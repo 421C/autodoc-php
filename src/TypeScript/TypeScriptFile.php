@@ -108,7 +108,7 @@ class TypeScriptFile
 
     public function processAutodocTags(Scope $scope): int
     {
-        $generator = $this->generator ?? new TypeScriptGenerator($scope->config);
+        $generator = $this->generator ?? new TypeScriptGenerator;
 
         $processedTags = 0;
         $tag = $this->findFirstAutodocTag($scope);

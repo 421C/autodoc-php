@@ -222,51 +222,20 @@ class AutoDocTag
 
     /**
      * @template K of key-of<TypeScriptConfig>
-     * @param K $key
-     * @return (K is 'path_prefixes' ? iterable<string, string> : TypeScriptConfig[K])
+     * @param K|null $key
+     * @return ($key is null ? TypeScriptConfig : TypeScriptConfig[K])
      */
-    public function getConfig(string $key): mixed
+    public function getConfig(?string $key = null): mixed
     {
         if (! isset($this->config)) {
             $this->config = $this->scope->config->getTypeScriptConfig($this->options['mode'] ?? null);
         }
 
-        $defaults = [
-            'working_directory' => null,
-            'file_extensions' => ['ts', 'tsx', 'vue'],
-            'indent' => '    ',
-            'string_quote' => "'",
-            'add_semicolons' => false,
-            'show_values_for_scalar_types' => true,
-            'save_types_in_single_file' => null,
-            'modes' => [],
-            'path_prefixes' => fn () => [],
-        ];
-
-        $value = $this->config[$key] ?? $defaults[$key];
-
-        if ($key === 'path_prefixes') {
-            if (is_string($value)) {
-                if (class_exists($value) && method_exists($value, '__invoke')) {
-                    $value = (new $value)(...);
-
-                } else {
-                    throw new Exception("Error: path_prefixes in autodoc config is not an invokable class name or callable. '$value' given.");
-                }
-            }
-
-            if (! is_callable($value)) {
-                $type = gettype($value);
-
-                throw new Exception("Error: path_prefixes in autodoc config is of type $type. It must be an invokable class name or a function of type `callable(Config \$config): iterable<string, string>`.");
-            }
+        if ($key === null) {
+            return $this->config;
         }
 
-        if (is_callable($value)) {
-            return $value($this->scope->config);
-        }
-
-        return $value;
+        return $this->config[$key] ?? null;
     }
 
 

@@ -23,6 +23,7 @@ use Exception;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFloatNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprIntegerNode;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprStringNode;
+use PHPStan\PhpDocParser\Ast\ConstExpr\ConstFetchNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\GenericTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
@@ -808,16 +809,12 @@ class PhpDoc
     }
 
 
-    private function getUnquotedValue(ConstExprIntegerNode|ConstExprStringNode|IdentifierTypeNode $node): string
+    private function getUnquotedValue(ConstExprIntegerNode|ConstExprStringNode|ConstFetchNode|IdentifierTypeNode $node): string
     {
-        if ($node instanceof ConstExprIntegerNode) {
-            return (string) $node->value;
-        }
-
         if ($node instanceof ConstExprStringNode) {
             return $node->value;
         }
 
-        return $node->name;
+        return (string) $node;
     }
 }

@@ -4,6 +4,7 @@ namespace AutoDoc\Commands;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\TypeScript\RoutesExporter;
 use AutoDoc\TypeScript\TypeScriptFile;
 use AutoDoc\TypeScript\TypeScriptGenerator;
 use Exception;
@@ -28,6 +29,10 @@ class UpdateTypeScriptStructures
      *     filePath: string,
      *     processedTags: int,
      * } | array{
+     *     filePath: string,
+     *     exportedRequests: int,
+     *     exportedResponses: int,
+     * } | array{
      *     error: Throwable|string,
      * }>
      */
@@ -40,10 +45,41 @@ class UpdateTypeScriptStructures
 
         $fileExtensions ??= $this->config->data['typescript']['file_extensions'] ?? ['ts', 'tsx', 'vue'];
 
+        yield from $this->exportRequestsAndResponses();
+
+        yield from $this->updateAutoDocTagStructures($workingDirectory, $fileExtensions);
+    }
+
+    /**
+     * @return iterable<array{
+     *     filePath: string,
+     *     exportedRequests: int,
+     *     exportedResponses: int,
+     * }>
+     */
+    private function exportRequestsAndResponses(): iterable
+    {
+        foreach ($this->config->data['typescript']['export_http_requests_and_responses'] ?? [] as $filePath => $options) {
+            yield (new RoutesExporter($this->config, $filePath))->export();
+        }
+    }
+
+    /**
+     * @param string[] $fileExtensions
+     *
+     * @return iterable<array{
+     *     filePath: string,
+     *     processedTags: int,
+     * } | array{
+     *     error: Throwable|string,
+     * }>
+     */
+    private function updateAutoDocTagStructures(string $workingDirectory, array $fileExtensions): iterable
+    {
         $files = $this->getFiles($workingDirectory, $fileExtensions);
 
         $scope = new Scope($this->config);
-        $generator = new TypeScriptGenerator($this->config);
+        $generator = new TypeScriptGenerator;
 
         foreach ($files as $filePath) {
             try {

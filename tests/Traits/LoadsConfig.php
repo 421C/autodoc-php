@@ -14,13 +14,23 @@ trait LoadsConfig
         $config->data['debug']['enabled'] = true;
         $config->data['debug']['ignore_dynamic_method_errors'] = false;
         $config->data['route_loader'] = RouteLoader::class;
+
         $config->data['typescript']['path_prefixes'] = fn () => ['@' => dirname(__DIR__) . '/typescript'];
+
         $config->data['typescript']['modes'] = [
             'double_quotes' => [
                 'string_quote' => '"',
             ],
             'separate_file' => [
                 'save_types_in_single_file' => '@/types.ts',
+            ],
+        ];
+
+        $config->data['typescript']['export_http_requests_and_responses'] = [
+            '@/requests-and-responses.ts' => [
+                'routes' => ['/api/test/route13', 'api/test/route14', 'api/test/route43'],
+                'exact_routes' => ['/api/test/route1'],
+                'request_methods' => ['get', 'post'],
             ],
         ];
 

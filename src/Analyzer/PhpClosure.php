@@ -76,6 +76,7 @@ class PhpClosure
                         required: $paramType->required,
                         deprecated: $paramType->deprecated,
                         schema: $paramType->toSchema($this->scope->config),
+                        type: $paramType,
                     );
                 }
             }

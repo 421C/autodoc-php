@@ -35,8 +35,16 @@ $config = new AutoDoc\Config(require $configPath);
 $commandOutput = (new AutoDoc\Commands\UpdateTypeScriptStructures($config))->run($workingDirectory);
 
 foreach ($commandOutput as $message) {
-    if (isset($message['filePath'])) {
-        echo 'Updated ' . $message['filePath'] . ' (' . $message['processedTags'] . ' tags)' . PHP_EOL;
+    if (isset($message['filePath'], $message['processedTags'])) {
+        $tagsText = $message['processedTags'] . ' tag' . ($message['processedTags'] === 1 ? '' : 's');
+
+        echo 'Updated ' . $message['filePath'] . ' (' . $tagsText . ')' . PHP_EOL;
+
+    } else if (isset($message['filePath'], $message['exportedRequests'], $message['exportedResponses'])) {
+        $requestsResponsesText = $message['exportedRequests'] . ' request' . ($message['exportedRequests'] === 1 ? '' : 's') . ', '
+            . $message['exportedResponses'] . ' response' . ($message['exportedResponses'] === 1 ? '' : 's');
+
+        echo 'Updated ' . $message['filePath'] . ' (' . $requestsResponsesText . ')' . PHP_EOL;
 
     } else if (isset($message['error'])) {
         if ($fimessagele['error'] instanceof Throwable) {

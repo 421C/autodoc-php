@@ -293,6 +293,7 @@ class Scope
         if ($node instanceof Node\Expr\ArrayDimFetch && $node->dim) {
             $varType = $this->resolveType($node->var);
             $key = $this->getRawValueFromNode($node->dim);
+            $key = is_int($key) ? $key : (string) $key;
 
             $getArrayItemType = function ($varType) use ($key) {
                 $type = null;

@@ -85,6 +85,7 @@ class PhpClassMethod
                         required: $paramType->required,
                         deprecated: $paramType->deprecated,
                         schema: $schema,
+                        type: $paramType,
                     );
                 }
             }

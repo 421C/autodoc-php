@@ -24,7 +24,7 @@ use Exception;
  *     request_methods?: string[],
  * }
  *
- * @phpstan-type TypeScriptConfig array{
+ * @phpstan-type TypeScriptConfigRaw array{
  *     working_directory?: string,
  *     file_extensions?: string[],
  *     indent?: string,
@@ -33,8 +33,31 @@ use Exception;
  *     show_values_for_scalar_types?: bool,
  *     save_types_in_single_file?: string|null,
  *     modes?: array<string, array<string, mixed>>,
- *     path_prefixes?: class-string<object&callable(Config $config): array<string, string>>|callable(Config $config): array<string, string>,
+ *     path_prefixes?: class-string<object&callable(Config $config): iterable<string, string>>|callable(Config $config): iterable<string, string>,
  *     tsconfig_path?: string,
+ *     export_http_requests_and_responses?: array<string, array{
+ *         routes?: string[],
+ *         exact_routes?: string[],
+ *         request_methods?: string[],
+ *     }>,
+ * }
+ *
+ * @phpstan-type TypeScriptConfig array{
+ *     working_directory?: string,
+ *     file_extensions: string[],
+ *     indent: string,
+ *     string_quote: string,
+ *     add_semicolons: bool,
+ *     show_values_for_scalar_types: bool,
+ *     save_types_in_single_file?: string|null,
+ *     modes: array<string, array<string, mixed>>,
+ *     path_prefixes: iterable<string, string>,
+ *     tsconfig_path?: string,
+ *     export_http_requests_and_responses?: array<string, array{
+ *         routes?: string[],
+ *         exact_routes?: string[],
+ *         request_methods?: string[],
+ *     }>,
  * }
  *
  * @phpstan-type ConfigArray array{
@@ -74,7 +97,7 @@ use Exception;
  *         enabled: bool,
  *         ignore_dynamic_method_errors: bool,
  *     },
- *     typescript?: TypeScriptConfig,
+ *     typescript?: TypeScriptConfigRaw,
  * }
  */
 class Config
@@ -143,10 +166,47 @@ class Config
      */
     public function getTypeScriptConfig(?string $mode = null): array
     {
-        /** @var TypeScriptConfig */
+        $defaults = [
+            'file_extensions' => ['ts', 'tsx', 'vue'],
+            'indent' => '    ',
+            'string_quote' => "'",
+            'add_semicolons' => false,
+            'show_values_for_scalar_types' => true,
+            'modes' => [],
+            'path_prefixes' => fn () => [],
+        ];
+
+        /** @var TypeScriptConfigRaw */
         $modeConfig = $mode ? ($this->data['typescript']['modes'][$mode] ?? []) : [];
 
-        return array_merge($this->data['typescript'] ?? [], $modeConfig);
+        $tsConfig = array_merge($defaults, $this->data['typescript'] ?? [], $modeConfig);
+
+        $pathPrefixesLoader = $tsConfig['path_prefixes'];
+
+        if (is_string($pathPrefixesLoader)) {
+            if (class_exists($pathPrefixesLoader) && method_exists($pathPrefixesLoader, '__invoke')) {
+                $pathPrefixesLoader = (new $pathPrefixesLoader)(...);
+
+            } else {
+                throw new Exception("Error: path_prefixes in autodoc config is not an invokable class name or callable. '$pathPrefixesLoader' given.");
+            }
+        }
+
+        /** @phpstan-ignore function.alreadyNarrowedType */
+        if (is_callable($pathPrefixesLoader)) {
+            $tsConfig['path_prefixes'] = $pathPrefixesLoader($this);
+
+            if (! is_iterable($tsConfig['path_prefixes'])) {
+                throw new Exception('Error: path_prefixes in autodoc config must return an iterable.');
+            }
+
+        } else {
+            $type = gettype($pathPrefixesLoader);
+
+            throw new Exception("Error: path_prefixes in autodoc config is of type $type. It must be an invokable class name or a function of type `callable(Config \$config): iterable<string, string>`.");
+        }
+
+        return $tsConfig;
     }
 
 
