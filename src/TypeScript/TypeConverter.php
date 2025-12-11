@@ -189,7 +189,7 @@ class TypeConverter
         }
 
         if (! $properties) {
-            return '{}';
+            return 'object';
         }
 
         $result = '{';
