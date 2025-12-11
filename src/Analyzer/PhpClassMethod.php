@@ -70,23 +70,7 @@ class PhpClassMethod
 
             foreach (['cookie', 'header', 'path', 'query'] as $location) {
                 foreach ($phpDocRequestParams[$location] as $paramName => $paramType) {
-                    $description = $paramType->description;
-
-                    $paramType->description = null;
-
-                    $schema = $paramType->toSchema($this->scope->config);
-
-                    $description = $description ? trim("{$paramType->description}\n\n{$description}") : $paramType->description;
-
-                    $operation->parameters[] = new Parameter(
-                        name: $paramName,
-                        in: $location,
-                        description: $description,
-                        required: $paramType->required,
-                        deprecated: $paramType->deprecated,
-                        schema: $schema,
-                        type: $paramType,
-                    );
+                    $operation->parameters[] = Parameter::fromType($paramType, $paramName, $location, $this->scope->config);
                 }
             }
         }
@@ -108,7 +92,6 @@ class PhpClassMethod
             if (! $responseBodyType && $methodNodeVisitor->returnTypes) {
                 $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
             }
-
         }
 
         $responseBodyType = $responseBodyType?->unwrapType($this->scope->config);
@@ -128,15 +111,32 @@ class PhpClassMethod
         if ($requestBodyType) {
             $requestBodyType = $requestBodyType->unwrapType($this->scope->config);
 
-            if (!($requestBodyType instanceof UnknownType) && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
-                $operation->requestBody = new RequestBody(
-                    content: [
-                        'application/json' => new MediaType(
-                            schema: $requestBodyType->toSchema($this->scope->config),
-                            type: $requestBodyType,
-                        ),
-                    ],
-                );
+            if ($this->scope->route
+                && !($requestBodyType instanceof UnknownType)
+                && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))
+            ) {
+                if ($this->scope->route->hasMethod('GET') || $this->scope->route->hasMethod('HEAD')) {
+                    if ($requestBodyType instanceof ObjectType) {
+                        foreach ($requestBodyType->properties as $paramName => $paramType) {
+                            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'query', $this->scope->config);
+                        }
+
+                    } else if ($requestBodyType instanceof ArrayType && $requestBodyType->shape) {
+                        foreach ($requestBodyType->shape as $paramName => $paramType) {
+                            $operation->parameters[] = Parameter::fromType($paramType, (string) $paramName, 'query', $this->scope->config);
+                        }
+                    }
+
+                } else {
+                    $operation->requestBody = new RequestBody(
+                        content: [
+                            'application/json' => new MediaType(
+                                schema: $requestBodyType->toSchema($this->scope->config),
+                                type: $requestBodyType,
+                            ),
+                        ],
+                    );
+                }
             }
         }
 

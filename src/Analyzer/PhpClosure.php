@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\OpenApi\MediaType;
@@ -70,14 +71,7 @@ class PhpClosure
 
             foreach (['cookie', 'header', 'path', 'query'] as $location) {
                 foreach ($phpDocRequestParams[$location] as $paramName => $paramType) {
-                    $operation->parameters[] = new Parameter(
-                        name: $paramName,
-                        in: $location,
-                        required: $paramType->required,
-                        deprecated: $paramType->deprecated,
-                        schema: $paramType->toSchema($this->scope->config),
-                        type: $paramType,
-                    );
+                    $operation->parameters[] = Parameter::fromType($paramType, $paramName, $location, $this->scope->config);
                 }
             }
         }
@@ -85,15 +79,32 @@ class PhpClosure
         if ($requestBodyType) {
             $requestBodyType = $requestBodyType->unwrapType($this->scope->config);
 
-            if (!($requestBodyType instanceof UnknownType) && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))) {
-                $operation->requestBody = new RequestBody(
-                    content: [
-                        'application/json' => new MediaType(
-                            schema: $requestBodyType->toSchema($this->scope->config),
-                            type: $requestBodyType,
-                        ),
-                    ],
-                );
+            if ($this->scope->route
+                && !($requestBodyType instanceof UnknownType)
+                && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))
+            ) {
+                if ($this->scope->route->hasMethod('GET') || $this->scope->route->hasMethod('HEAD')) {
+                    if ($requestBodyType instanceof ObjectType) {
+                        foreach ($requestBodyType->properties as $paramName => $paramType) {
+                            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'query', $this->scope->config);
+                        }
+
+                    } else if ($requestBodyType instanceof ArrayType && $requestBodyType->shape) {
+                        foreach ($requestBodyType->shape as $paramName => $paramType) {
+                            $operation->parameters[] = Parameter::fromType($paramType, (string) $paramName, 'query', $this->scope->config);
+                        }
+                    }
+
+                } else {
+                    $operation->requestBody = new RequestBody(
+                        content: [
+                            'application/json' => new MediaType(
+                                schema: $requestBodyType->toSchema($this->scope->config),
+                                type: $requestBodyType,
+                            ),
+                        ],
+                    );
+                }
             }
         }
 

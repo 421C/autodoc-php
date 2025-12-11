@@ -2,6 +2,7 @@
 
 namespace AutoDoc\OpenApi;
 
+use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use JsonSerializable;
 
@@ -58,5 +59,26 @@ class Parameter implements JsonSerializable
             'examples' => $this->examples,
             'example' => $this->example,
         ], fn ($value) => $value !== null);
+    }
+
+
+    /**
+     * @param 'path' | 'query' | 'header' | 'cookie' $in
+     */
+    public static function fromType(Type $type, string $name, string $in, Config $config): self
+    {
+        $description = $type->description;
+
+        $type->description = null;
+
+        return new Parameter(
+            name: $name,
+            in: $in,
+            description: $description,
+            required: $type->required,
+            deprecated: $type->deprecated,
+            schema: $type->toSchema($config),
+            type: $type,
+        );
     }
 }

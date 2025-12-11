@@ -108,6 +108,12 @@ class TypeScriptGenerator
         $indent = $tag->getConfig('indent');
         $baseIndent = $tag->getDeclarationIndent();
 
+        if (! $operation->requestBody) {
+            $tag->reportError('Request body not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
+
+            return '';
+        }
+
         $type = $operation->requestBody->content['application/json']->type
             ?? $operation->requestBody->content[array_key_first($operation->requestBody->content)]->type
             ?? null;

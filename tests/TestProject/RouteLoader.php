@@ -19,7 +19,7 @@ class RouteLoader extends AbstractRouteLoader
         foreach ($publicMethods as $method) {
             yield new Route(
                 uri: '/api/test/' . $method->getName(),
-                method: 'get',
+                method: 'post',
                 className: TestController::class,
                 classMethod: $method->getName(),
             );

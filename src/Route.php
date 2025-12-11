@@ -49,7 +49,19 @@ class Route
 
     public function getRequestBodyType(?Config $config = null): ?Type
     {
-        return (new UnionType($this->requestBodyTypes))->unwrapType($config);
+        $unwrappedType = (new UnionType($this->requestBodyTypes))->unwrapType($config);
+
+        if ($unwrappedType instanceof UnionType) {
+            return $unwrappedType->mergeObjectsAndArrayShapes($config)->unwrapType($config);
+        }
+
+        return $unwrappedType;
+    }
+
+
+    public function hasMethod(string $method): bool
+    {
+        return strcasecmp($this->method, $method) === 0;
     }
 
 

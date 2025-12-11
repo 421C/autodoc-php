@@ -20,6 +20,88 @@ use AutoDoc\DataTypes\VoidType;
 
 trait WithMergeableTypes
 {
+    public function mergeObjectsAndArrayShapes(?Config $config = null): self
+    {
+        $types = [];
+
+        $objectType = null;
+        $arrayShapeType = null;
+
+        foreach ($this->types as $type) {
+            $type = $type->unwrapType($config);
+
+            if ($type instanceof ObjectType) {
+                if ($objectType) {
+                    foreach ($type->properties as $key => $valueType) {
+                        $existingValueType = $objectType->properties[$key] ?? null;
+
+                        if (! $existingValueType) {
+                            $objectType->properties[$key] = $valueType;
+
+                        } else {
+                            $mergedType = $this->mergeTypes($existingValueType, $valueType);
+
+                            if ($mergedType) {
+                                $mergedType->required = $existingValueType->required || $valueType->required;
+
+                                $objectType->properties[$key] = $mergedType;
+
+                            } else {
+                                $objectType->properties[$key] = (new IntersectionType([$existingValueType, $valueType]))
+                                    ->setRequired($existingValueType->required || $valueType->required);
+                            }
+                        }
+                    }
+
+                } else {
+                    $objectType = $type;
+                }
+
+            } else if ($type instanceof ArrayType && $type->shape) {
+                if ($arrayShapeType) {
+                    foreach ($type->shape as $key => $valueType) {
+                        $existingValueType = $arrayShapeType->shape[$key] ?? null;
+
+                        if (! $existingValueType) {
+                            $arrayShapeType->shape[$key] = $valueType;
+
+                        } else {
+                            $mergedType = $this->mergeTypes($existingValueType, $valueType);
+
+                            if ($mergedType) {
+                                $mergedType->required = $existingValueType->required || $valueType->required;
+
+                                $arrayShapeType->shape[$key] = $mergedType;
+
+                            } else {
+                                $arrayShapeType->shape[$key] = (new IntersectionType([$existingValueType, $valueType]))
+                                    ->setRequired($existingValueType->required || $valueType->required);
+                            }
+                        }
+                    }
+
+                } else {
+                    $arrayShapeType = $type;
+                }
+
+            } else {
+                $types[] = $type;
+            }
+        }
+
+        if ($objectType) {
+            $types[] = $objectType;
+        }
+
+        if ($arrayShapeType) {
+            $types[] = $arrayShapeType;
+        }
+
+        $this->types = $types;
+
+        return $this;
+    }
+
     public function mergeDuplicateTypes(bool $mergeAsIntersection = false, ?Config $config = null): void
     {
         $types = [];
