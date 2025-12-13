@@ -25,14 +25,24 @@ trait WithMergeableTypes
         $types = [];
 
         $objectType = null;
-        $arrayShapeType = null;
 
         foreach ($this->types as $type) {
             $type = $type->unwrapType($config);
 
-            if ($type instanceof ObjectType) {
+            if ($type instanceof ObjectType || ($type instanceof ArrayType && $type->shape)) {
+                if ($type instanceof ArrayType) {
+                    $properties = [];
+
+                    foreach ($type->shape as $key => $valueType) {
+                        $properties[(string) $key] = $valueType;
+                    }
+
+                } else {
+                    $properties = $type->properties;
+                }
+
                 if ($objectType) {
-                    foreach ($type->properties as $key => $valueType) {
+                    foreach ($properties as $key => $valueType) {
                         $existingValueType = $objectType->properties[$key] ?? null;
 
                         if (! $existingValueType) {
@@ -54,34 +64,7 @@ trait WithMergeableTypes
                     }
 
                 } else {
-                    $objectType = $type;
-                }
-
-            } else if ($type instanceof ArrayType && $type->shape) {
-                if ($arrayShapeType) {
-                    foreach ($type->shape as $key => $valueType) {
-                        $existingValueType = $arrayShapeType->shape[$key] ?? null;
-
-                        if (! $existingValueType) {
-                            $arrayShapeType->shape[$key] = $valueType;
-
-                        } else {
-                            $mergedType = $this->mergeTypes($existingValueType, $valueType);
-
-                            if ($mergedType) {
-                                $mergedType->required = $existingValueType->required || $valueType->required;
-
-                                $arrayShapeType->shape[$key] = $mergedType;
-
-                            } else {
-                                $arrayShapeType->shape[$key] = (new IntersectionType([$existingValueType, $valueType]))
-                                    ->setRequired($existingValueType->required || $valueType->required);
-                            }
-                        }
-                    }
-
-                } else {
-                    $arrayShapeType = $type;
+                    $objectType = $type instanceof ArrayType ? new ObjectType($properties) : $type;
                 }
 
             } else {
@@ -91,10 +74,6 @@ trait WithMergeableTypes
 
         if ($objectType) {
             $types[] = $objectType;
-        }
-
-        if ($arrayShapeType) {
-            $types[] = $arrayShapeType;
         }
 
         $this->types = $types;
