@@ -76,6 +76,22 @@ class PhpClosure
             }
         }
 
+        foreach ($this->scope->route->requestQueryParams ?? [] as $paramName => $paramType) {
+            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'query', $this->scope->config);
+        }
+
+        foreach ($this->scope->route->requestUrlParams ?? [] as $paramName => $paramType) {
+            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'path', $this->scope->config);
+        }
+
+        foreach ($this->scope->route->requestHeaders ?? [] as $paramName => $paramType) {
+            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'header', $this->scope->config);
+        }
+
+        foreach ($this->scope->route->requestCookies ?? [] as $paramName => $paramType) {
+            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'cookie', $this->scope->config);
+        }
+
         if ($requestBodyType) {
             $requestBodyType = $requestBodyType->unwrapType($this->scope->config);
 

@@ -36,10 +36,30 @@ class Route
      */
     public array $responses = [];
 
-    /**
-     * @var Type[]
-     */
+    /** @var array<string, Type> */
+    public array $requestQueryParams = [];
+
+    /** @var array<string, Type> */
+    public array $requestUrlParams = [];
+
+    /** @var array<string, Type> */
+    public array $requestHeaders = [];
+
+    /** @var array<string, Type> */
+    public array $requestCookies = [];
+
+    /** @var Type[] */
     private array $requestBodyTypes = [];
+
+
+    public function addResponse(int $status, string $contentType, Type $body): void
+    {
+        $this->responses[] = [
+            'status' => $status,
+            'contentType' => $contentType,
+            'body' => $body,
+        ];
+    }
 
 
     public function addRequestBodyType(Type $type): void
@@ -62,15 +82,5 @@ class Route
     public function hasMethod(string $method): bool
     {
         return strcasecmp($this->method, $method) === 0;
-    }
-
-
-    public function addResponse(int $status, string $contentType, Type $body): void
-    {
-        $this->responses[] = [
-            'status' => $status,
-            'contentType' => $contentType,
-            'body' => $body,
-        ];
     }
 }
