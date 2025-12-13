@@ -180,60 +180,89 @@ class PhpClassMethod
             return new UnknownType;
         }
 
+        $nativeReturnType = $phpFunction->getTypeFromNativeReturnType();
+        $phpDocReturnType = null;
+        $analyzedReturnType = null;
+
         if ($usePhpDocIfAvailable) {
-            $typeFromPhpDocReturnTag = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
+            $returnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
 
-            if ($typeFromPhpDocReturnTag) {
-                $isPlainArray = $typeFromPhpDocReturnTag instanceof ArrayType
-                    && ! $typeFromPhpDocReturnTag->shape
-                    && ! $typeFromPhpDocReturnTag->itemType;
-
-                if (! $isPlainArray) {
-                    return $typeFromPhpDocReturnTag;
-                }
+            if ($returnType && ! ($returnType instanceof UnknownType)) {
+                $phpDocReturnType = $returnType;
             }
         }
 
+        $isPhpDocReturnTypePlainArray = $phpDocReturnType instanceof ArrayType
+            && ! $phpDocReturnType->shape
+            && ! $phpDocReturnType->itemType;
+
         if (! $doNotAnalyzeBody && $this->scope->depth <= $this->scope->config->data['max_depth']) {
+            $analyzeReturnType = ! $phpDocReturnType || $isPhpDocReturnTypePlainArray;
+
             $methodNodeVisitor = new ClassMethodNodeVisitor(
                 methodName: $this->methodName,
                 scope: $this->scope,
-                analyzeReturnValue: true,
+                analyzeReturnValue: $analyzeReturnType,
                 args: $this->args,
             );
 
             $this->phpClass->traverse($methodNodeVisitor);
 
             if ($methodNodeVisitor->returnTypes) {
-                $type = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
+                $analyzedReturnType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
 
-                if (! ($type instanceof UnknownType)) {
-                    return $type;
-                }
+            } else if (! $methodNodeVisitor->targetMethodExists && $analyzeReturnType) {
+                $methodFoundInTrait = false;
 
-            } else if (! $methodNodeVisitor->targetMethodExists) {
                 foreach ($this->phpClass->getReflection()->getTraits() as $traitName => $traitReflection) {
                     /** @var class-string $traitName */
 
-                    $returnValue = $this->scope
+                    $methodInTrait = $this->scope
                         ->getPhpClassInDeeperScope($traitName)
-                        ->getMethod($this->methodName)
-                        ->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+                        ->getMethod($this->methodName);
 
-                    if (! ($returnValue instanceof UnknownType)) {
-                        return $returnValue;
+                    if ($methodInTrait->exists()) {
+                        $methodFoundInTrait = true;
+                        $analyzedReturnType = $methodInTrait->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+                        break;
                     }
                 }
 
-                $parentClass = $this->phpClass->getParent();
+                if (! $methodFoundInTrait) {
+                    $parentClass = $this->phpClass->getParent();
 
-                if ($parentClass) {
-                    return $parentClass->getMethod($this->methodName)->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+                    if ($parentClass) {
+                        $analyzedReturnType = $parentClass->getMethod($this->methodName)->getReturnType($usePhpDocIfAvailable, $doNotAnalyzeBody);
+                    }
                 }
             }
         }
 
-        return $phpFunction->getTypeFromNativeReturnType() ?? $typeFromPhpDocReturnTag ?? new UnknownType;
+        $phpDocReturnType = $phpDocReturnType?->unwrapType($this->scope->config);
+
+        if ($nativeReturnType) {
+            $resultingReturnType = $nativeReturnType->unwrapType($this->scope->config);
+
+            if ($phpDocReturnType) {
+                $resultingReturnType = $resultingReturnType->getSubType($phpDocReturnType, $this->scope->config);
+            }
+
+            if ($analyzedReturnType) {
+                $resultingReturnType = $resultingReturnType->getSubType($analyzedReturnType, $this->scope->config);
+            }
+
+        } else if ($phpDocReturnType) {
+            $resultingReturnType = $phpDocReturnType;
+
+            if ($analyzedReturnType) {
+                $resultingReturnType = $resultingReturnType->getSubType($analyzedReturnType, $this->scope->config);
+            }
+
+        } else {
+            $resultingReturnType = $analyzedReturnType;
+        }
+
+        return $resultingReturnType ?? new UnknownType;
     }
 
 
@@ -244,7 +273,13 @@ class PhpClassMethod
 
         } catch (ReflectionException $exception) {
             if ($this->scope->isDebugModeEnabled()) {
-                if (($this->scope->config->data['debug']['ignore_dynamic_method_errors'] ?? true) === false) {
+                $ignoreError = $this->scope->config->data['debug']['ignore_dynamic_method_errors'] ?? true;
+
+                if (! $ignoreError && trait_exists($this->phpClass->className)) {
+                    $ignoreError = $this->scope->config->data['debug']['ignore_unknown_method_errors_in_traits'] ?? true;
+                }
+
+                if (! $ignoreError) {
                     throw $exception;
                 }
             }

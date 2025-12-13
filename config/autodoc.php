@@ -155,10 +155,15 @@ return [
         'enabled' => false,
 
         /**
-         * Ignore errors about non-existant methods on classes that have a
+         * Ignore errors about unknown methods on classes that have a
          * __call or __callStatic magic method.
          */
         'ignore_dynamic_method_errors' => true,
+
+        /**
+         * Ignore errors about unknown methods in traits.
+         */
+        'ignore_unknown_method_errors_in_traits' => true,
     ],
 
     /**

@@ -94,8 +94,9 @@ use Exception;
  *     memory_limit: ?string,
  *     max_depth: int,
  *     debug?: array{
- *         enabled: bool,
- *         ignore_dynamic_method_errors: bool,
+ *         enabled?: bool,
+ *         ignore_dynamic_method_errors?: bool,
+ *         ignore_unknown_method_errors_in_traits?: bool,
  *     },
  *     typescript?: TypeScriptConfigRaw,
  * }
