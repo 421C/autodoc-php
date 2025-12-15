@@ -311,6 +311,42 @@ final class TypeScriptSchemaTest extends TestCase
                         contentType: string|null
                     }
                 }>
+                requestQueryParams: Record<string, {
+                    description: string|null
+                    examples: unknown|null
+                    required: boolean
+                    deprecated: boolean
+                    example: Record<string, unknown>|string|null
+                    isEnum: boolean
+                    contentType: string|null
+                }>
+                requestUrlParams: Record<string, {
+                    description: string|null
+                    examples: unknown|null
+                    required: boolean
+                    deprecated: boolean
+                    example: Record<string, unknown>|string|null
+                    isEnum: boolean
+                    contentType: string|null
+                }>
+                requestHeaders: Record<string, {
+                    description: string|null
+                    examples: unknown|null
+                    required: boolean
+                    deprecated: boolean
+                    example: Record<string, unknown>|string|null
+                    isEnum: boolean
+                    contentType: string|null
+                }>
+                requestCookies: Record<string, {
+                    description: string|null
+                    examples: unknown|null
+                    required: boolean
+                    deprecated: boolean
+                    example: Record<string, unknown>|string|null
+                    isEnum: boolean
+                    contentType: string|null
+                }>
             }
 
             text ...

@@ -99,6 +99,10 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->currentDepth++;
         }
 
+        if ($this->handleConditionNode($node)) {
+            return null;
+        }
+
         if ($node instanceof Node\Stmt\Expression) {
             $this->handleExpression($node);
         }
@@ -128,6 +132,10 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $node instanceof Node\Stmt\TryCatch
         ) {
             $this->currentDepth--;
+        }
+
+        if ($this->handleConditionEnd($node)) {
+            return null;
         }
 
         return null;

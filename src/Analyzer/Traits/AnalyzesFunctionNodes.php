@@ -2,18 +2,28 @@
 
 namespace AutoDoc\Analyzer\Traits;
 
+use AutoDoc\Analyzer\PhpCondition;
 use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
 use PhpParser\Comment;
 use PhpParser\Node;
-use PhpParser\Node\ArrayItem;
-use PhpParser\Node\Expr\Array_;
 use PhpParser\Node\Expr\Variable;
+
 
 trait AnalyzesFunctionNodes
 {
+    /**
+     * @var PhpCondition[]
+     */
+    private array $conditionStack = [];
+
+    private int $currentConditionScopeIndex = 0;
+
+
     /**
      * @param Node\Param[] $params
      */
@@ -78,7 +88,12 @@ trait AnalyzesFunctionNodes
                     ]);
 
                     // /** @var {varType} $varName */
-                    $this->scope->assignVariable($varNode, $varType, depth: $this->currentDepth);
+                    $this->scope->assignVariable(
+                        varNode: $varNode,
+                        valueNode: $varType,
+                        depth: $this->currentDepth,
+                        conditions: $this->conditionStack,
+                    );
                 }
             }
         }
@@ -118,29 +133,35 @@ trait AnalyzesFunctionNodes
     private function handleAssignment(Node $varNode, Node\Expr $valueNode, array $comments = []): void
     {
         if ($varNode instanceof Node\Expr\Variable) {
-            // $var = {expr};
-            $this->scope->assignVariable($varNode, $valueNode, $comments, depth: $this->currentDepth);
+            // $var = {expr}
+            $this->scope->assignVariable(
+                varNode: $varNode,
+                valueNode: $valueNode,
+                comments: $comments,
+                depth: $this->currentDepth,
+                conditions: $this->conditionStack,
+            );
 
         } else if ($varNode instanceof Node\Expr\ArrayDimFetch) {
             $assignedArrayKey = $this->getRawArrayKeyValue($varNode->dim);
 
+            if ($assignedArrayKey === null) {
+                // {varNode->var}[]  ->  {varNode->var}[0]
+                $assignedArrayKey = 0;
+            }
+
             if ($varNode->var instanceof Node\Expr\Variable) {
-                $varType = $this->scope->getVariableType($varNode->var);
-
-                if ($varType) {
-                    if ($varType instanceof UnresolvedParserNodeType) {
-                        if ($assignedArrayKey) {
-                            // $var[$assignedArrayKey] = {expr};
-                            $varType->assignedProperties[$assignedArrayKey] = $valueNode;
-
-                        } else {
-                            // $var[] = {expr};
-                            $varType->assignedProperties[] = $valueNode;
-                        }
-                    }
-
-                    $this->scope->assignVariable($varNode->var, $varType, depth: $this->currentDepth);
-                }
+                // {varNode->var}[$assignedArrayKey] = {valueNode}
+                $this->scope->mutateVariable(
+                    varNode: $varNode->var,
+                    changes: [
+                        'attributes' => [
+                            $assignedArrayKey => new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope),
+                        ],
+                    ],
+                    depth: $this->currentDepth,
+                    conditions: $this->conditionStack,
+                );
 
             } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch) {
                 $nestedKeys = $this->getNestedArrayAccessKeys($varNode);
@@ -149,46 +170,89 @@ trait AnalyzesFunctionNodes
                 $keyPath = $nestedKeys['keyPath'];
 
                 if ($baseVariable instanceof Node\Expr\Variable) {
-                    $varType = $this->scope->getVariableType($baseVariable);
+                    $attributes = [];
+                    $lastKeyIndex = array_key_last($keyPath);
+                    $currentLevel = &$attributes;
 
-                    if ($varType) {
-                        if ($varType instanceof UnresolvedParserNodeType) {
-                            $currentLevel = &$varType->assignedProperties;
+                    foreach ($keyPath as $keyIndex => $key) {
+                        if ($keyIndex === $lastKeyIndex) {
+                            if ($key === null) {
+                                // {baseVariable}[...][] = {valueNode}
+                                $currentLevel[] = new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope);
 
-                            $lastKeyIndex = array_key_last($keyPath);
-
-                            foreach ($keyPath as $keyIndex => $key) {
-                                if ($lastKeyIndex !== $keyIndex) {
-                                    if ($key === null) {
-                                        $placeholder = new Node\Expr\Array_;
-                                        $currentLevel[] = new ArrayItem($placeholder);
-
-                                        $currentLevel = &$placeholder->items;
-
-                                    } else {
-                                        if (! isset($currentLevel[$key])) {
-                                            $currentLevel[$key] = new ArrayItem(new Array_);
-                                        }
-
-                                        $currentLevel = &$currentLevel[$key]->value->items;
-                                    }
-
-                                    $currentLevel[] = new ArrayItem($valueNode);
-                                }
+                            } else {
+                                // {baseVariable}[...][$key] = {valueNode}
+                                $currentLevel[$key] = new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope);
                             }
-                        }
 
-                        $this->scope->assignVariable($baseVariable, $varType, depth: $this->currentDepth);
+                        } else if ($key === null) {
+                            // {baseVariable}[...][][...]
+                            //                     ↪ ↑
+                            $arrayType = new ArrayType;
+                            $currentLevel[] = $arrayType;
+
+                            $currentLevel = &$arrayType->shape;
+
+                        } else {
+                            // {baseVariable}[...][$key][...]
+                            //                         ↪ ↑
+                            if (! isset($currentLevel[$key])) {
+                                $currentLevel[$key] = new ArrayType;
+                            }
+
+                            $currentLevel = &$currentLevel[$key]->shape;
+                        }
                     }
+
+                    $attributes = $this->normalizeNestedArrayTypes($attributes);
+
+                    $this->scope->mutateVariable(
+                        varNode: $baseVariable,
+                        changes: ['attributes' => $attributes],
+                        depth: $this->currentDepth,
+                        conditions: $this->conditionStack,
+                    );
                 }
             }
         }
     }
 
     /**
+     * @param array<int|string, Type> $attributes
+     * @return array<int|string, Type>
+     */
+    private function normalizeNestedArrayTypes(array $attributes): array
+    {
+        foreach ($attributes as $attributeKey => $attributeType) {
+            if ($attributeType instanceof ArrayType) {
+                if ($attributeType->shape) {
+                    $attributeType->shape = $this->normalizeNestedArrayTypes($attributeType->shape);
+
+                    $hasIntegerKeys = false;
+
+                    foreach (array_keys($attributeType->shape) as $shapeKey) {
+                        if (is_int($shapeKey)) {
+                            $hasIntegerKeys = true;
+                            break;
+                        }
+                    }
+
+                    if ($hasIntegerKeys) {
+                        $attributeType->convertShapeToTypePair($this->scope->config);
+                    }
+                }
+            }
+
+            $attributes[$attributeKey] = $attributeType;
+        }
+
+        return $attributes;
+    }
+
+    /**
      * @return array{
      *     baseVariable: Node\Expr,
-     *     keyPath: array<int|string|null>,
+     *     keyPath: list<int|string|null>,
      * }
      */
     private function getNestedArrayAccessKeys(Node\Expr\ArrayDimFetch $arrayAccessNode): array
@@ -221,5 +285,40 @@ trait AnalyzesFunctionNodes
         }
 
         return $arrayKey;
+    }
+
+
+    protected function handleConditionNode(Node $node): bool
+    {
+        if ($node instanceof Node\Stmt\If_
+            || $node instanceof Node\Stmt\While_
+            || $node instanceof Node\Stmt\For_
+            || $node instanceof Node\Stmt\Foreach_
+            || $node instanceof Node\Stmt\Switch_
+            || $node instanceof Node\Stmt\TryCatch
+        ) {
+            $this->conditionStack[] = new PhpCondition($node);
+
+            return true;
+        }
+
+        return false;
+    }
+
+    protected function handleConditionEnd(Node $node): bool
+    {
+        if ($node instanceof Node\Stmt\If_
+            || $node instanceof Node\Stmt\While_
+            || $node instanceof Node\Stmt\For_
+            || $node instanceof Node\Stmt\Foreach_
+            || $node instanceof Node\Stmt\Switch_
+            || $node instanceof Node\Stmt\TryCatch
+        ) {
+            array_pop($this->conditionStack);
+
+            return true;
+        }
+
+        return false;
     }
 }

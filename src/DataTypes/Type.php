@@ -42,7 +42,7 @@ abstract class Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
             if (count($this->types) === 1) {
-                $type = $this->types[0];
+                $type = reset($this->types);
 
                 $type->addDescription($this->description);
                 $type->examples = $this->examples ?: $type->examples;

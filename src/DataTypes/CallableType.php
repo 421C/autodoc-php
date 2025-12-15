@@ -5,6 +5,7 @@ namespace AutoDoc\DataTypes;
 use AutoDoc\Analyzer\PhpAnonymousFunction;
 use AutoDoc\Analyzer\PhpFunctionArgument;
 use AutoDoc\Config;
+use PhpParser\Node;
 
 class CallableType extends Type
 {
@@ -16,9 +17,9 @@ class CallableType extends Type
     /**
      * @param PhpFunctionArgument[] $args
      */
-    public function getReturnType(array $args = []): Type
+    public function getReturnType(array $args = [], ?Node $callerNode = null): Type
     {
-        return $this->anonymousFunction?->resolveReturnType($args) ?? new UnknownType;
+        return $this->anonymousFunction?->resolveReturnType($args, $callerNode) ?? new UnknownType;
     }
 
     public function toSchema(?Config $config = null): array

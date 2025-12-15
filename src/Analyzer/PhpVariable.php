@@ -7,9 +7,29 @@ use AutoDoc\DataTypes\Type;
 class PhpVariable
 {
     public function __construct(
+        public readonly string $name,
+
         /**
-         * @var array<int, array{Type, int, int, int}>
+         * @var array<int, array<int, PhpVariableMutation>>
          */
-        public array $assignments = [],
+        public array $mutations = [],
     ) {}
+
+    /**
+     * @return Type[]
+     */
+    public function getDirectAssignmentTypes(): array
+    {
+        $assignments = [];
+
+        foreach ($this->mutations as $mutationsOnLine) {
+            foreach ($mutationsOnLine as $mutation) {
+                if (isset($mutation->changes['type'])) {
+                    $assignments[] = $mutation->changes['type'];
+                }
+            }
+        }
+
+        return $assignments;
+    }
 }

@@ -75,22 +75,6 @@ class PhpClassMethod
             }
         }
 
-        foreach ($this->scope->route->requestQueryParams ?? [] as $paramName => $paramType) {
-            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'query', $this->scope->config);
-        }
-
-        foreach ($this->scope->route->requestUrlParams ?? [] as $paramName => $paramType) {
-            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'path', $this->scope->config);
-        }
-
-        foreach ($this->scope->route->requestHeaders ?? [] as $paramName => $paramType) {
-            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'header', $this->scope->config);
-        }
-
-        foreach ($this->scope->route->requestCookies ?? [] as $paramName => $paramType) {
-            $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'cookie', $this->scope->config);
-        }
-
         $classFileName = $this->phpClass->getReflection()->getFileName();
 
         if ($classFileName) {
@@ -107,6 +91,35 @@ class PhpClassMethod
 
             if (! $responseBodyType && $methodNodeVisitor->returnTypes) {
                 $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
+            }
+        }
+
+        $queryParamNames = array_flip(array_map(fn ($param) => $param->name, array_filter($operation->parameters ?? [], fn ($param) => $param instanceof Parameter && $param->in === 'query')));
+        $urlParamNames = array_flip(array_map(fn ($param) => $param->name, array_filter($operation->parameters ?? [], fn ($param) => $param instanceof Parameter && $param->in === 'path')));
+        $headerNames = array_flip(array_map(fn ($param) => $param->name, array_filter($operation->parameters ?? [], fn ($param) => $param instanceof Parameter && $param->in === 'header')));
+        $cookieNames = array_flip(array_map(fn ($param) => $param->name, array_filter($operation->parameters ?? [], fn ($param) => $param instanceof Parameter && $param->in === 'cookie')));
+
+        foreach ($this->scope->route->requestQueryParams ?? [] as $paramName => $paramType) {
+            if (! isset($queryParamNames[$paramName])) {
+                $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'query', $this->scope->config);
+            }
+        }
+
+        foreach ($this->scope->route->requestUrlParams ?? [] as $paramName => $paramType) {
+            if (! isset($urlParamNames[$paramName])) {
+                $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'path', $this->scope->config);
+            }
+        }
+
+        foreach ($this->scope->route->requestHeaders ?? [] as $paramName => $paramType) {
+            if (! isset($headerNames[$paramName])) {
+                $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'header', $this->scope->config);
+            }
+        }
+
+        foreach ($this->scope->route->requestCookies ?? [] as $paramName => $paramType) {
+            if (! isset($cookieNames[$paramName])) {
+                $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'cookie', $this->scope->config);
             }
         }
 

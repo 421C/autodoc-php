@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Traits\StoresVariables;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -25,6 +26,8 @@ use PhpParser\Node;
 
 class Scope
 {
+    use StoresVariables;
+
     public function __construct(
         public Config $config,
         public int $depth = 0,
@@ -51,6 +54,9 @@ class Scope
          */
         public array $variables = [],
     ) {}
+
+
+    public ?Node $callerNode = null;
 
 
     public function resolveType(Node $node, ?string $variableName = null, bool $isFinalResponse = false): Type
@@ -180,7 +186,7 @@ class Scope
                 $functionNodeType = $this->resolveType($node->name);
 
                 if ($functionNodeType instanceof CallableType) {
-                    return $functionNodeType->getReturnType(PhpFunctionArgument::list($node->args, scope: $this));
+                    return $functionNodeType->getReturnType(PhpFunctionArgument::list($node->args, scope: $this), $node);
                 }
             }
         }
@@ -596,114 +602,6 @@ class Scope
 
 
     /**
-     * @param Comment[] $comments
-     */
-    public function assignVariable(Node\Expr\Variable $varNode, Node|Type $valueNode, array $comments = [], int $depth = 0): void
-    {
-        if ($valueNode instanceof Node) {
-            $valueNode->setAttribute('comments', array_merge(
-                $comments,
-                $varNode->getComments(),
-                $valueNode->getComments(),
-            ));
-
-            $type = new UnresolvedParserNodeType(node: $valueNode, scope: $this);
-
-            /** @var int */
-            $endFilePos = $valueNode->getAttribute('endFilePos');
-
-        } else {
-            $type = $valueNode;
-
-            /** @var int */
-            $endFilePos = $varNode->getAttribute('endFilePos');
-        }
-
-        if (! is_string($varNode->name)) {
-            return;
-        }
-
-        if (! isset($this->variables[$varNode->name])) {
-            $this->variables[$varNode->name] = new PhpVariable;
-        }
-
-        /** @var int */
-        $startFilePos = $varNode->getAttribute('startFilePos');
-
-        $this->variables[$varNode->name]->assignments[$varNode->getStartLine()] = [
-            $type,
-            $depth,
-            $startFilePos,
-            $endFilePos,
-        ];
-    }
-
-    public function getVariableType(Node\Expr\Variable $varNode): ?Type
-    {
-        if (! is_string($varNode->name)) {
-            return null;
-        }
-
-        if ($varNode->name === 'this') {
-            if ($this->className) {
-                return new ObjectType(className: $this->className);
-            }
-        }
-
-        if (empty($this->variables[$varNode->name])) {
-            return null;
-        }
-
-        krsort($this->variables[$varNode->name]->assignments);
-
-        $varNodeStartLinePos = $varNode->getAttribute('startFilePos');
-        $currentLine = $varNode->getStartLine();
-        $possibleTypes = [];
-
-        while ($currentLine > 0) {
-            if (isset($this->variables[$varNode->name]->assignments[$currentLine])) {
-                [$varType, $depth, $assignmentStartFilePos, $assignmentEndFilePos] = $this->variables[$varNode->name]->assignments[$currentLine];
-
-                if ($varNodeStartLinePos > $assignmentEndFilePos) {
-                    $possibleTypes[] = $varType;
-
-                    if ($depth === 0) {
-                        break;
-                    }
-                }
-            }
-
-            $currentLine--;
-        }
-
-        if (count($possibleTypes) > 1) {
-            return new UnionType($possibleTypes);
-        }
-
-        return $possibleTypes[0] ?? null;
-    }
-
-    /**
-     * @param string[]|null $variableNames
-     */
-    public function transferVariablesFrom(Scope $parentScope, ?array $variableNames = null): void
-    {
-        if ($variableNames === null) {
-            foreach ($parentScope->variables as $varName => $phpVariable) {
-                $this->variables[$varName] = $phpVariable;
-            }
-
-        } else {
-            foreach ($variableNames as $varName) {
-                if (isset($parentScope->variables[$varName])) {
-                    $this->variables[$varName] = $parentScope->variables[$varName];
-                }
-            }
-        }
-    }
-
-
-    /**
      * @return ?class-string
      */
     public function getResolvedClassName(string|Node\Name $name): ?string
@@ -929,7 +827,7 @@ class Scope
                     $scopeInfo .= '        '
                         . $toString($phpvar, true)
                         . ' $' . $name
-                        . ' -> [' . implode(', ', array_map(fn ($assignment) => $toString($assignment[0]), $phpvar->assignments)) . ']' . "\n";
+                        . ' -> [' . implode(', ', array_map(fn ($mutation) => $toString($mutation->changes), array_merge(...$phpvar->mutations))) . ']' . "\n";
                 }
 
                 continue;

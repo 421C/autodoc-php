@@ -18,12 +18,15 @@ class PhpAnonymousFunction
     /**
      * @param PhpFunctionArgument[] $args
      */
-    public function resolveReturnType(array $args = []): Type
+    public function resolveReturnType(array $args = [], ?Node $callerNode = null): Type
     {
         $traverser = new NodeTraverser;
+        $functionScope = $this->scope->createChildScope();
+
+        $functionScope->callerNode = $callerNode;
 
         $nodeVisitor = new FunctionNodeVisitor(
-            scope: $this->scope->createChildScope(),
+            scope: $functionScope,
             parentScope: $this->scope,
             analyzeReturnValue: true,
             args: $args,

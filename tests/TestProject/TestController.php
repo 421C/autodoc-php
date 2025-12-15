@@ -128,6 +128,7 @@ class TestController
                                         'd',
                                         'e',
                                         'f',
+                                        'g',
                                     ],
                                 ],
                             ],
@@ -2091,6 +2092,325 @@ class TestController
     }
 
 
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'properties' => [
+                                        'str' => [
+                                            'const' => 'test',
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'str',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route45(): mixed
+    {
+        $var = $this->route45();
+
+        if ($var) {
+            /** @phpstan-ignore cast.int */
+            $var = (int) $var;
+
+            return $var;
+
+        } else {
+            /** @phpstan-ignore offsetAccess.nonOffsetAccessible */
+            $var['str'] = 'test';
+        }
+
+        return $var;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'items' => [
+                                'anyOf' => [
+                                    [
+                                        'enum' => [
+                                            'x',
+                                            'y',
+                                            'z',
+                                        ],
+                                        'type' => 'string',
+                                    ],
+                                    [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                            'type' => 'array',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route46(): mixed
+    {
+        $var = rand(0, 500);
+
+        if ($var > 300) {
+            $var = 'x';
+
+        } else if ($var > 200) {
+            $var = 'y';
+
+        } else if ($var > 100) {
+            $var = 'z';
+        }
+
+        return [$var];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'const' => 200,
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'const' => 'A',
+                                    'type' => 'string',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route47(): mixed
+    {
+        if (rand(0, 1)) {
+            $a = 100;
+            $a = 200;
+
+            return $a;
+        }
+
+        $a = 'A';
+
+        return $a;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'data' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'null',
+                                    ],
+                                ],
+                                'x' => [
+                                    'const' => 1,
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'required' => [
+                                'data',
+                                'x',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route48(): mixed
+    {
+        if (rand(0, 1)) {
+            $obj = $this->getGenericClassInstance(GenericClass::class, [null]);
+
+        } else {
+            $obj = 0;
+        }
+
+        /** @phpstan-ignore offsetAccess.nonOffsetAccessible */
+        $obj['x'] = 1;
+
+        return $obj;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'text/plain' => [
+                        'schema' => [
+                            'const' => 50,
+                            'type' => 'integer',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route49(): mixed
+    {
+        $a = 'initial';
+        $f = fn () => $a;
+        $a = 50;
+
+        return $f();
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'const' => 50,
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'boolean',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route50(): mixed
+    {
+        $a = 'initial';
+        $f = fn () => $a;
+
+        if (rand(0, 1)) {
+            $a = 50;
+
+            return $f();
+
+        } else {
+            $a = false;
+
+            return $f();
+        }
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'enum' => [
+                                    1,
+                                    2,
+                                    3,
+                                ],
+                                'type' => 'integer',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route51(): mixed
+    {
+        $array = [1, 2, 3];
+
+        if (rand(0, 1)) {
+            $a = [];
+
+            while (count($a) < 10) {
+                $a[] = $array[rand(1, 3)];
+            }
+        }
+
+        /** @phpstan-ignore variable.undefined */
+        return $a;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'nested' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'nested',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route52(): mixed
+    {
+        $array = [];
+
+        $array['nested'][] = intval(1);
+
+        return $array;
+    }
+
+
     /**
      * @template TClass of object
      *
@@ -2114,7 +2434,8 @@ class TestController
      */
     private function getGenericClassInstance(string $className, mixed $classConstructorParam): object
     {
-        return new $className($classConstructorParam);
+        /** @phpstan-ignore return.type */
+        return (object) [];
     }
 
     private function getGenericClassInstanceWithoutPhpDoc(string $className, mixed $classConstructorParam): mixed
