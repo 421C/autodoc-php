@@ -164,8 +164,14 @@ trait WithMergeableTypes
             return null;
         }
 
-        if ($type1 instanceof BoolType
-            || $type1 instanceof VoidType
+        if ($type1 instanceof BoolType) {
+            /** @var BoolType $type2 */
+            $type1->value = $type1->value === $type2->value ? $type1->value : null;
+
+            return $type1;
+        }
+
+        if ($type1 instanceof VoidType
             || $type1 instanceof NullType
         ) {
             return $type1;

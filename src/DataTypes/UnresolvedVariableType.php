@@ -115,40 +115,7 @@ class UnresolvedVariableType extends UnresolvedType
 
             if (! empty($mutation->changes['attributes'])) {
                 foreach ($mutation->changes['attributes'] as $key => $attributeType) {
-                    $potentialTypes = $resolvedType instanceof UnionType ? $resolvedType->types : array_filter([$resolvedType]);
-                    $typesWithAddedAttribute = [];
-
-                    for ($i = 0; $i < count($potentialTypes); $i++) {
-                        if ($potentialTypes[$i] instanceof ObjectType) {
-                            $potentialTypes[$i]->properties[(string) $key] = $attributeType->setRequired($isCertain);
-                            $typesWithAddedAttribute[] = $potentialTypes[$i];
-
-                        } else if ($potentialTypes[$i] instanceof ArrayType) {
-                            $potentialTypes[$i]->addItemToArray($key, $attributeType->setRequired($isCertain));
-                            $typesWithAddedAttribute[] = $potentialTypes[$i];
-                        }
-                    }
-
-                    if ($isCertain) {
-                        if (empty($typesWithAddedAttribute)) {
-                            $resolvedType = new ArrayType;
-                            $resolvedType->addItemToArray($key, $attributeType->setRequired(true));
-
-                        } else {
-                            $resolvedType = (new UnionType($typesWithAddedAttribute))->unwrapType($this->scope->config);
-                        }
-
-                    } else {
-                        if (empty($typesWithAddedAttribute)) {
-                            $arrayType = new ArrayType;
-                            $arrayType->addItemToArray($key, $attributeType);
-
-                            $resolvedType = (new UnionType([...$potentialTypes, $arrayType]))->unwrapType($this->scope->config);
-
-                        } else {
-                            $resolvedType = (new UnionType($potentialTypes))->unwrapType($this->scope->config);
-                        }
-                    }
+                    $resolvedType = $this->mergeAttribute($resolvedType, $key, $attributeType, $isCertain);
                 }
             }
         }
@@ -164,5 +131,74 @@ class UnresolvedVariableType extends UnresolvedType
         $this->resolvedType = $resolvedType;
 
         return $resolvedType;
+    }
+
+
+    private function mergeAttribute(?Type $baseType, int|string $key, Type $attributeType, bool $isCertain): Type
+    {
+        $potentialTypes = $baseType instanceof UnionType ? $baseType->types : array_filter([$baseType]);
+        $typesWithAddedAttribute = [];
+
+        for ($i = 0; $i < count($potentialTypes); $i++) {
+            if ($potentialTypes[$i] instanceof ObjectType) {
+                $keyString = (string) $key;
+
+                if (! $isCertain && isset($potentialTypes[$i]->properties[$keyString])) {
+                    $potentialTypes[$i]->properties[$keyString] = (new UnionType([
+                        $attributeType->setRequired($isCertain),
+                        $potentialTypes[$i]->properties[$keyString],
+                    ]));
+
+                } else {
+                    $potentialTypes[$i]->properties[$keyString] = $attributeType->setRequired($isCertain);
+                }
+
+                $typesWithAddedAttribute[] = $potentialTypes[$i];
+
+            } else if ($potentialTypes[$i] instanceof ArrayType) {
+                if ($attributeType instanceof ArrayType && $attributeType->shape && $potentialTypes[$i]->shape) {
+                    foreach ($potentialTypes[$i]->shape as $existingAttributeKey => $existingAttributeItemType) {
+                        if (! isset($attributeType->shape[$existingAttributeKey])) {
+                            $attributeType = $this->mergeAttribute($attributeType, $existingAttributeKey, $existingAttributeItemType, $isCertain);
+                        }
+                    }
+                }
+
+                if (! $isCertain && isset($potentialTypes[$i]->shape[$key])) {
+                    $potentialTypes[$i]->shape[$key] = (new UnionType([
+                        $attributeType->setRequired($isCertain),
+                        $potentialTypes[$i]->shape[$key],
+                    ]));
+
+                } else {
+                    $potentialTypes[$i]->addItemToArray($key, $attributeType->setRequired($isCertain));
+                }
+
+                $typesWithAddedAttribute[] = $potentialTypes[$i];
+            }
+        }
+
+        if ($isCertain) {
+            if (empty($typesWithAddedAttribute)) {
+                $baseType = new ArrayType;
+                $baseType->addItemToArray($key, $attributeType->setRequired(true));
+
+            } else {
+                $baseType = (new UnionType($typesWithAddedAttribute))->unwrapType($this->scope->config);
+            }
+
+        } else {
+            if (empty($typesWithAddedAttribute)) {
+                $arrayType = new ArrayType;
+                $arrayType->addItemToArray($key, $attributeType);
+
+                $baseType = (new UnionType([...$potentialTypes, $arrayType]))->unwrapType($this->scope->config);
+
+            } else {
+                $baseType = (new UnionType($potentialTypes))->unwrapType($this->scope->config);
+            }
+        }
+
+        return $baseType;
     }
 }
