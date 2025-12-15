@@ -45,6 +45,10 @@ class UpdateTypeScriptStructures
 
         $fileExtensions ??= $this->config->data['typescript']['file_extensions'] ?? ['ts', 'tsx', 'vue'];
 
+        if (isset($this->config->data['memory_limit'])) {
+            ini_set('memory_limit', $this->config->data['memory_limit']);
+        }
+
         yield from $this->exportRequestsAndResponses();
 
         yield from $this->updateAutoDocTagStructures($workingDirectory, $fileExtensions);
