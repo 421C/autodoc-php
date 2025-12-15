@@ -234,19 +234,27 @@ trait WithMergeableTypes
 
             return $array1;
 
-        } else if (!$array1->shape && !$array2->shape && $array1->itemType && $array2->itemType) {
-            $array1HasStringKeys = $array1->keyType && !($array1->keyType instanceof IntegerType);
-            $array2HasStringKeys = $array2->keyType && !($array2->keyType instanceof IntegerType);
+        } else if (!$array1->shape && !$array2->shape) {
+            if ($array1->itemType && $array2->itemType) {
+                $array1HasStringKeys = $array1->keyType && !($array1->keyType instanceof IntegerType);
+                $array2HasStringKeys = $array2->keyType && !($array2->keyType instanceof IntegerType);
 
-            // If only one of both arrays have string keys, types are not mergeable.
-            if ($array1HasStringKeys !== $array2HasStringKeys) {
-                return null;
-            }
+                // If only one of both arrays have string keys, types are not mergeable.
+                if ($array1HasStringKeys !== $array2HasStringKeys) {
+                    return null;
+                }
 
-            $itemType = $this->mergeTypes($array1->itemType, $array2->itemType);
+                $itemType = $this->mergeTypes($array1->itemType, $array2->itemType);
 
-            if ($itemType) {
-                return new ArrayType($itemType);
+                if ($itemType) {
+                    return new ArrayType($itemType);
+                }
+
+            } else if ($array1->itemType) {
+                return $array1;
+
+            } else {
+                return $array2;
             }
         }
 
