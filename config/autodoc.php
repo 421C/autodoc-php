@@ -119,6 +119,11 @@ return [
          * If disabled, arrays will be resolved as shapes only if all keys are known.
          */
         'resolve_partial_shapes' => false,
+
+        /**
+         * When enabled, array shapes will be merged in type unions.
+         */
+        'merge_shapes_in_type_unions' => false,
     ],
 
     /**

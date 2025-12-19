@@ -572,6 +572,25 @@ class Scope
     }
 
 
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withArrayShapeMerging(callable $callback): mixed
+    {
+        $initialValue = $this->config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+
+        $this->config->data['arrays']['merge_shapes_in_type_unions'] = true;
+
+        $returnValue = $callback();
+
+        $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialValue;
+
+        return $returnValue;
+    }
+
+
     public function getRawValueFromNode(Node $node): int|string|float|null
     {
         if ($node instanceof Node\Scalar\String_

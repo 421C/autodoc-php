@@ -86,6 +86,7 @@ use Exception;
  *     arrays?: array{
  *         remove_scalar_type_values_when_merging_with_unknown_types?: bool,
  *         resolve_partial_shapes?: bool,
+ *         merge_shapes_in_type_unions?: bool,
  *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,

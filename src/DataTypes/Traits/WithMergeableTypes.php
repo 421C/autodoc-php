@@ -179,7 +179,7 @@ trait WithMergeableTypes
 
         if ($type1 instanceof ArrayType) {
             /** @var ArrayType $type2 */
-            return $this->mergeArrayTypes($type1, $type2, $mergeAsIntersection);
+            return $this->mergeArrayTypes($type1, $type2, $mergeAsIntersection, $config);
         }
 
         if ($type1 instanceof ObjectType) {
@@ -191,13 +191,15 @@ trait WithMergeableTypes
     }
 
 
-    private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, bool $mergeAsIntersection = false): ?ArrayType
+    private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, bool $mergeAsIntersection = false, ?Config $config = null): ?ArrayType
     {
         if ($array1->shape && $array2->shape) {
-            $keys1 = array_keys($array1->shape);
-            $keys2 = array_keys($array2->shape);
+            $mergeShapesInTypeUnions = $config?->data['arrays']['merge_shapes_in_type_unions'] ?? false;
 
-            if (! $mergeAsIntersection) {
+            if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {
+                $keys1 = array_keys($array1->shape);
+                $keys2 = array_keys($array2->shape);
+
                 sort($keys1);
                 sort($keys2);
 
@@ -207,7 +209,7 @@ trait WithMergeableTypes
             }
 
             foreach ($array1->shape as $key => $type1) {
-                if ($mergeAsIntersection && !isset($array2->shape[$key])) {
+                if (! isset($array2->shape[$key])) {
                     continue;
                 }
 
@@ -216,7 +218,7 @@ trait WithMergeableTypes
                 $mergedType = $this->mergeTypes($type1, $type2);
 
                 if ($mergedType) {
-                    if ($mergeAsIntersection) {
+                    if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                         $mergedType->required = $type1->required || $type2->required;
                     }
 
@@ -230,7 +232,7 @@ trait WithMergeableTypes
                 }
             }
 
-            if ($mergeAsIntersection) {
+            if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                 foreach ($array2->shape as $key => $type2) {
                     if (!isset($array1->shape[$key])) {
                         $array1->shape[$key] = $type2;
@@ -369,7 +371,7 @@ trait WithMergeableTypes
 
         $resultType = new $typeClass;
 
-        $resultType->required = $this->required;
+        $resultType->required = $this->required || $type1->required || $type2->required;
 
         if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
             $t1Values = $type1->getPossibleValues();

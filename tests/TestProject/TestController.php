@@ -263,6 +263,10 @@ class TestController
                                         'type' => 'integer',
                                     ],
                                 ],
+                                'required' => [
+                                    'n',
+                                    'data',
+                                ],
                             ],
                         ],
                     ],
@@ -2410,6 +2414,211 @@ class TestController
         return $array;
     }
 
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'first' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'first 1' => [
+                                            'type' => 'array',
+                                            'items' => [
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                        'first 2' => [
+                                            'type' => 'array',
+                                            'items' => [
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'first 1',
+                                        'first 2',
+                                    ],
+                                ],
+                                'second' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'second 1' => [
+                                            'items' => [
+                                                'const' => 50,
+                                                'type' => 'integer',
+                                            ],
+                                            'type' => 'array',
+                                        ],
+                                        'second 2' => [
+                                            'items' => [
+                                                'const' => 50,
+                                                'type' => 'integer',
+                                            ],
+                                            'type' => 'array',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'second 1',
+                                        'second 2',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'first',
+                                'second',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route53(): mixed
+    {
+        $empty = [];
+        $nonEmpty = $empty;
+        $nonEmpty[] = 50;
+
+        $array = [
+            'first' => [
+                'first 1' => $empty,
+                'first 2' => $empty,
+            ],
+            'second' => [
+                'second 1' => $nonEmpty,
+            ],
+        ];
+
+        $array['second']['second 2'][] = $array['second']['second 1'][0];
+
+        return $array;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'text/plain' => [
+                        'schema' => [
+                            'type' => 'null',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route54(): mixed
+    {
+        return $this->route54();
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                'anotherProp' => [
+                                    'properties' => [
+                                        'deeper' => [
+                                            'properties' => [
+                                                'o' => [
+                                                    'properties' => [
+                                                        'x' => [
+                                                            'properties' => [
+                                                                'y' => [
+                                                                    'properties' => [
+                                                                        'key' => [
+                                                                            'type' => 'boolean',
+                                                                        ],
+                                                                    ],
+                                                                    'required' => [
+                                                                        'key',
+                                                                    ],
+                                                                    'type' => 'object',
+                                                                ],
+                                                            ],
+                                                            'required' => [
+                                                                'y',
+                                                            ],
+                                                            'type' => 'object',
+                                                        ],
+                                                    ],
+                                                    'required' => [
+                                                        'x',
+                                                    ],
+                                                    'type' => 'object',
+                                                ],
+                                            ],
+                                            'required' => [
+                                                'o',
+                                            ],
+                                            'type' => 'object',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'deeper',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                                'data' => [
+                                    'properties' => [
+                                        'second 1' => [
+                                            'items' => [
+                                                'const' => 50,
+                                                'type' => 'integer',
+                                            ],
+                                            'type' => 'array',
+                                        ],
+                                        'second 2' => [
+                                            'items' => [
+                                                'const' => 50,
+                                                'type' => 'integer',
+                                            ],
+                                            'type' => 'array',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'second 1',
+                                        'second 2',
+                                    ],
+                                    'type' => 'object',
+                                ],
+                            ],
+                            'required' => [
+                                'data',
+                                'anotherProp',
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route55(): mixed
+    {
+        /** @phpstan-ignore offsetAccess.nonOffsetAccessible */
+        $secondArray = $this->route53()['second'];
+
+        $obj = $this->getGenericClassInstanceWithoutPhpDoc(GenericClass::class, $secondArray);
+
+        /** @phpstan-ignore property.nonObject */
+        $obj->anotherProp->deeper['o']['x']->y['key'] = false;
+
+        return $obj;
+    }
 
     /**
      * @template TClass of object

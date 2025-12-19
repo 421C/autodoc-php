@@ -21,6 +21,7 @@ class UnresolvedParserNodeType extends UnresolvedType
 
         $type->addDescription($this->description);
         $type->examples = $type->examples ?: $this->examples;
+        $type->required = $type->required || $this->required;
 
         return $type;
     }

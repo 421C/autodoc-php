@@ -142,29 +142,30 @@ trait AnalyzesFunctionNodes
                 conditions: $this->conditionStack,
             );
 
-        } else if ($varNode instanceof Node\Expr\ArrayDimFetch) {
-            $assignedArrayKey = $this->getRawArrayKeyValue($varNode->dim);
+        } else if ($varNode instanceof Node\Expr\ArrayDimFetch || $varNode instanceof Node\Expr\PropertyFetch) {
+            $assignedItemKey = $this->getRawArrayKeyValue($varNode instanceof Node\Expr\ArrayDimFetch ? $varNode->dim : $varNode->name);
 
-            if ($assignedArrayKey === null) {
+            if ($assignedItemKey === null) {
                 // {varNode->var}[]  ->  {varNode->var}[0]
-                $assignedArrayKey = 0;
+                $assignedItemKey = 0;
             }
 
             if ($varNode->var instanceof Node\Expr\Variable) {
-                // {varNode->var}[$assignedArrayKey] = {valueNode}
+                // {varNode->var}[$assignedItemKey] = {valueNode}
+                // {varNode->var}->{$assignedItemKey} = {valueNode}
                 $this->scope->mutateVariable(
                     varNode: $varNode->var,
                     changes: [
                         'attributes' => [
-                            $assignedArrayKey => new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope),
+                            $assignedItemKey => new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope),
                         ],
                     ],
                     depth: $this->currentDepth,
                     conditions: $this->conditionStack,
                 );
 
-            } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch) {
-                $nestedKeys = $this->getNestedArrayAccessKeys($varNode);
+            } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch || $varNode->var instanceof Node\Expr\PropertyFetch) {
+                $nestedKeys = $this->getNestedAccessKeys($varNode);
 
                 $baseVariable = $nestedKeys['baseVariable'];
                 $keyPath = $nestedKeys['keyPath'];
@@ -255,13 +256,13 @@ trait AnalyzesFunctionNodes
      *     keyPath: list<int|string|null>,
      * }
      */
-    private function getNestedArrayAccessKeys(Node\Expr\ArrayDimFetch $arrayAccessNode): array
+    private function getNestedAccessKeys(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $arrayAccessNode): array
     {
         $keyPath = [];
         $currentNode = $arrayAccessNode;
 
-        while ($currentNode instanceof Node\Expr\ArrayDimFetch) {
-            $keyPath[] = $this->getRawArrayKeyValue($currentNode->dim);
+        while ($currentNode instanceof Node\Expr\ArrayDimFetch || $currentNode instanceof Node\Expr\PropertyFetch) {
+            $keyPath[] = $this->getRawArrayKeyValue($currentNode instanceof Node\Expr\ArrayDimFetch ? $currentNode->dim : $currentNode->name);
             $currentNode = $currentNode->var;
         }
 
