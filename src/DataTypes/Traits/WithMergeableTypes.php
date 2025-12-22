@@ -147,11 +147,11 @@ trait WithMergeableTypes
     {
         // Converting UnknownType to StringType to prevent `string or string`
         // when there is an union of StringType and UnknownType.
-        if ($type1 instanceof UnknownType) {
+        if ($type1 instanceof UnknownType && $type2 instanceof StringType) {
             $type1 = new StringType;
         }
 
-        if ($type2 instanceof UnknownType) {
+        if ($type2 instanceof UnknownType && $type1 instanceof StringType) {
             $type2 = new StringType;
         }
 
@@ -218,8 +218,11 @@ trait WithMergeableTypes
                 $mergedType = $this->mergeTypes($type1, $type2);
 
                 if ($mergedType) {
-                    if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
+                    if ($mergeAsIntersection) {
                         $mergedType->required = $type1->required || $type2->required;
+
+                    } else {
+                        $mergedType->required = $type1->required && $type2->required;
                     }
 
                     $array1->shape[$key] = $mergedType;
@@ -286,7 +289,7 @@ trait WithMergeableTypes
         }
 
         foreach ($object1->properties as $key => $type1) {
-            if ($mergeAsIntersection && !isset($object2->properties[$key])) {
+            if (! isset($object2->properties[$key])) {
                 continue;
             }
 
@@ -295,8 +298,11 @@ trait WithMergeableTypes
             $mergedType = $this->mergeTypes($type1, $type2);
 
             if ($mergedType) {
-                if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
+                if ($mergeAsIntersection) {
                     $mergedType->required = $type1->required || $type2->required;
+
+                } else {
+                    $mergedType->required = $type1->required && $type2->required;
                 }
 
                 $object1->properties[$key] = $mergedType;

@@ -147,6 +147,7 @@ class UnresolvedVariableType extends UnresolvedType
 
         for ($i = 0; $i < count($potentialTypes); $i++) {
             if ($potentialTypes[$i] instanceof ObjectType) {
+                $potentialTypes[$i] = clone $potentialTypes[$i];
                 $keyString = (string) $key;
 
                 if (isset($potentialTypes[$i]->properties[$keyString])) {
@@ -167,6 +168,8 @@ class UnresolvedVariableType extends UnresolvedType
                 $typesWithAddedAttribute[] = $potentialTypes[$i];
 
             } else if ($potentialTypes[$i] instanceof ArrayType) {
+                $potentialTypes[$i] = clone $potentialTypes[$i];
+
                 if (isset($potentialTypes[$i]->shape[$key])) {
                     if ($isCertain && ! ($attributeType instanceof ArrayType || $attributeType instanceof ObjectType)) {
                         $potentialTypes[$i]->shape[$key] = $attributeType;
