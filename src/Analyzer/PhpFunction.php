@@ -14,6 +14,7 @@ use PhpParser\Node;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
+use ReflectionException;
 use ReflectionFunction;
 use ReflectionFunctionAbstract;
 
@@ -42,15 +43,38 @@ class PhpFunction
     private ?PhpDoc $docComment = null;
 
 
-    public function getReturnType(): Type
+    public function getReturnType(?Type $analyzedType = null, ?Type $phpDocType = null): Type
     {
         if ($this->reflection->getName() == 'base64_encode') {
             return new StringType(format: 'byte');
         }
 
-        return $this->getTypeFromPhpDocReturnTag()
-            ?? $this->getTypeFromNativeReturnType()
-            ?? new UnknownType;
+        $nativeType = $this->getTypeFromNativeReturnType();
+        $phpDocType = $phpDocType?->unwrapType($this->scope->config);
+
+        if ($nativeType) {
+            $resultingReturnType = $nativeType->unwrapType($this->scope->config);
+
+            if ($phpDocType) {
+                $resultingReturnType = $resultingReturnType->getSubType($phpDocType, $this->scope->config);
+            }
+
+            if ($analyzedType) {
+                $resultingReturnType = $resultingReturnType->getSubType($analyzedType, $this->scope->config);
+            }
+
+        } else if ($phpDocType) {
+            $resultingReturnType = $phpDocType;
+
+            if ($analyzedType) {
+                $resultingReturnType = $resultingReturnType->getSubType($analyzedType, $this->scope->config);
+            }
+
+        } else {
+            $resultingReturnType = $analyzedType;
+        }
+
+        return $resultingReturnType ?? new UnknownType;
     }
 
 
@@ -96,7 +120,25 @@ class PhpFunction
     }
 
 
-    private function getParsedArgumentType(string $name): ?Type
+    public function getDefaultArgumentValue(string $name): mixed
+    {
+        try {
+            foreach ($this->reflection->getParameters() as $paramIndex => $reflectionParameter) {
+                if ($name !== $reflectionParameter->name) {
+                    continue;
+                }
+
+                return $reflectionParameter->getDefaultValue();
+            }
+
+        } catch (ReflectionException) {
+        }
+
+        return null;
+    }
+
+
+    public function getParsedArgumentType(string $name): ?Type
     {
         foreach ($this->reflection->getParameters() as $paramIndex => $reflectionParameter) {
             if ($name !== $reflectionParameter->name) {
@@ -113,6 +155,7 @@ class PhpFunction
                     } else if ($arg->node->name->name === $name) {
                         return $arg->getType();
                     }
+
                 } else if ($arg->node instanceof Type) {
                     if ($paramIndex === $argIndex) {
                         return $arg->getType();

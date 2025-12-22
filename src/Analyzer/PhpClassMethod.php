@@ -48,6 +48,8 @@ class PhpClassMethod
         $phpFunction = $this->getPhpFunction();
         $phpDoc = $phpFunction?->getPhpDoc();
 
+        $phpDocReturnType = null;
+
         if ($phpDoc) {
             $phpDocResponseTag = $phpDoc->getResponseTag();
 
@@ -58,7 +60,7 @@ class PhpClassMethod
                 $phpDocReturnTag = $phpDoc->getReturnTag();
 
                 if ($phpDocReturnTag) {
-                    $responseBodyType = $phpFunction->getTypeFromPhpDocTag($phpDocReturnTag);
+                    $phpDocReturnType = $phpFunction->getTypeFromPhpDocTag($phpDocReturnTag)?->resolve();
                 }
             }
 
@@ -76,6 +78,7 @@ class PhpClassMethod
         }
 
         $classFileName = $this->phpClass->getReflection()->getFileName();
+        $analyzedReturnType = null;
 
         if ($classFileName) {
             $methodNodeVisitor = new ClassMethodNodeVisitor(
@@ -90,7 +93,7 @@ class PhpClassMethod
             $requestBodyType ??= $this->scope->route?->getRequestBodyType($this->scope->config);
 
             if (! $responseBodyType && $methodNodeVisitor->returnTypes) {
-                $responseBodyType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
+                $analyzedReturnType = (new UnionType($methodNodeVisitor->returnTypes))->unwrapType($this->scope->config);
             }
         }
 
@@ -120,20 +123,6 @@ class PhpClassMethod
         foreach ($this->scope->route->requestCookies ?? [] as $paramName => $paramType) {
             if (! isset($cookieNames[$paramName])) {
                 $operation->parameters[] = Parameter::fromType($paramType, $paramName, 'cookie', $this->scope->config);
-            }
-        }
-
-        $responseBodyType = $responseBodyType?->unwrapType($this->scope->config);
-
-        if (! $responseBodyType
-            || $responseBodyType instanceof UnknownType
-            || ($responseBodyType instanceof ObjectType && empty($responseBodyType->properties) && !$responseBodyType->typeToDisplay)
-            || ($responseBodyType instanceof ArrayType && empty($responseBodyType->shape) && !$responseBodyType->itemType)
-        ) {
-            $nativeReturnType = $phpFunction?->getTypeFromNativeReturnType()?->unwrapType($this->scope->config);
-
-            if ($nativeReturnType) {
-                $responseBodyType = $nativeReturnType;
             }
         }
 
@@ -169,9 +158,32 @@ class PhpClassMethod
             }
         }
 
+        if (! $responseBodyType) {
+            $responseBodyType = $phpFunction?->getReturnType(
+                analyzedType: $analyzedReturnType,
+                phpDocType: $phpDocReturnType,
+            );
+        }
+
+        // Create a response from analyzed return type
+        if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
+            $httpStatusCode = $responseBodyType->getHttpStatusCode();
+            $contentType = $responseBodyType->getContentType();
+
+            $operation->responses[$httpStatusCode] = new Response(
+                content: [
+                    $contentType => new MediaType(
+                        schema: $responseBodyType->toSchema($this->scope->config),
+                        type: $responseBodyType,
+                    ),
+                ],
+            );
+        }
+
+        // Add responses attached to Route object
         foreach ($this->scope->route->responses ?? [] as $response) {
-            $httpStatusCode = strval($response['status'] ?? 200);
             $type = $response['body'] ?? new UnknownType;
+            $httpStatusCode = $response['status'] ?? $type->getHttpStatusCode();
             $contentType = $response['contentType'] ?? $type->getContentType();
 
             $operation->responses[$httpStatusCode] = new Response(
@@ -179,19 +191,6 @@ class PhpClassMethod
                     $contentType => new MediaType(
                         schema: $type->toSchema($this->scope->config),
                         type: $type,
-                    ),
-                ],
-            );
-        }
-
-        if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
-            $contentType = $responseBodyType->getContentType();
-
-            $operation->responses['200'] = new Response(
-                content: [
-                    $contentType => new MediaType(
-                        schema: $responseBodyType->toSchema($this->scope->config),
-                        type: $responseBodyType,
                     ),
                 ],
             );
@@ -209,15 +208,14 @@ class PhpClassMethod
             return new UnknownType;
         }
 
-        $nativeReturnType = $phpFunction->getTypeFromNativeReturnType();
         $phpDocReturnType = null;
         $analyzedReturnType = null;
 
         if ($usePhpDocIfAvailable) {
-            $returnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
+            $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
 
-            if ($returnType && ! ($returnType instanceof UnknownType)) {
-                $phpDocReturnType = $returnType;
+            if ($phpDocReturnType instanceof UnknownType) {
+                $phpDocReturnType = null;
             }
         }
 
@@ -267,31 +265,10 @@ class PhpClassMethod
             }
         }
 
-        $phpDocReturnType = $phpDocReturnType?->unwrapType($this->scope->config);
-
-        if ($nativeReturnType) {
-            $resultingReturnType = $nativeReturnType->unwrapType($this->scope->config);
-
-            if ($phpDocReturnType) {
-                $resultingReturnType = $resultingReturnType->getSubType($phpDocReturnType, $this->scope->config);
-            }
-
-            if ($analyzedReturnType) {
-                $resultingReturnType = $resultingReturnType->getSubType($analyzedReturnType, $this->scope->config);
-            }
-
-        } else if ($phpDocReturnType) {
-            $resultingReturnType = $phpDocReturnType;
-
-            if ($analyzedReturnType) {
-                $resultingReturnType = $resultingReturnType->getSubType($analyzedReturnType, $this->scope->config);
-            }
-
-        } else {
-            $resultingReturnType = $analyzedReturnType;
-        }
-
-        return $resultingReturnType ?? new UnknownType;
+        return $phpFunction->getReturnType(
+            analyzedType: $analyzedReturnType,
+            phpDocType: $phpDocReturnType,
+        );
     }
 
 

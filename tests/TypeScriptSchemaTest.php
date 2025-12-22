@@ -309,6 +309,7 @@ final class TypeScriptSchemaTest extends TestCase
                         example: Record<string, unknown>|string|null
                         isEnum: boolean
                         contentType: string|null
+                        httpStatusCode: number|null
                     }
                 }>
                 requestQueryParams: Record<string, {
@@ -319,6 +320,7 @@ final class TypeScriptSchemaTest extends TestCase
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
+                    httpStatusCode: number|null
                 }>
                 requestUrlParams: Record<string, {
                     description: string|null
@@ -328,6 +330,7 @@ final class TypeScriptSchemaTest extends TestCase
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
+                    httpStatusCode: number|null
                 }>
                 requestHeaders: Record<string, {
                     description: string|null
@@ -337,6 +340,7 @@ final class TypeScriptSchemaTest extends TestCase
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
+                    httpStatusCode: number|null
                 }>
                 requestCookies: Record<string, {
                     description: string|null
@@ -346,6 +350,7 @@ final class TypeScriptSchemaTest extends TestCase
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
+                    httpStatusCode: number|null
                 }>
             }
 

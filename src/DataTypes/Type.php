@@ -36,6 +36,7 @@ abstract class Type
     public bool $isEnum = false;
 
     public ?string $contentType = null;
+    public ?int $httpStatusCode = null;
 
 
     /**
@@ -93,6 +94,15 @@ abstract class Type
         }
 
         return 'application/json';
+    }
+
+    public function getHttpStatusCode(): int
+    {
+        if ($this->httpStatusCode) {
+            return $this->httpStatusCode;
+        }
+
+        return 200;
     }
 
     public function getSubType(Type $type, Config $config): Type

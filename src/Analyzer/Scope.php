@@ -174,13 +174,15 @@ class Scope
             }
 
             if ($node->name instanceof Node\Name) {
-                $function = new PhpFunction(
+                $phpFunction = new PhpFunction(
                     nameOrReflection: $node->name->name,
                     scope: $this,
                     args: PhpFunctionArgument::list($node->args, scope: $this),
                 );
 
-                return $function->getReturnType()->unwrapType($this->config);
+                $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
+
+                return $phpFunction->getReturnType(phpDocType: $phpDocReturnType)->unwrapType($this->config);
 
             } else {
                 $functionNodeType = $this->resolveType($node->name);

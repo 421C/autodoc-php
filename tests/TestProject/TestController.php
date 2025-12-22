@@ -2620,6 +2620,149 @@ class TestController
         return $obj;
     }
 
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'index' => [
+                                            'type' => 'number',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'index',
+                                    ],
+                                ],
+                                [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'index' => [
+                                                'type' => 'number',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'index',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route56(): mixed
+    {
+        $array = [];
+
+        for ($i = 0; $i < 10; $i++) {
+            $array[] = (object) [
+                'index' => $i,
+            ];
+        }
+
+        foreach ($array as $item) {
+            if ($item->index === 5) {
+                return $item;
+            }
+        }
+
+        return $array;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'message' => [
+                                            'type' => 'string',
+                                        ],
+                                        'name' => [
+                                            'const' => 'not_found',
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'name',
+                                        'message',
+                                    ],
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route57(): mixed
+    {
+        /** @var ?int */
+        $var = null;
+
+        $var = $var ?? throw new NotFoundException;
+
+        return [$var][0];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                'rule 1' => [
+                                    'const' => 2,
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'required' => [
+                                'rule 1',
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function route58(): mixed
+    {
+        $rules = [
+            'rule 1' => 1,
+        ];
+
+        $rules['rule 1'] = 2;
+
+        /** @autodoc debug $rules */
+
+        return $rules;
+    }
+
+
     /**
      * @template TClass of object
      *
