@@ -1,5 +1,6 @@
 parameters:
     paths:
+        - bin/autodoc-debug
         - src
         - tests
     level: 9

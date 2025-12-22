@@ -38,35 +38,6 @@ abstract class Type
     public ?string $contentType = null;
 
 
-    public function unwrapType(?Config $config = null): Type
-    {
-        if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
-            if (count($this->types) === 1) {
-                $type = reset($this->types);
-
-                $type->addDescription($this->description);
-                $type->examples = $this->examples ?: $type->examples;
-                $type->example = $this->example ?: $type->example;
-
-                $type->required = $type->required || $this->required;
-                $type->deprecated = $type->deprecated || $this->deprecated;
-
-                return $type->unwrapType($config);
-            }
-
-            if (empty($this->types)) {
-                return new UnknownType($this->description);
-            }
-
-            $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
-
-        } else if (is_a($this, UnresolvedType::class)) {
-            return $this->resolve()->unwrapType($config);
-        }
-
-        return $this;
-    }
-
     /**
      * @return $this
      */
@@ -103,49 +74,6 @@ abstract class Type
         }
 
         return $this;
-    }
-
-
-    public static function resolveFromReflection(ReflectionType $reflectionType, ?Scope $scope = null): Type
-    {
-        if ($reflectionType instanceof ReflectionNamedType) {
-            $typeName = $reflectionType->getName();
-
-            $type = match ($reflectionType->getName()) {
-                'int' => new IntegerType,
-                'float' => new FloatType,
-                'string' => new StringType,
-                'bool', 'true', 'false' => new BoolType,
-                'array' => new ArrayType,
-                'object' => new ObjectType,
-                'null' => new NullType,
-                default => new UnknownType,
-            };
-
-            if ($type instanceof UnknownType && class_exists($typeName)) {
-                if (isset($scope)) {
-                    $type = $scope->getPhpClassInDeeperScope($typeName)->resolveType();
-
-                } else {
-                    $type = new ObjectType(className: $typeName);
-                }
-            }
-
-            if ($reflectionType->allowsNull() && !($type instanceof NullType)) {
-                $type = new UnionType([$type, new NullType]);
-            }
-
-            return $type;
-
-        } else if ($reflectionType instanceof ReflectionUnionType) {
-            return new UnionType(array_map(fn ($rType) => Type::resolveFromReflection($rType, $scope), $reflectionType->getTypes()));
-
-        } else if ($reflectionType instanceof ReflectionIntersectionType) {
-            return new IntersectionType(array_map(fn ($rType) => Type::resolveFromReflection($rType, $scope), $reflectionType->getTypes()));
-
-        } else {
-            return new UnknownType;
-        }
     }
 
     public function getContentType(): string
@@ -383,5 +311,100 @@ abstract class Type
         }
 
         return false;
+    }
+
+
+    public function unwrapType(?Config $config = null): Type
+    {
+        if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
+            if (count($this->types) === 1) {
+                $type = reset($this->types);
+
+                $type->addDescription($this->description);
+                $type->examples = $this->examples ?: $type->examples;
+                $type->example = $this->example ?: $type->example;
+
+                $type->required = $type->required || $this->required;
+                $type->deprecated = $type->deprecated || $this->deprecated;
+
+                return $type->unwrapType($config);
+            }
+
+            if (empty($this->types)) {
+                return new UnknownType($this->description);
+            }
+
+            $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
+
+        } else if (is_a($this, UnresolvedType::class)) {
+            return $this->resolve()->unwrapType($config);
+        }
+
+        return $this;
+    }
+
+
+    public function deepResolve(?Config $config = null): Type
+    {
+        if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
+            $this->types = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->types);
+
+        } else if (is_a($this, UnresolvedType::class)) {
+            return $this->resolve()->deepResolve($config);
+
+        } else if (is_a($this, ObjectType::class)) {
+            $this->properties = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->properties);
+            $this->typeToDisplay = $this->typeToDisplay?->unwrapType($config)->deepResolve($config);
+
+        } else if (is_a($this, ArrayType::class)) {
+            $this->keyType = $this->keyType?->unwrapType($config)->deepResolve($config);
+            $this->itemType = $this->itemType?->unwrapType($config)->deepResolve($config);
+            $this->shape = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->shape);
+        }
+
+        return $this;
+    }
+
+
+    public static function resolveFromReflection(ReflectionType $reflectionType, ?Scope $scope = null): Type
+    {
+        if ($reflectionType instanceof ReflectionNamedType) {
+            $typeName = $reflectionType->getName();
+
+            $type = match ($reflectionType->getName()) {
+                'int' => new IntegerType,
+                'float' => new FloatType,
+                'string' => new StringType,
+                'bool', 'true', 'false' => new BoolType,
+                'array' => new ArrayType,
+                'object' => new ObjectType,
+                'null' => new NullType,
+                default => new UnknownType,
+            };
+
+            if ($type instanceof UnknownType && class_exists($typeName)) {
+                if (isset($scope)) {
+                    $type = $scope->getPhpClassInDeeperScope($typeName)->resolveType();
+
+                } else {
+                    $type = new ObjectType(className: $typeName);
+                }
+            }
+
+            if ($reflectionType->allowsNull() && !($type instanceof NullType)) {
+                $type = new UnionType([$type, new NullType]);
+            }
+
+            return $type;
+
+        } else if ($reflectionType instanceof ReflectionUnionType) {
+            return new UnionType(array_map(fn ($rType) => Type::resolveFromReflection($rType, $scope), $reflectionType->getTypes()));
+
+        } else if ($reflectionType instanceof ReflectionIntersectionType) {
+            return new IntersectionType(array_map(fn ($rType) => Type::resolveFromReflection($rType, $scope), $reflectionType->getTypes()));
+
+        } else {
+            return new UnknownType;
+        }
     }
 }
