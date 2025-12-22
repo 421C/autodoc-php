@@ -8,6 +8,8 @@ use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
+use AutoDoc\Debugger\TypeInspector;
+use AutoDoc\Route;
 use Exception;
 use Override;
 use PhpParser\Comment\Doc;
@@ -87,7 +89,7 @@ class ProcessAutoDocDebugTags
 
         foreach ($lines as $index => $line) {
             if (preg_match('/^[\s\*\/]*@autodoc\s+debug\s+(\S+)\s*[\s\*\/]*$/', $line, $matches)) {
-                $debugTarget = $matches[1];
+                $debugTargetName = $matches[1];
 
                 $parser = (new ParserFactory)->createForNewestSupportedVersion();
                 $ast = $parser->parse($code);
@@ -116,20 +118,19 @@ class ProcessAutoDocDebugTags
 
                 $scope = new Scope(
                     config: $this->config,
+                    route: new Route('', 'debug'),
                     className: $className,
                     methodName: $methodName,
                 );
 
-                $debugTargetType = $this->getDebugTargetType($scope, $ast, $debugTarget, $autodocCommentNode, $tagLocation);
+                $debugTarget = $this->getDebugTarget($scope, $ast, $debugTargetName, $autodocCommentNode, $tagLocation);
 
-                if ($debugTargetType) {
-                    $path = $this->formatFilePath($filePath, $workingDirectory);
-                    $lineNumber = $index + 1;
+                $path = $this->formatFilePath($filePath, $workingDirectory);
+                $lineNumber = $index + 1;
 
-                    $this->info("$debugTarget [$path:$lineNumber]");
+                $this->info("$debugTargetName [$path:$lineNumber]");
 
-                    $this->printDebugInfo($debugTargetType);
-                }
+                $this->printDebugInfo($debugTarget);
             }
         }
     }
@@ -137,9 +138,9 @@ class ProcessAutoDocDebugTags
     /**
      * @param Node\Stmt[] $ast
      */
-    protected function getDebugTargetType(Scope $scope, array $ast, string $debugTarget, Doc $autodocCommentNode, string $tagLocation): ?Type
+    protected function getDebugTarget(Scope $scope, array $ast, string $debugTargetName, Doc $autodocCommentNode, string $tagLocation): mixed
     {
-        if (preg_match('/^\$(\S+)$/', $debugTarget, $matches)) {
+        if (preg_match('/^\$(\S+)$/', $debugTargetName, $matches)) {
             $node = new Node\Expr\Variable(
                 name: $matches[1],
                 attributes: [
@@ -150,8 +151,13 @@ class ProcessAutoDocDebugTags
                 ],
             );
 
+            $debugTargetGetter = fn () => new UnresolvedParserNodeType($node, $scope);
+
+        } else if ($debugTargetName === 'route') {
+            $debugTargetGetter = fn () => $scope->route;
+
         } else {
-            $this->error("Failed to parse @autodoc debug tag: '$debugTarget' is not a PHP variable [$tagLocation]");
+            $this->error("Failed to parse @autodoc debug tag: '$debugTargetName' is not a PHP variable [$tagLocation]");
 
             return null;
         }
@@ -169,22 +175,26 @@ class ProcessAutoDocDebugTags
             $traverser->traverse($ast);
         }
 
-        $unresolvedType = new UnresolvedParserNodeType($node, $scope);
+        $result = $debugTargetGetter();
 
-        if ($this->resolutionDepth !== null) {
-            for ($i = 0; $i < $this->resolutionDepth; $i++) {
-                $unresolvedType = $unresolvedType->unwrapType($scope->config);
+        if ($result instanceof Type) {
+            if ($this->resolutionDepth !== null) {
+                for ($i = 0; $i < $this->resolutionDepth; $i++) {
+                    $result = $result->unwrapType($scope->config);
+                }
+
+                return $result;
             }
 
-            return $unresolvedType;
+            return $result->deepResolve();
         }
 
-        return $unresolvedType->deepResolve();
+        return $result;
     }
 
-    protected function printDebugInfo(Type $type): void
+    protected function printDebugInfo(mixed $type): void
     {
-        dump($type);
+        echo (new TypeInspector)($type);
     }
 
     /**
@@ -209,10 +219,14 @@ class ProcessAutoDocDebugTags
             #[Override]
             public function enterNode(Node $node)
             {
-                $doc = $node->getDocComment();
-
-                if ($doc && $this->targetLine >= $doc->getStartLine() && $this->targetLine <= $doc->getEndLine()) {
-                    $this->autodocCommentNode = $doc;
+                foreach ($node->getComments() as $comment) {
+                    if ($comment instanceof Doc
+                        && $this->targetLine >= $comment->getStartLine()
+                        && $this->targetLine <= $comment->getEndLine()
+                    ) {
+                        $this->autodocCommentNode = $comment;
+                        break;
+                    }
                 }
 
                 if ($node instanceof Node\Stmt\Class_) {
