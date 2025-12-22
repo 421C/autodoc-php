@@ -80,7 +80,7 @@ class ExtensionHandler
      */
     public function handleTypeExtensions(MethodCall|FuncCall|StaticCall|PhpClass $classOrExpr, bool $getReturnType = true): ?Type
     {
-        $requestTypeHandled = false;
+        $requestTypeHandled = isset($this->scope->objectsHandlingRequestBody[$classOrExpr]);
         $returnTypeHandled = ! $getReturnType;
         $returnType = null;
 
@@ -106,6 +106,7 @@ class ExtensionHandler
                 if ($requestType) {
                     $requestTypeHandled = true;
 
+                    $this->scope->objectsHandlingRequestBody[$classOrExpr] = true;
                     $this->scope->route?->addRequestBodyType($requestType);
                 }
             }

@@ -23,6 +23,7 @@ use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
+use WeakMap;
 
 class Scope
 {
@@ -53,11 +54,17 @@ class Scope
          * @var array<string, PhpVariable>
          */
         public array $variables = [],
-    ) {}
+    ) {
+        $this->objectsHandlingRequestBody = new WeakMap;
+    }
 
 
     public ?Node $callerNode = null;
 
+    /**
+     * @var WeakMap<object, true>
+     */
+    public WeakMap $objectsHandlingRequestBody;
 
     public function resolveType(Node $node, ?string $variableName = null, bool $isFinalResponse = false): Type
     {
