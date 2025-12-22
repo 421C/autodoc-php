@@ -5,8 +5,11 @@ namespace AutoDoc\Analyzer\Traits;
 use AutoDoc\Analyzer\PhpCondition;
 use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\DataTypes\UnresolvedArrayItemType;
+use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
 use PhpParser\Comment;
@@ -65,10 +68,11 @@ trait AnalyzesFunctionNodes
         }
     }
 
-    private function handleExpression(Node\Stmt\Expression $node): void
+    /**
+     * @param Comment[] $comments
+     */
+    private function handleComments(array $comments): void
     {
-        $comments = $node->getComments();
-
         foreach ($comments as $comment) {
             if ($comment instanceof Comment\Doc) {
                 $phpDoc = new PhpDoc($comment->getText(), $this->scope);
@@ -91,25 +95,50 @@ trait AnalyzesFunctionNodes
                     $this->scope->assignVariable(
                         varNode: $varNode,
                         valueNode: $varType,
-                        depth: $this->currentDepth,
                         conditions: $this->conditionStack,
                     );
                 }
             }
         }
+    }
 
-        if ($node->expr instanceof Node\Expr\Assign) {
-            $this->handleAssignment($node->expr->var, $node->expr->expr, $comments);
+
+    /**
+     * @param Comment[] $comments
+     */
+    private function handleExpression(Node $node, array $comments): void
+    {
+        if ($node instanceof Node\Expr\Assign) {
+            $this->handleAssignment($node->var, $node->expr, $comments);
         }
 
-        if ($this->isOperationEntrypoint && $node->expr instanceof Node\Expr\Throw_) {
-            $responseType = $this->scope->handleThrowExtensions($node->expr->expr);
+        if ($node instanceof Node\Expr\PostInc
+            || $node instanceof Node\Expr\PostDec
+            || $node instanceof Node\Expr\PreInc
+            || $node instanceof Node\Expr\PreDec
+        ) {
+            $this->handleAssignment($node->var, new NumberType, $comments);
+        }
+
+        if ($this->isOperationEntrypoint && $node instanceof Node\Expr\Throw_) {
+            $responseType = $this->scope->handleThrowExtensions($node->expr);
 
             if ($responseType !== null) {
                 $this->returnTypes[] = $responseType;
             }
         }
     }
+
+
+    private function handleForeach(Node\Stmt\Foreach_ $node): void
+    {
+        if ($node->keyVar) {
+            $this->handleAssignment($node->keyVar, new UnresolvedArrayKeyType(new UnresolvedParserNodeType($node->expr, $this->scope), $this->scope));
+        }
+
+        $this->handleAssignment($node->valueVar, new UnresolvedArrayItemType(new UnresolvedParserNodeType($node->expr, $this->scope), $this->scope));
+    }
+
 
     private function handleReturnStatement(Node\Stmt\Return_ $node): void
     {
@@ -130,15 +159,16 @@ trait AnalyzesFunctionNodes
     /**
      * @param Comment[] $comments
      */
-    private function handleAssignment(Node $varNode, Node\Expr $valueNode, array $comments = []): void
+    private function handleAssignment(Node $varNode, Node\Expr|Type $valueNode, array $comments = []): void
     {
+        $assignedType = $valueNode instanceof Type ? $valueNode : new UnresolvedParserNodeType($valueNode, $this->scope);
+
         if ($varNode instanceof Node\Expr\Variable) {
             // $var = {expr}
             $this->scope->assignVariable(
                 varNode: $varNode,
                 valueNode: $valueNode,
                 comments: $comments,
-                depth: $this->currentDepth,
                 conditions: $this->conditionStack,
             );
 
@@ -151,16 +181,15 @@ trait AnalyzesFunctionNodes
             }
 
             if ($varNode->var instanceof Node\Expr\Variable) {
-                // {varNode->var}[$assignedItemKey] = {valueNode}
-                // {varNode->var}->{$assignedItemKey} = {valueNode}
+                // {varNode->var}[$assignedItemKey] = {assignedType}
+                // {varNode->var}->{$assignedItemKey} = {assignedType}
                 $this->scope->mutateVariable(
                     varNode: $varNode->var,
                     changes: [
                         'attributes' => [
-                            $assignedItemKey => new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope),
+                            $assignedItemKey => $assignedType,
                         ],
                     ],
-                    depth: $this->currentDepth,
                     conditions: $this->conditionStack,
                 );
 
@@ -178,12 +207,12 @@ trait AnalyzesFunctionNodes
                     foreach ($keyPath as $keyIndex => $key) {
                         if ($keyIndex === $lastKeyIndex) {
                             if ($key === null) {
-                                // {baseVariable}[...][] = {valueNode}
-                                $currentLevel[] = new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope);
+                                // {baseVariable}[...][] = {assignedType}
+                                $currentLevel[] = $assignedType;
 
                             } else {
-                                // {baseVariable}[...][$key] = {valueNode}
-                                $currentLevel[$key] = new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope);
+                                // {baseVariable}[...][$key] = {assignedType}
+                                $currentLevel[$key] = $assignedType;
                             }
 
                         } else if ($key === null) {
@@ -210,7 +239,6 @@ trait AnalyzesFunctionNodes
                     $this->scope->mutateVariable(
                         varNode: $baseVariable,
                         changes: ['attributes' => $attributes],
-                        depth: $this->currentDepth,
                         conditions: $this->conditionStack,
                     );
                 }
@@ -289,7 +317,7 @@ trait AnalyzesFunctionNodes
     }
 
 
-    protected function handleConditionNode(Node $node): bool
+    protected function handleConditionNode(Node $node): void
     {
         if ($node instanceof Node\Stmt\If_
             || $node instanceof Node\Stmt\While_
@@ -299,14 +327,10 @@ trait AnalyzesFunctionNodes
             || $node instanceof Node\Stmt\TryCatch
         ) {
             $this->conditionStack[] = new PhpCondition($node);
-
-            return true;
         }
-
-        return false;
     }
 
-    protected function handleConditionEnd(Node $node): bool
+    protected function handleConditionEnd(Node $node): void
     {
         if ($node instanceof Node\Stmt\If_
             || $node instanceof Node\Stmt\While_
@@ -316,10 +340,6 @@ trait AnalyzesFunctionNodes
             || $node instanceof Node\Stmt\TryCatch
         ) {
             array_pop($this->conditionStack);
-
-            return true;
         }
-
-        return false;
     }
 }

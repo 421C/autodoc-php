@@ -463,8 +463,12 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\BinaryOp\Coalesce) {
+            if ($node->right instanceof Node\Expr\Throw_) {
+                return $this->resolveType($node->left)->removeNull($this->config);
+            }
+
             return new UnionType([
-                $this->resolveType($node->left),
+                $this->resolveType($node->left)->removeNull($this->config),
                 $this->resolveType($node->right),
             ]);
         }
@@ -577,15 +581,18 @@ class Scope
      * @param (callable(): TResult) $callback
      * @return TResult
      */
-    public function withArrayShapeMerging(callable $callback): mixed
+    public function withShapeMerging(callable $callback): mixed
     {
-        $initialValue = $this->config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+        $initialArrayValue = $this->config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+        $initialObjectValue = $this->config->data['objects']['merge_shapes_in_type_unions'] ?? false;
 
         $this->config->data['arrays']['merge_shapes_in_type_unions'] = true;
+        $this->config->data['objects']['merge_shapes_in_type_unions'] = true;
 
         $returnValue = $callback();
 
-        $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialValue;
+        $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialArrayValue;
+        $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
 
         return $returnValue;
     }

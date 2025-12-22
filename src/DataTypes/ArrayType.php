@@ -48,7 +48,17 @@ class ArrayType extends Type
         $this->keyType = $this->keyType?->unwrapType($config);
         $this->itemType = $this->itemType?->unwrapType($config);
 
-        if ($this->keyType && !($this->keyType instanceof IntegerType)) {
+        $keyTypes = $this->keyType instanceof UnionType ? $this->keyType->types : array_filter([$this->keyType]);
+        $hasStringKeys = false;
+
+        foreach ($keyTypes as $keyType) {
+            if (! ($keyType instanceof IntegerType || $keyType instanceof NumberType)) {
+                $hasStringKeys = true;
+                break;
+            }
+        }
+
+        if ($hasStringKeys) {
             return array_filter([
                 'type' => 'object',
                 'additionalProperties' => ($this->itemType ?? new UnknownType)->toSchema($config),

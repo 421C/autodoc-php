@@ -6,6 +6,7 @@ use AutoDoc\Analyzer\Traits\AnalyzesFunctionNodes;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use Override;
+use PhpParser\Comment;
 use PhpParser\Node;
 use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitorAbstract;
@@ -29,7 +30,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     /** @var Type[] */
     public array $returnTypes = [];
 
-    private int $currentDepth = 0;
+    /** @var Comment[] */
+    private array $currentExpressionComments = [];
 
     /**
      * @return Node[]
@@ -89,23 +91,23 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             return NodeVisitor::DONT_TRAVERSE_CHILDREN;
         }
 
-        if ($node instanceof Node\Stmt\If_
-            || $node instanceof Node\Stmt\While_
-            || $node instanceof Node\Stmt\For_
-            || $node instanceof Node\Stmt\Foreach_
-            || $node instanceof Node\Stmt\Switch_
-            || $node instanceof Node\Stmt\TryCatch
-        ) {
-            $this->currentDepth++;
-        }
+        if ($node instanceof Node\Stmt\Expression) {
+            $this->currentExpressionComments = $node->getComments();
 
-        if ($this->handleConditionNode($node)) {
             return null;
         }
 
-        if ($node instanceof Node\Stmt\Expression) {
-            $this->handleExpression($node);
+        $comments = array_merge($this->currentExpressionComments, $node->getComments());
+
+        $this->handleComments($comments);
+
+        $this->handleExpression($node, $comments);
+
+        if ($node instanceof Node\Stmt\Foreach_) {
+            $this->handleForeach($node);
         }
+
+        $this->handleConditionNode($node);
 
         if ($this->analyzeReturnValue && $node instanceof Node\Stmt\Return_) {
             $this->handleReturnStatement($node);
@@ -124,19 +126,11 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     #[Override]
     public function leaveNode(Node $node)
     {
-        if ($node instanceof Node\Stmt\If_ ||
-            $node instanceof Node\Stmt\While_ ||
-            $node instanceof Node\Stmt\For_ ||
-            $node instanceof Node\Stmt\Foreach_ ||
-            $node instanceof Node\Stmt\Switch_ ||
-            $node instanceof Node\Stmt\TryCatch
-        ) {
-            $this->currentDepth--;
+        if ($node instanceof Node\Stmt\Expression) {
+            $this->currentExpressionComments = [];
         }
 
-        if ($this->handleConditionEnd($node)) {
-            return null;
-        }
+        $this->handleConditionEnd($node);
 
         return null;
     }

@@ -88,6 +88,9 @@ use Exception;
  *         resolve_partial_shapes?: bool,
  *         merge_shapes_in_type_unions?: bool,
  *     },
+ *     objects?: array{
+ *         merge_shapes_in_type_unions?: bool,
+ *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,
  *     extensions: array<class-string>,

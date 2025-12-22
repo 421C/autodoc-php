@@ -184,7 +184,7 @@ trait WithMergeableTypes
 
         if ($type1 instanceof ObjectType) {
             /** @var ObjectType $type2 */
-            return $this->mergeObjectTypes($type1, $type2, $mergeAsIntersection);
+            return $this->mergeObjectTypes($type1, $type2, $mergeAsIntersection, $config);
         }
 
         return null;
@@ -269,21 +269,14 @@ trait WithMergeableTypes
         return null;
     }
 
-    private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, bool $mergeAsIntersection = false): ?ObjectType
+    private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, bool $mergeAsIntersection = false, ?Config $config = null): ?ObjectType
     {
-        $keys1 = array_keys($object1->properties);
-        $keys2 = array_keys($object2->properties);
+        $mergeShapesInTypeUnions = $config?->data['objects']['merge_shapes_in_type_unions'] ?? false;
 
-        if ($mergeAsIntersection) {
-            if (empty($keys1)) {
-                return $object2;
-            }
+        if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {
+            $keys1 = array_keys($object1->properties);
+            $keys2 = array_keys($object2->properties);
 
-            if (empty($keys2)) {
-                return $object1;
-            }
-
-        } else {
             sort($keys1);
             sort($keys2);
 
@@ -302,7 +295,7 @@ trait WithMergeableTypes
             $mergedType = $this->mergeTypes($type1, $type2);
 
             if ($mergedType) {
-                if ($mergeAsIntersection) {
+                if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                     $mergedType->required = $type1->required || $type2->required;
                 }
 
@@ -316,12 +309,16 @@ trait WithMergeableTypes
             }
         }
 
-        if ($mergeAsIntersection) {
+        if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
             foreach ($object2->properties as $key => $type2) {
                 if (!isset($object1->properties[$key])) {
                     $object1->properties[$key] = $type2;
                 }
             }
+        }
+
+        if ($object1->typeToDisplay || $object2->typeToDisplay) {
+            $object1->typeToDisplay = (new UnionType(array_values(array_filter([$object1->typeToDisplay, $object2->typeToDisplay]))))->unwrapType($config);
         }
 
         return $object1;
@@ -356,20 +353,29 @@ trait WithMergeableTypes
 
         if ($t1IsNumber && $t2IsNumber) {
             if ($type1::class === $type2::class) {
-                $typeClass = $type1::class;
+                $typeClassName = $type1::class;
+                $resultType = new $typeClassName;
 
             } else {
-                $typeClass = NumberType::class;
+                $resultType = new NumberType;
             }
 
+            $resultType->description = $type1->description === $type2->description ? $type1->description : null;
+            $resultType->minimum = $type1->minimum === $type2->minimum ? $type1->minimum : null;
+            $resultType->maximum = $type1->maximum === $type2->maximum ? $type1->maximum : null;
+
         } else if ($type1 instanceof StringType && $type2 instanceof StringType) {
-            $typeClass = StringType::class;
+            $resultType = new StringType(
+                description: $type1->description === $type2->description ? $type1->description : null,
+                format: $type1->format === $type2->format ? $type1->format : null,
+                minLength: $type1->minLength === $type2->minLength ? $type1->minLength : null,
+                maxLength: $type1->maxLength === $type2->maxLength ? $type1->maxLength : null,
+                pattern: $type1->pattern === $type2->pattern ? $type1->pattern : null,
+            );
 
         } else {
             return null;
         }
-
-        $resultType = new $typeClass;
 
         $resultType->required = $this->required || $type1->required || $type2->required;
 

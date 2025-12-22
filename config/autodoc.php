@@ -126,6 +126,13 @@ return [
         'merge_shapes_in_type_unions' => false,
     ],
 
+    'objects' => [
+        /**
+         * When enabled, object shapes will be merged in type unions.
+         */
+        'merge_shapes_in_type_unions' => false,
+    ],
+
     /**
      * Class that will be used to load and analyze routes.
      * This class must extend `AutoDoc\AbstractRouteLoader`.

@@ -20,7 +20,6 @@ class PhpVariableMutation
         public array $changes,
         public readonly int $startFilePos,
         public readonly int $endFilePos,
-        public readonly int $depth,
 
         /**
          * @var PhpCondition[]

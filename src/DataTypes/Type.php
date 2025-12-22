@@ -267,11 +267,12 @@ abstract class Type
                     return false;
                 }
 
-                if ($this->className !== $superType->className) {
+                if ($this->className === $superType->className) {
+                    return true;
+
+                } else {
                     if (class_exists($this->className) && class_exists($superType->className)) {
-                        if (! is_a($this->className, $superType->className, true)) {
-                            return false;
-                        }
+                        return is_a($this->className, $superType->className, true);
 
                     } else {
                         return false;
@@ -311,6 +312,21 @@ abstract class Type
         }
 
         return false;
+    }
+
+
+    public function removeNull(?Config $config = null): Type
+    {
+        if ($this instanceof UnionType) {
+            $types = array_filter($this->types, fn (Type $type) => ! $type instanceof NullType);
+
+            return (new UnionType($types))->unwrapType($config);
+
+        } else if ($this instanceof NullType) {
+            return new UnknownType;
+        }
+
+        return $this;
     }
 
 

@@ -27,7 +27,6 @@ trait StoresVariables
         Node\Expr\Variable $varNode,
         Node|Type $valueNode,
         array $comments = [],
-        int $depth = 0,
         array $conditions = [],
     ): void {
 
@@ -65,7 +64,6 @@ trait StoresVariables
             changes: ['type' => $type],
             startFilePos: $startFilePos,
             endFilePos: $endFilePos,
-            depth: $depth,
             conditions: $conditions,
         );
     }
@@ -100,7 +98,6 @@ trait StoresVariables
             changes: $changes,
             startFilePos: $startFilePos,
             endFilePos: $endFilePos,
-            depth: $depth,
             conditions: $conditions,
         );
     }
@@ -176,7 +173,6 @@ trait StoresVariables
                         ],
                         startFilePos: 0,
                         endFilePos: 0,
-                        depth: 0,
                         conditions: [],
                     )],
                 ]
