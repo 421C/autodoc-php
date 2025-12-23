@@ -86,7 +86,7 @@ class Workspace
 
             $openApiSchema = $docGenerator->makeOpenApi($this->config, $reportProgress);
 
-            $openApiSchemaJson = json_encode($openApiSchema);
+            $openApiSchemaJson = json_encode($openApiSchema, JSON_PRETTY_PRINT);
 
             if (! $openApiSchemaJson) {
                 return null;
