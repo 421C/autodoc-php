@@ -64,6 +64,9 @@ class RoutesExporter
         $tsConfig = $this->config->getTypeScriptConfig();
         $scope = new Scope($this->config);
 
+        ksort($this->requestsObjectShape->properties);
+        ksort($this->responsesObjectShape->properties);
+
         $requestsTsType = $typeConverter->convertToTypeScriptType($this->requestsObjectShape, $scope, $tsConfig, '');
         $responsesTsType = $typeConverter->convertToTypeScriptType($this->responsesObjectShape, $scope, $tsConfig, '');
 
