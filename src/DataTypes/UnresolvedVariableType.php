@@ -16,12 +16,10 @@ class UnresolvedVariableType extends UnresolvedType
         public ?string $description = null,
     ) {}
 
-    private Type $resolvedType;
-
     public function resolve(): Type
     {
-        if (isset($this->resolvedType)) {
-            return $this->resolvedType;
+        if (isset($this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos])) {
+            return $this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos];
         }
 
         krsort($this->phpVariable->mutations);
@@ -130,7 +128,11 @@ class UnresolvedVariableType extends UnresolvedType
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
 
-        $this->resolvedType = $resolvedType;
+        if (! isset($this->scope->resolvedVariables[$this->phpVariable])) {
+            $this->scope->resolvedVariables[$this->phpVariable] = [];
+        }
+
+        $this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos] = $resolvedType;
 
         return $resolvedType;
     }
