@@ -50,7 +50,10 @@ class Workspace
     /**
      * Generate and save an OpenApi 3.1 schema JSON file.
      *
-     * @param array{start?: (callable(Route): void), end?: (callable(Route): void)}|null $reportProgress
+     * @param array{
+     *     start?: (callable(Route): void),
+     *     end?: (callable(Route, float): void),
+     * }|null $reportProgress
      */
     public function getJson(bool $returnFileName = false, ?array $reportProgress = null): ?string
     {

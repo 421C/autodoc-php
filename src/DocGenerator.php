@@ -12,7 +12,10 @@ use Throwable;
 class DocGenerator
 {
     /**
-     * @param array{start?: (callable(Route): void), end?: (callable(Route): void)}|null $reportProgress
+     * @param array{
+     *     start?: (callable(Route): void),
+     *     end?: (callable(Route, float): void),
+     * }|null $reportProgress
      */
     public function makeOpenApi(Config $config, ?array $reportProgress = null): RootSchema
     {

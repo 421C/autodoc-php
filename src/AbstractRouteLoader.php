@@ -25,7 +25,11 @@ abstract class AbstractRouteLoader
 
 
     /**
-     * @param array{start?: (callable(Route): void), end?: (callable(Route): void)}|null $reportProgress
+     * @param array{
+     *     start?: (callable(Route): void),
+     *     end?: (callable(Route, float): void),
+     * }|null $reportProgress
+     *
      * @return array<string, Path>
      */
     public function getOpenApiPaths(?array $reportProgress = null): array
@@ -44,6 +48,7 @@ abstract class AbstractRouteLoader
                 $reportProgress['start']($route);
             }
 
+            $startTime = microtime(true);
             $operation = $this->routeToOperation($route);
 
             if ($operation) {
@@ -58,7 +63,9 @@ abstract class AbstractRouteLoader
             }
 
             if (isset($reportProgress['end'])) {
-                $reportProgress['end']($route);
+                $seconds = microtime(true) - $startTime;
+
+                $reportProgress['end']($route, $seconds);
             }
         }
 

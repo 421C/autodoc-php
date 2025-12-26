@@ -2757,8 +2757,6 @@ class TestController
 
         $rules['rule 1'] = 2;
 
-        /** @autodoc debug $rules */
-
         return $rules;
     }
 
