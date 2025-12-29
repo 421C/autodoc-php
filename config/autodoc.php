@@ -60,6 +60,11 @@ return [
          * When enabled, will use pattern instead of format for numeric string types.
          */
         'use_pattern_for_numeric_strings' => false,
+
+        /**
+         * When enabled, will pretty print OpenApi JSON files.
+         */
+        'json_pretty_print' => false,
     ],
 
     /**

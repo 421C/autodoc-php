@@ -77,6 +77,7 @@ use Exception;
  *         show_routes_as_titles?: bool,
  *         show_values_for_scalar_types?: bool,
  *         use_pattern_for_numeric_strings?: bool,
+ *         json_pretty_print?: bool,
  *     },
  *     schemas?: array<int|class-string, class-string|EnumConfig>,
  *     enum?: EnumConfig,
