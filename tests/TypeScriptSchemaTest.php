@@ -62,7 +62,7 @@ final class TypeScriptSchemaTest extends TestCase
             state: 1|2
         }
 
-        export type Route32Response = {
+        export type IntegerKeyWithMixedValuesResponse = {
             '15': Record<string, 4.21|true|'Big'|'Small'>
         }
 
@@ -78,7 +78,7 @@ final class TypeScriptSchemaTest extends TestCase
             Small = 'Small',
         }
 
-        export type Route14Request = {
+        export type HeadersAndRequestBodyRequest = {
             data: Record<string, {
                 id: number
                 name?: string
@@ -136,14 +136,7 @@ final class TypeScriptSchemaTest extends TestCase
          */
 
         export type Requests = {
-            '/api/test/route13': {
-                POST: {
-                    query: {
-                        filter: string[]
-                    }
-                }
-            }
-            '/api/test/route14': {
+            '/api/test/requestparams/headers-and-request-body': {
                 POST: {
                     body: {
                         data: Record<string, {
@@ -153,20 +146,27 @@ final class TypeScriptSchemaTest extends TestCase
                     }
                 }
             }
+            '/api/test/requestparams/query-param-array-of-strings': {
+                POST: {
+                    query: {
+                        filter: string[]
+                    }
+                }
+            }
         }
 
         export type Responses = {
-            '/api/test/route1': {
+            '/api/test/arrayoperations/array-values-on-assoc-array': {
+                POST: {
+                    '200': Array<1|2>
+                }
+            }
+            '/api/test/basicresponses/array-shape-from-return-tag': {
                 POST: {
                     '200': {
                         success: boolean
                         data?: string
                     }
-                }
-            }
-            '/api/test/route43': {
-                POST: {
-                    '200': Array<1|2>
                 }
             }
         }
@@ -379,7 +379,7 @@ final class TypeScriptSchemaTest extends TestCase
             ',
             expected: '
             /** @autodoc GET /api/test/closure1 */
-            type Closure1Response = Array<{
+            type ClosureResponse = Array<{
                 test: boolean
             }>
             ',
@@ -395,7 +395,7 @@ final class TypeScriptSchemaTest extends TestCase
             ',
             expected: '
             /** @autodoc GET /api/test/closure3 200 */
-            type Closure3Response = number|null
+            type ClosureResponse = number|null
             ',
         );
     }
@@ -405,11 +405,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc post /api/test/route9 */
+            /** @autodoc post /api/test/basicresponses/object-with-encoded-string */
             ',
             expected: '
-            /** @autodoc post /api/test/route9 */
-            type Route9Response = {
+            /** @autodoc post /api/test/basicresponses/object-with-encoded-string */
+            type ObjectWithEncodedStringResponse = {
                 text: string
                 encoded: string
                 count: number
@@ -424,11 +424,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route6 */
+            /** @autodoc POST /api/test/generictypes/generic-class-with-mixed-array-param */
             type TypeWithExistingName = number
             ',
             expected: "
-            /** @autodoc POST /api/test/route6 */
+            /** @autodoc POST /api/test/generictypes/generic-class-with-mixed-array-param */
             type TypeWithExistingName = {
                 data: Array<'abc'|123>
             }
@@ -445,7 +445,7 @@ final class TypeScriptSchemaTest extends TestCase
             ',
             expected: '
             /** @autodoc GET /api/test/closure4 */
-            type Closure4Response = {
+            type ClosureResponse = {
                 list: Array<{
                     id: number
                     name: string
@@ -460,13 +460,13 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route10 */
+            /** @autodoc POST /api/test/generictypes/tuple-with-template-type */
             interface TestResponseInterface {
                 {{{}}}
             }
             ',
             expected: '
-            /** @autodoc POST /api/test/route10 */
+            /** @autodoc POST /api/test/generictypes/tuple-with-template-type */
             type TestResponseInterface = [0|1, string]
             ',
         );
@@ -477,11 +477,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route16 */
+            /** @autodoc POST /api/test/intersectionunion/object-with-date-time-intersection */
             type TypeWithExistingName = number
             ',
             expected: '
-            /** @autodoc POST /api/test/route16 */
+            /** @autodoc POST /api/test/intersectionunion/object-with-date-time-intersection */
             type TypeWithExistingName = {
                 created_at: string
             }
@@ -494,11 +494,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route18 */
+            /** @autodoc POST /api/test/intersectionunion/intersection-with-union-property */
             ',
             expected: '
-            /** @autodoc POST /api/test/route18 */
-            type Route18Response = {
+            /** @autodoc POST /api/test/intersectionunion/intersection-with-union-property */
+            type IntersectionWithUnionPropertyResponse = {
                 id: number
                 name: string
                 uuid: {
@@ -514,11 +514,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route14 request */
+            /** @autodoc POST /api/test/requestparams/headers-and-request-body request */
             ',
             expected: '
-            /** @autodoc POST /api/test/route14 request */
-            type Route14Request = {
+            /** @autodoc POST /api/test/requestparams/headers-and-request-body request */
+            type HeadersAndRequestBodyRequest = {
                 data: Record<string, {
                     id: number
                     name?: string
@@ -533,11 +533,11 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
-            /** @autodoc POST /api/test/route29 */
+            /** @autodoc POST /api/test/generictypes/class-representing-assoc-array */
             ',
             expected: '
-            /** @autodoc POST /api/test/route29 */
-            type Route29Response = Record<string, 1|2>
+            /** @autodoc POST /api/test/generictypes/class-representing-assoc-array */
+            type ClassRepresentingAssocArrayResponse = Record<string, 1|2>
             ',
         );
     }
@@ -683,7 +683,7 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
-            /** @autodoc POST /api/test/route33 */
+            /** @autodoc POST /api/test/basicresponses/boolean-response */
             export type BoolResponse = false
 
             const otherBool = true
@@ -696,7 +696,7 @@ final class TypeScriptSchemaTest extends TestCase
 
             EOS,
             expected: <<<EOS
-            /** @autodoc POST /api/test/route33 */
+            /** @autodoc POST /api/test/basicresponses/boolean-response */
             export type BoolResponse = true
 
             const otherBool = true
@@ -742,7 +742,7 @@ final class TypeScriptSchemaTest extends TestCase
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
             /**
-             * @autodoc POST /api/test/route18 {
+             * @autodoc POST /api/test/intersectionunion/intersection-with-union-property {
              *     omit: 'id' | 'uuid'
              * }
              */
@@ -750,11 +750,11 @@ final class TypeScriptSchemaTest extends TestCase
             EOS,
             expected: <<<EOS
             /**
-             * @autodoc POST /api/test/route18 {
+             * @autodoc POST /api/test/intersectionunion/intersection-with-union-property {
              *     omit: 'id' | 'uuid'
              * }
              */
-            type Route18Response = {
+            type IntersectionWithUnionPropertyResponse = {
                 name: string
             }
             test
@@ -866,12 +866,12 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
-            /** @autodoc POST /api/test/route32 {mode: 'separate_file'} */
+            /** @autodoc POST /api/test/dynamickeys/integer-key-with-mixed-values {mode: 'separate_file'} */
             test
             EOS,
             expected: <<<EOS
-            /** @autodoc POST /api/test/route32 {mode: 'separate_file'} */
-            type Route32Response = import('@/types.ts').Route32Response
+            /** @autodoc POST /api/test/dynamickeys/integer-key-with-mixed-values {mode: 'separate_file'} */
+            type IntegerKeyWithMixedValuesResponse = import('@/types.ts').IntegerKeyWithMixedValuesResponse
             test
             EOS,
         );
@@ -882,13 +882,13 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
-              /** @autodoc POST /api/test/route36 {
+              /** @autodoc POST /api/test/arrayoperations/array-map-with-keys-and-values {
                *     mode: 'separate_file', as: 'Route36Response' } */
               type Response = {}
               type AnotherType = {}
             EOS,
             expected: <<<EOS
-              /** @autodoc POST /api/test/route36 {
+              /** @autodoc POST /api/test/arrayoperations/array-map-with-keys-and-values {
                *     mode: 'separate_file', as: 'Route36Response' } */
               type Response = import('@/types.ts').Route36Response
               type AnotherType = {}
@@ -1030,7 +1030,7 @@ final class TypeScriptSchemaTest extends TestCase
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
             /**
-             * @autodoc POST /api/test/route26 {
+             * @autodoc POST /api/test/closures/closure-with-parameter {
              *     with: array{
              *         token: string,
              *         hidden: true
@@ -1043,7 +1043,7 @@ final class TypeScriptSchemaTest extends TestCase
             EOS,
             expected: <<<EOS
             /**
-             * @autodoc POST /api/test/route26 {
+             * @autodoc POST /api/test/closures/closure-with-parameter {
              *     with: array{
              *         token: string,
              *         hidden: true
@@ -1051,7 +1051,7 @@ final class TypeScriptSchemaTest extends TestCase
              *     omit: 'hidden',
              * }
              */
-            type Route26Response = {
+            type ClosureWithParameterResponse = {
                 number: 42.1
                 token: string
             }
@@ -1067,7 +1067,7 @@ final class TypeScriptSchemaTest extends TestCase
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
             /**
-             * @autodoc POST /api/test/route30 {
+             * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary {
              *     with: AutoDoc\Tests\TestProject\Entities\GenericClass<object{ name: ?string }>,
              *     omit: 'a',
              * }
@@ -1075,16 +1075,16 @@ final class TypeScriptSchemaTest extends TestCase
             interface X ...
             function () {
                 /**
-                 * @autodoc POST /api/test/route30 { omit: 'c'|'d' }
+                 * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary { omit: 'c'|'d' }
                  */
                 /**
-                 * @autodoc POST /api/test/route30 { only: 'd' }
+                 * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary { only: 'd' }
                  */
             }
             EOS,
             expected: <<<EOS
             /**
-             * @autodoc POST /api/test/route30 {
+             * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary {
              *     with: AutoDoc\Tests\TestProject\Entities\GenericClass<object{ name: ?string }>,
              *     omit: 'a',
              * }
@@ -1104,16 +1104,16 @@ final class TypeScriptSchemaTest extends TestCase
             }
             function () {
                 /**
-                 * @autodoc POST /api/test/route30 { omit: 'c'|'d' }
+                 * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary { omit: 'c'|'d' }
                  */
-                type Route30Response = {
+                type DynamicKeyFromTernaryResponse = {
                     a: 1
                     b: 2
                 }
                 /**
-                 * @autodoc POST /api/test/route30 { only: 'd' }
+                 * @autodoc POST /api/test/controlflow/dynamic-key-from-ternary { only: 'd' }
                  */
-                type Route30Response = object|{
+                type DynamicKeyFromTernaryResponse = object|{
                     d: 100
                 }
             }
@@ -1126,7 +1126,7 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: <<<EOS
-            /** @autodoc POST /api/test/route14 request {
+            /** @autodoc POST /api/test/requestparams/headers-and-request-body request {
              *     mode: 'separate_file',
              *     with: array{
              *         token: string,
@@ -1135,13 +1135,13 @@ final class TypeScriptSchemaTest extends TestCase
 
             EOS,
             expected: <<<EOS
-            /** @autodoc POST /api/test/route14 request {
+            /** @autodoc POST /api/test/requestparams/headers-and-request-body request {
              *     mode: 'separate_file',
              *     with: array{
              *         token: string,
              *     },
              *  } */
-            type Route14Request = import('@/types.ts').Route14Request
+            type HeadersAndRequestBodyRequest = import('@/types.ts').HeadersAndRequestBodyRequest
 
             EOS,
         );
@@ -1192,6 +1192,29 @@ final class TypeScriptSchemaTest extends TestCase
                 One = 1,
             }
             ",
+        );
+    }
+
+    #[Test]
+    public function xmlRequestEndpoint(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc POST /api/test/xmlrequest/process */
+            /** @autodoc POST /api/test/xmlrequest/process request */
+            ',
+            expected: '
+            /** @autodoc POST /api/test/xmlrequest/process */
+            type ProcessResponse = {
+                error: \'Invalid XML\'
+            }|Array<{
+                customer: unknown
+                amount: number
+                points: 10|1
+            }>
+            /** @autodoc POST /api/test/xmlrequest/process request */
+            type ProcessRequest = string
+            ',
         );
     }
 }

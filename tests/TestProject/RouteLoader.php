@@ -5,26 +5,75 @@ namespace AutoDoc\Tests\TestProject;
 use AutoDoc\AbstractRouteLoader;
 use AutoDoc\Route;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Controllers\ArrayOperationsController;
+use AutoDoc\Tests\TestProject\Controllers\BasicResponsesController;
+use AutoDoc\Tests\TestProject\Controllers\ClosuresController;
+use AutoDoc\Tests\TestProject\Controllers\ControlFlowController;
+use AutoDoc\Tests\TestProject\Controllers\DynamicKeysController;
+use AutoDoc\Tests\TestProject\Controllers\ExceptionsController;
+use AutoDoc\Tests\TestProject\Controllers\GenericTypesController;
+use AutoDoc\Tests\TestProject\Controllers\IntersectionUnionController;
+use AutoDoc\Tests\TestProject\Controllers\RequestParamsController;
+use AutoDoc\Tests\TestProject\Controllers\TraitMethodsController;
+use AutoDoc\Tests\TestProject\Controllers\XmlRequestController;
 use ReflectionClass;
 use ReflectionMethod;
 
 class RouteLoader extends AbstractRouteLoader
 {
+    /**
+     * @var array<class-string>
+     */
+    private array $controllers = [
+        BasicResponsesController::class,
+        GenericTypesController::class,
+        IntersectionUnionController::class,
+        RequestParamsController::class,
+        ClosuresController::class,
+        ArrayOperationsController::class,
+        ControlFlowController::class,
+        ExceptionsController::class,
+        TraitMethodsController::class,
+        DynamicKeysController::class,
+        XmlRequestController::class,
+    ];
+
     public function getRoutes(): iterable
     {
-        $testController = new ReflectionClass(TestController::class);
+        foreach ($this->controllers as $controllerClass) {
+            $controller = new ReflectionClass($controllerClass);
+            $publicMethods = $controller->getMethods(ReflectionMethod::IS_PUBLIC);
 
-        $publicMethods = $testController->getMethods(ReflectionMethod::IS_PUBLIC);
+            $shortName = $controller->getShortName();
+            $prefix = strtolower(preg_replace('/Controller$/', '', $shortName) ?? $shortName);
 
-        foreach ($publicMethods as $method) {
-            yield new Route(
-                uri: '/api/test/' . $method->getName(),
-                method: 'post',
-                className: TestController::class,
-                classMethod: $method->getName(),
-            );
+            foreach ($publicMethods as $method) {
+                if ($method->class !== $controllerClass) {
+                    continue;
+                }
+
+                yield new Route(
+                    uri: '/api/test/' . $prefix . '/' . $this->toKebabCase($method->getName()),
+                    method: 'post',
+                    className: $controllerClass,
+                    classMethod: $method->getName(),
+                );
+            }
         }
 
+        yield from $this->getClosureRoutes();
+    }
+
+    private function toKebabCase(string $input): string
+    {
+        return strtolower(preg_replace('/([a-z])([A-Z])/', '$1-$2', $input) ?? $input);
+    }
+
+    /**
+     * @return iterable<Route>
+     */
+    private function getClosureRoutes(): iterable
+    {
         /**
          * Closure test 1
          *

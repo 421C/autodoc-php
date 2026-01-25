@@ -28,8 +28,8 @@ trait LoadsConfig
 
         $config->data['typescript']['export_http_requests_and_responses'] = [
             '@/requests-and-responses.ts' => [
-                'routes' => ['/api/test/route13', 'api/test/route14', 'api/test/route43'],
-                'exact_routes' => ['/api/test/route1'],
+                'routes' => ['/api/test/requestparams/query-param-array-of-strings', 'api/test/requestparams/headers-and-request-body', 'api/test/arrayoperations/array-values-on-assoc-array'],
+                'exact_routes' => ['/api/test/basicresponses/array-shape-from-return-tag'],
                 'request_methods' => ['get', 'post'],
             ],
         ];
