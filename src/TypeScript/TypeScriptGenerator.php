@@ -137,7 +137,8 @@ class TypeScriptGenerator
             $structureType = 'type';
         }
 
-        $name = $tag->getExistingStructureName() ?? $this->toPascalCase(basename($route->uri) . 'Request');
+        $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
+        $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Request');
         $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
         $typeDefinition = $this->typeConverter->convertToTypeScriptType(
@@ -203,7 +204,8 @@ class TypeScriptGenerator
             $structureType = 'type';
         }
 
-        $name = $tag->getExistingStructureName() ?? $this->toPascalCase(basename($route->uri) . 'Response');
+        $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
+        $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Response');
         $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
         $typeDefinition = $this->typeConverter->convertToTypeScriptType(
