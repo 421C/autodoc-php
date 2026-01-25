@@ -2,7 +2,7 @@
 
 PHP autodoc automatically generates up-to-date OpenAPI 3.1.0 documentation and TypeScript types directly from your PHP code – no PHPDoc annotations required.
 
-Instead of relying on manually written comments, PHP autodoc reads your actual PHP code and native types to extract accurate type information. PHPDoc annotations are supported if present, but completely optional.
+Instead of relying on AI or manually written comments, PHP autodoc reads your actual PHP code and native types to extract accurate type information. PHPDoc annotations are supported if present, but completely optional.
 
 For Laravel projects, [autodoc-laravel](https://github.com/421C/autodoc-laravel) offers seamless integration with routes, request validation, database models, API resources, and more.
 
@@ -11,9 +11,9 @@ For Laravel projects, [autodoc-laravel](https://github.com/421C/autodoc-laravel)
 
 ## TypeScript export
 
-Keep your frontend and backend in sync – define your types once in PHP and let PHP autodoc generate the matching TypeScript types automatically.
+Define your types once in PHP and let PHP autodoc generate the matching TypeScript types automatically to keep your frontend and backend types in sync.
 
-PHP autodoc supports exporting enums, classes, PHPStan type aliases, request/response structures and even custom PHPDoc type expressions as TypeScript types. [PHP autodoc-laravel](https://github.com/421C/autodoc-laravel) extends this functionality by offering support for Laravel models and other Laravel-specific structures that need custom handling.
+PHP autodoc supports exporting API request/response structures, classes, enums, PHPStan type aliases and custom PHPDoc type expressions as TypeScript types. [PHP autodoc-laravel](https://github.com/421C/autodoc-laravel) extends this functionality by offering support for Laravel models and other Laravel-specific structures that need custom handling.
 
 See [TypeScript section in our documentation](https://phpautodoc.com) for more info and examples.
 
