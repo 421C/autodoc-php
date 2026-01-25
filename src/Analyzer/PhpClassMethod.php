@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -146,9 +147,22 @@ class PhpClassMethod
                     }
 
                 } else {
+                    $contentType = $requestBodyType->getContentType();
+
+                    foreach ($operation->parameters ?? [] as $param) {
+                        if ($param instanceof Parameter
+                            && $param->in === 'header'
+                            && strcasecmp($param->name, 'Content-Type') === 0
+                            && $param->type instanceof StringType
+                            && is_string($param->type->value)
+                        ) {
+                            $contentType = $param->type->value;
+                        }
+                    }
+
                     $operation->requestBody = new RequestBody(
                         content: [
-                            'application/json' => new MediaType(
+                            $contentType => new MediaType(
                                 schema: $requestBodyType->toSchema($this->scope->config),
                                 type: $requestBodyType,
                             ),
