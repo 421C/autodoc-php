@@ -81,6 +81,9 @@ class TypeScriptGenerator
                 if ($responseStatusOrRequestKeyword && ! str_contains($responseStatusOrRequestKeyword, '{')) {
                     $httpStatus = $responseStatusOrRequestKeyword;
 
+                } else if (isset($operation->responses[200]) || isset($operation->responses['200'])) {
+                    $httpStatus = 200;
+
                 } else {
                     $httpStatus = array_key_first($operation->responses ?? []);
                 }
