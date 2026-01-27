@@ -181,17 +181,34 @@ class PhpClassMethod
 
         // Create a response from analyzed return type
         if ($responseBodyType && !($responseBodyType instanceof UnknownType)) {
-            $httpStatusCode = $responseBodyType->getHttpStatusCode();
-            $contentType = $responseBodyType->getContentType();
+            $responseTypes = $responseBodyType instanceof UnionType
+                ? $responseBodyType->types
+                : [$responseBodyType];
 
-            $operation->responses[$httpStatusCode] = new Response(
-                content: [
-                    $contentType => new MediaType(
-                        schema: $responseBodyType->toSchema($this->scope->config),
-                        type: $responseBodyType,
-                    ),
-                ],
-            );
+            /** @var array<int, Type[]> */
+            $typesByStatusCode = [];
+
+            foreach ($responseTypes as $type) {
+                $statusCode = $type->getHttpStatusCode();
+                $typesByStatusCode[$statusCode][] = $type;
+            }
+
+            foreach ($typesByStatusCode as $httpStatusCode => $types) {
+                $responseType = count($types) === 1
+                    ? $types[0]
+                    : (new UnionType($types))->unwrapType($this->scope->config);
+
+                $contentType = $responseType->getContentType();
+
+                $operation->responses[$httpStatusCode] = new Response(
+                    content: [
+                        $contentType => new MediaType(
+                            schema: $responseType->toSchema($this->scope->config),
+                            type: $responseType,
+                        ),
+                    ],
+                );
+            }
         }
 
         // Add responses attached to Route object

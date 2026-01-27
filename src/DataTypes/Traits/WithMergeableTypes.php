@@ -145,6 +145,10 @@ trait WithMergeableTypes
 
     private function mergeTypes(Type $type1, Type $type2, bool $mergeAsIntersection = false, ?Config $config = null): ?Type
     {
+        if ($type1->getHttpStatusCode() !== $type2->getHttpStatusCode()) {
+            return null;
+        }
+
         // Converting UnknownType to StringType to prevent `string or string`
         // when there is an union of StringType and UnknownType.
         if ($type1 instanceof UnknownType && $type2 instanceof StringType) {
