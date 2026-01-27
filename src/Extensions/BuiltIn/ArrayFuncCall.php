@@ -63,9 +63,12 @@ class ArrayFuncCall extends FuncCallExtension
 
                 if ($arrayType instanceof ArrayType) {
                     return new ArrayType(
-                        itemType: $callbackType->getReturnType([
-                            new PhpFunctionArgument($arrayType->convertShapeToTypePair($scope->config)->itemType ?? new UnknownType, $scope),
-                        ]),
+                        itemType: $callbackType->getReturnType(
+                            args: [
+                                new PhpFunctionArgument($arrayType->convertShapeToTypePair($scope->config)->itemType ?? new UnknownType, $scope),
+                            ],
+                            callerNode: $funcCall,
+                        ),
                         keyType: $arrayType->keyType,
                     );
                 }
@@ -89,7 +92,7 @@ class ArrayFuncCall extends FuncCallExtension
             }
 
             return new ArrayType(
-                itemType: $callbackType->getReturnType($closureArgs),
+                itemType: $callbackType->getReturnType($closureArgs, $funcCall),
             );
 
         } else if ($callbackType instanceof NullType) {
