@@ -466,4 +466,75 @@ class ArrayOperationsController
 
         return $numbers;
     }
+
+
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'properties' => [
+                                'a' => [
+                                    'type' => 'integer',
+                                ],
+                                'b' => [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'required' => [
+                                'a',
+                                'b',
+                            ],
+                            'type' => 'object',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function arrayMergeWithEmptyArray(): mixed
+    {
+        $numbers = rand(0, 1) ? [
+            'a' => 1,
+            'b' => 2,
+        ] : null;
+
+        return $numbers ?? [];
+    }
+
+
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'items' => [
+                                'type' => 'integer',
+                            ],
+                            'type' => 'array',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function foreachWithNullCoalescingArray(): mixed
+    {
+        $numbers = rand(0, 1) ? [
+            'a' => 1,
+            'b' => 2,
+        ] : null;
+
+        $result = [];
+
+        foreach ($numbers ?? [] as $number) {
+            $result[] = $number;
+        }
+
+        return $result;
+    }
 }

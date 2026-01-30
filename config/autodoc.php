@@ -240,7 +240,7 @@ return [
          * @example [
          *     '@/exported-types/document-requests-and-responses.ts' => [
          *         'routes' => ['/api/document'],
-         *         'request_methods' => ['get', 'post'],
+         *         'request_methods' => ['get', 'post', 'put', 'patch', 'delete'],
          *     ],
          * ]
          */

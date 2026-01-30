@@ -15,7 +15,7 @@ class UnresolvedArrayItemType extends UnresolvedType
 
     public function resolve(): Type
     {
-        $type = $this->potentialArrayType->unwrapType($this->scope->config);
+        $type = $this->potentialArrayType->unwrapType($this->scope->config)->unwrapType($this->scope->config);
 
         if ($type instanceof ArrayType) {
             return $type->convertShapeToTypePair()->itemType ?? new UnknownType;
