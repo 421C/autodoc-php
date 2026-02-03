@@ -116,13 +116,32 @@ class PhpEnum
             return '';
         }
 
-        $enumCaseHtmlDescriptions = [];
+        $rows = [];
+
+        $darkMode = ($this->phpClass->scope->config->data['ui']['theme'] ?? 'light') === 'dark';
 
         foreach ($enumCaseNodeVisitor->caseDescriptions as $caseValue => $caseDescription) {
-            $enumCaseHtmlDescriptions[] = '<span class="sl-bg-canvas-tint sl-rounded sl-border" style="text-align:center;min-width:42px;height:18px;display:inline-block;margin-right:6px;margin-bottom:6px;padding-left:2px;padding-right:2px;">' . $caseValue . '</span>' . trim($caseDescription);
+            $rows[] = '<tr>'
+                . '<td style="padding: 8px; font-family: monospace; color:' . ($darkMode ? '#eee' : '#111') . '">'
+                    . $caseDescription
+                . '</td>'
+                . '<td style="padding: 8px; font-family: monospace; color:' . ($darkMode ? '#ccc' : '#333') . '">'
+                    . $caseValue
+                . '</td>'
+            . '</tr>';
         }
 
-        return '<br><pre>' . implode('<br>', $enumCaseHtmlDescriptions) . '</pre><br>';
+        return '<table style="width:100%; min-width:100%; font-size:14px; color:#0f172a; margin:16px 0; border-collapse:collapse;">'
+            . '<thead>'
+                . '<tr>'
+                    . '<th style="text-align: left; padding: 8px; font-weight: bold;">Name</th>'
+                    . '<th style="text-align: left; padding: 8px; font-weight: bold;">Value</th>'
+                . '</tr>'
+            . '</thead>'
+            . '<tbody>'
+                . implode('', $rows)
+            . '</tbody>'
+        . '</table>';
     }
 
     private function escapeMarkdown(string $text): string
