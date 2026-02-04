@@ -46,12 +46,15 @@ class ObjectType extends Type
 
         return array_filter([
             'type' => 'object',
-            'properties' => array_map(fn ($prop) => $prop->toSchema($config), $this->properties),
+            'properties' => array_combine(
+                array_map(fn ($key) => (string) $key, array_keys($this->properties)),
+                array_map(fn ($prop) => $prop->toSchema($config), $this->properties)
+            ),
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
             'required' => array_values(array_filter(
                 array_map(
-                    fn ($prop, $propName) => $prop->required ? $propName : null,
+                    fn ($prop, $propName) => $prop->required ? (string) $propName : null,
                     $this->properties,
                     array_keys($this->properties),
                 )

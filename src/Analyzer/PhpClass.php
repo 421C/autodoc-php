@@ -27,7 +27,7 @@ use SplFixedArray;
 use Stringable;
 
 /**
- * @template-covariant TClass of object
+ * @template TClass of object
  */
 class PhpClass
 {
@@ -178,6 +178,7 @@ class PhpClass
 
         $publicProperties = [];
         $privateAndProtectedProperties = [];
+        $propertyScopeAllowsUsingCache = true;
 
         foreach ($this->getReflection()->getProperties() as $propertyReflection) {
             $isPublic = $propertyReflection->isPublic();
@@ -192,6 +193,10 @@ class PhpClass
 
             if ($propertyPhpDoc && $propertyReflection->getDeclaringClass()->name === $this->className) {
                 $propertyType = $propertyPhpDoc->resolvePropertyType($propertyName);
+
+                if ($propertyScopeAllowsUsingCache) {
+                    $propertyScopeAllowsUsingCache = ! $propertyPhpDoc->scope->constructorTemplateTypes;
+                }
 
             } else {
                 $propertyType = $this->resolvePropertyFromParentDocComments($propertyName) ?? $propertyType;
@@ -228,7 +233,7 @@ class PhpClass
             $privateAndProtectedProperties = $this->handlePhpDocPropertyTags($privateAndProtectedProperties);
         }
 
-        if ($this->scopeAllowsUsingCache()) {
+        if ($this->scopeAllowsUsingCache() && $propertyScopeAllowsUsingCache) {
             if ($onlyPublic) {
                 $this->publicProperties = $publicProperties;
 
@@ -262,7 +267,9 @@ class PhpClass
         foreach ($this->getPhpDoc()?->getPropertyTags() ?? [] as $propertyTag) {
             [$propertyName, $propertyType] = $propertyTag;
 
-            $properties[$propertyName] = $propertyType;
+            if ($propertyName) {
+                $properties[$propertyName] = $propertyType;
+            }
         }
 
         foreach ($this->getPhpDoc()?->getPropertyDescriptionTags() ?? [] as $tag) {
@@ -423,17 +430,21 @@ class PhpClass
      */
     public function getTraits(): array
     {
-        $traitUsesRecursive = function ($trait) use (&$traitUsesRecursive): array {
-            $traits = class_uses($trait) ?: [];
+        return $this->getTraitUsesRecursive($this->className);
+    }
 
-            foreach ($traits as $trait) {
-                $traits += $traitUsesRecursive($trait);
-            }
+    /**
+     * @return class-string[]
+     */
+    private function getTraitUsesRecursive(string $trait): array
+    {
+        $traits = class_uses($trait) ?: [];
 
-            return $traits;
-        };
+        foreach ($traits as $trait) {
+            $traits += $this->getTraitUsesRecursive($trait);
+        }
 
-        return $traitUsesRecursive($this->className);
+        return $traits;
     }
 
 

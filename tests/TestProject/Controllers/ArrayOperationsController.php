@@ -417,7 +417,7 @@ class ArrayOperationsController
                             ],
                             'required' => [
                                 'a',
-                                0,
+                                '0',
                             ],
                             'type' => 'object',
                         ],

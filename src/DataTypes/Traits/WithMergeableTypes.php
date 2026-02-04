@@ -410,4 +410,21 @@ trait WithMergeableTypes
 
         return $resultType;
     }
+
+    /**
+     * @param array<mixed> $array
+     * @return list<string>
+     */
+    private function flattenArrayOfStrings(array $array): array
+    {
+        $strings = [];
+
+        array_walk_recursive($array, function ($value) use (&$strings) {
+            if (is_string($value)) {
+                $strings[] = $value;
+            }
+        });
+
+        return $strings;
+    }
 }

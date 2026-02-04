@@ -44,7 +44,7 @@ class DynamicKeysController
                                 ],
                             ],
                             'required' => [
-                                15,
+                                '15',
                             ],
                         ],
                     ],
@@ -160,7 +160,7 @@ class DynamicKeysController
 
         $obj = $this->getGenericClassInstanceWithoutPhpDoc(GenericClass::class, $secondArray);
 
-        /** @phpstan-ignore property.nonObject */
+        /** @phpstan-ignore-next-line */
         $obj->anotherProp->deeper['o']['x']->y['key'] = false;
 
         return $obj;
@@ -183,6 +183,7 @@ class DynamicKeysController
             ],
         ];
 
+        /** @phpstan-ignore-next-line */
         $array['second']['second 2'][] = $array['second']['second 1'][0];
 
         return $array;

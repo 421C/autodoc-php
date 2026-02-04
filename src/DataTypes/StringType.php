@@ -20,7 +20,7 @@ class StringType extends Type
 
 
     /**
-     * @return string[]|null
+     * @return list<string>|null
      */
     public function getPossibleValues(): ?array
     {
@@ -28,7 +28,7 @@ class StringType extends Type
             return null;
         }
 
-        return is_string($this->value) ? [$this->value] : $this->value;
+        return is_string($this->value) ? [$this->value] : array_values($this->value);
     }
 
 
@@ -38,7 +38,7 @@ class StringType extends Type
             'type' => 'string',
             'format' => $this->format,
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
             'minLength' => $this->minLength,
             'maxLength' => $this->maxLength,
             'pattern' => $this->pattern,

@@ -118,7 +118,7 @@ class TypeScriptGenerator
         }
 
         $type = $operation->requestBody->content['application/json']->type
-            ?? $operation->requestBody->content[array_key_first($operation->requestBody->content)]->type
+            ?? $operation->requestBody->content[array_key_first($operation->requestBody->content) ?? '']->type
             ?? null;
 
         if (! $type) {
@@ -185,7 +185,7 @@ class TypeScriptGenerator
         }
 
         $type = $operation->responses[$httpStatus]->content['application/json']->type
-            ?? $operation->responses[$httpStatus]->content[array_key_first($operation->responses[$httpStatus]->content)]->type
+            ?? $operation->responses[$httpStatus]->content[array_key_first($operation->responses[$httpStatus]->content) ?? '']->type
             ?? null;
 
         if (! $type) {

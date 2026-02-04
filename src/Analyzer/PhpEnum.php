@@ -36,6 +36,7 @@ class PhpEnum
             $type = Type::resolveFromReflection($reflectionType);
 
             if ($enumConfig['show_allowed_values'] ?? true) {
+                /** @var list<float|int|string> */
                 $caseValues = array_column(array_map(fn ($case) => $case->getValue(), $enumReflection->getCases()), 'value');
 
                 $type->setEnumValues($caseValues);

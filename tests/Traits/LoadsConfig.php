@@ -9,6 +9,7 @@ trait LoadsConfig
 {
     protected static function loadConfig(): Config
     {
+        /** @phpstan-ignore argument.type */
         $config = new Config(require __DIR__ . '/../../config/autodoc.php');
 
         $config->data['debug']['enabled'] = true;

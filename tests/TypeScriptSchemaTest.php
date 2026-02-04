@@ -93,9 +93,12 @@ final class TypeScriptSchemaTest extends TestCase
     {
         $tsFile = new TypeScriptFile(null, self::$generator);
 
-        $this->assertIsCallable(self::$scope->config->data['typescript']['path_prefixes'] ?? null);
+        $this->assertTrue(isset(self::$scope->config->data['typescript']['path_prefixes']));
+        $this->assertIsNotString(self::$scope->config->data['typescript']['path_prefixes']);
 
-        foreach (self::$scope->config->data['typescript']['path_prefixes']() as $prefix => $path) {
+        $prefixes = self::$scope->config->data['typescript']['path_prefixes'](self::$scope->config);
+
+        foreach ($prefixes as $prefix => $path) {
             if (! is_dir($path)) {
                 mkdir($path);
             }

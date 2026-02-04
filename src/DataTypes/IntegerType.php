@@ -28,7 +28,7 @@ class IntegerType extends Type
     public bool $allowTrueAsInteger = false;
 
     /**
-     * @return int[]|null
+     * @return list<int>|null
      */
     public function getPossibleValues(): ?array
     {
@@ -36,7 +36,7 @@ class IntegerType extends Type
             return null;
         }
 
-        return is_int($this->value) ? [$this->value] : $this->value;
+        return is_int($this->value) ? [$this->value] : array_values($this->value);
     }
 
 
@@ -45,7 +45,7 @@ class IntegerType extends Type
         $schema = array_filter([
             'type' => 'integer',
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
         ]);
 
         if ($this->minimum !== null) {

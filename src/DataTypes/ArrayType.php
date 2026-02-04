@@ -31,12 +31,15 @@ class ArrayType extends Type
         if ($this->shape) {
             return array_filter([
                 'type' => 'object',
-                'properties' => array_map(fn ($prop) => $prop->toSchema($config), $this->shape),
+                'properties' => array_combine(
+                    array_map(fn ($key) => (string) $key, array_keys($this->shape)),
+                    array_map(fn ($prop) => $prop->toSchema($config), $this->shape)
+                ),
                 'description' => $this->description,
-                'examples' => $this->examples,
+                'examples' => $this->examples ? array_values($this->examples) : null,
                 'required' => array_values(array_filter(
                     array_map(
-                        fn ($prop, $propName) => $prop->required ? $propName : null,
+                        fn ($prop, $propName) => $prop->required ? (string) $propName : null,
                         $this->shape,
                         array_keys($this->shape),
                     ),
@@ -63,7 +66,7 @@ class ArrayType extends Type
                 'type' => 'object',
                 'additionalProperties' => ($this->itemType ?? new UnknownType)->toSchema($config),
                 'description' => $this->description,
-                'examples' => $this->examples,
+                'examples' => $this->examples ? array_values($this->examples) : null,
                 'minProperties' => $this->minItems,
                 'maxProperties' => $this->maxItems,
             ]);
@@ -73,7 +76,7 @@ class ArrayType extends Type
                 'type' => 'array',
                 'items' => ($this->itemType ?? new UnknownType)->toSchema($config),
                 'description' => $this->description,
-                'examples' => $this->examples,
+                'examples' => $this->examples ? array_values($this->examples) : null,
                 'minItems' => $this->minItems,
                 'maxItems' => $this->maxItems,
             ]);

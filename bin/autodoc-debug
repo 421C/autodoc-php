@@ -2,6 +2,7 @@
 <?php declare(strict_types=1);
 
 foreach ([$_composer_autoload_path ?? __DIR__ . '/../../../autoload.php', __DIR__ . '/../vendor/autoload.php'] as $file) {
+    /** @var string $file */
     if (file_exists($file)) {
         require $file;
         break;
@@ -12,7 +13,7 @@ $configPath = null;
 $workingDirectory = null;
 $resolutionDepth = null;
 
-for ($i = 1; $i < count($argv); $i++) {
+for ($i = 1; $i < count($argv ?? []); $i++) {
     if (str_starts_with($argv[$i], '--config=')) {
         $configPath = substr($argv[$i], strlen('--config='));
 
@@ -40,6 +41,7 @@ if (! $workingDirectory) {
     exit(1);
 }
 
+/** @phpstan-ignore argument.type */
 $config = new AutoDoc\Config(require $configPath);
 
 $command = new AutoDoc\Commands\ProcessAutoDocDebugTags($config, $resolutionDepth);

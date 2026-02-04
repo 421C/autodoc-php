@@ -58,6 +58,11 @@ class Workspace
     public function getJson(bool $returnFileName = false, ?array $reportProgress = null): ?string
     {
         $this->config->selectedWorkspaceKey = $this->key;
+
+        if ($this->config->selectedWorkspaceKey === null) {
+            throw new Exception('Workspace key is NULL.');
+        }
+
         $this->config->selectedWorkspace = $this->config->data['workspaces'][$this->config->selectedWorkspaceKey] ?? null;
 
         if (! $this->config->selectedWorkspace) {

@@ -266,7 +266,9 @@ class Scope
                         }
                     }
 
-                    $propertyType = $varType->typeToDisplay->properties[$propertyName]
+                    $displayObjectType = $varType->typeToDisplay instanceof ObjectType ? $varType->typeToDisplay : null;
+
+                    $propertyType = $displayObjectType?->properties[$propertyName]
                         ?? $varType->properties[$propertyName]
                         ?? null;
 
@@ -306,6 +308,7 @@ class Scope
                     return $getPropertyType($varType, $propertyName);
 
                 } else if ($varType instanceof UnionType) {
+                    /** @var list<Type> $types */
                     $types = [];
 
                     foreach ($varType->types as $type) {
@@ -341,16 +344,23 @@ class Scope
                             ?? null;
 
                     } else if ($varType instanceof ObjectType) {
-                        $type = $varType->typeToDisplay->shape[$key]
-                            ?? $varType->typeToDisplay->properties[$key]
-                            ?? $varType->typeToDisplay->itemType
-                            ?? null;
+                        $displayType = $varType->typeToDisplay;
+
+                        if ($displayType instanceof ArrayType) {
+                            $type = $displayType->shape[$key]
+                                ?? $displayType->itemType
+                                ?? null;
+
+                        } else if ($displayType instanceof ObjectType) {
+                            $type = $displayType->properties[$key] ?? null;
+                        }
                     }
 
                     return $type?->unwrapType($this->config) ?? new UnknownType;
                 };
 
                 if ($varType instanceof UnionType) {
+                    /** @var list<Type> $types */
                     $types = [];
 
                     foreach ($varType->types as $type) {

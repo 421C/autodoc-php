@@ -5,7 +5,9 @@ namespace AutoDoc\DataTypes;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Traits\WithMergeableTypes;
 
-
+/**
+ * @phpstan-import-type TypeSchema from Type
+ */
 class UnionType extends Type
 {
     use WithMergeableTypes;
@@ -48,11 +50,11 @@ class UnionType extends Type
                 $schema = $nullableType->toSchema($config);
 
                 if (isset($schema['type'])) {
-                    $schema['type'] = [$schema['type'], 'null'];
+                    $schema['type'] = $this->flattenArrayOfStrings([$schema['type'], 'null']);
 
                     return $schema;
 
-                } else if (isset($schema['anyOf']) && is_array($schema['anyOf'])) {
+                } else if (isset($schema['anyOf'])) {
                     $schema['anyOf'][] = ['type' => 'null'];
 
                     return $schema;
@@ -103,6 +105,9 @@ class UnionType extends Type
             }
         }
 
+        /**
+         * @var list<TypeSchema>
+         */
         $uniqueTypeSchemas = $this->deepUnique($uniqueTypeSchemas);
 
         $typeSchemas = array_merge(
@@ -138,7 +143,7 @@ class UnionType extends Type
 
         if ($canOutputTypesAsArray) {
             return [
-                'type' => array_column($typeSchemas, 'type'),
+                'type' => $this->flattenArrayOfStrings(array_column($typeSchemas, 'type')),
             ];
         }
 

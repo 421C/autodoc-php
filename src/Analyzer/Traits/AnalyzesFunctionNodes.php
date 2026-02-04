@@ -200,8 +200,11 @@ trait AnalyzesFunctionNodes
                 $keyPath = $nestedKeys['keyPath'];
 
                 if ($baseVariable instanceof Node\Expr\Variable) {
+                    /** @var array<int|string, Type> $attributes */
                     $attributes = [];
                     $lastKeyIndex = array_key_last($keyPath);
+
+                    /** @var array<int|string, Type> $currentLevel */
                     $currentLevel = &$attributes;
 
                     foreach ($keyPath as $keyIndex => $key) {
@@ -221,16 +224,21 @@ trait AnalyzesFunctionNodes
                             $arrayType = new ArrayType;
                             $currentLevel[] = $arrayType;
 
+                            /** @var array<int|string, Type> $currentLevel */
                             $currentLevel = &$arrayType->shape;
 
                         } else {
                             // {baseVariable}[...][$key][...]
                             //                         ↪ ↑
-                            if (! isset($currentLevel[$key])) {
+                            if (! isset($currentLevel[$key]) || ! $currentLevel[$key] instanceof ArrayType) {
                                 $currentLevel[$key] = new ArrayType;
                             }
 
-                            $currentLevel = &$currentLevel[$key]->shape;
+                            /** @var ArrayType $nestedArrayType */
+                            $nestedArrayType = $currentLevel[$key];
+
+                            /** @var array<int|string, Type> $currentLevel */
+                            $currentLevel = &$nestedArrayType->shape;
                         }
                     }
 

@@ -517,6 +517,7 @@ class ControlFlowController
     {
         $array = [];
 
+        /** @phpstan-ignore-next-line */
         $array['nested'][] = intval(1);
 
         return $array;
@@ -603,6 +604,7 @@ class ControlFlowController
             ],
         ];
 
+        /** @phpstan-ignore-next-line */
         $array['second']['second 2'][] = $array['second']['second 1'][0];
 
         return $array;

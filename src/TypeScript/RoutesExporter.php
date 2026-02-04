@@ -50,10 +50,8 @@ class RoutesExporter
                 }
 
                 foreach ($operation->responses ?? [] as $responseCode => $response) {
-                    $responseType = $response->content['application/json']->type ?? null;
-
-                    if ($responseType) {
-                        $this->addResponse($route, $method, $responseCode, $responseType);
+                    if (isset($response->content['application/json']->type)) {
+                        $this->addResponse($route, $method, $responseCode, $response->content['application/json']->type);
                     }
                 }
             }
@@ -103,23 +101,37 @@ class RoutesExporter
     private function addRequestBody(string $route, string $method, Type $requestBodyType): void
     {
         $this->requestsObjectShape->properties[$route] ??= (new ObjectType)->setRequired(true);
-        $this->requestsObjectShape->properties[$route]->properties[$method] ??=  (new ObjectType)->setRequired(true); // @phpstan-ignore property.notFound
+        assert($this->requestsObjectShape->properties[$route] instanceof ObjectType);
+
+        $this->requestsObjectShape->properties[$route]->properties[$method] ??= (new ObjectType)->setRequired(true);
+        assert($this->requestsObjectShape->properties[$route]->properties[$method] instanceof ObjectType);
+
         $this->requestsObjectShape->properties[$route]->properties[$method]->properties['body'] = $requestBodyType->setRequired(true);
     }
 
     private function addQueryParameter(string $route, string $method, string $name, Type $parameterType): void
     {
         $this->requestsObjectShape->properties[$route] ??= (new ObjectType)->setRequired(true);
-        $this->requestsObjectShape->properties[$route]->properties[$method] ??= (new ObjectType)->setRequired(true); // @phpstan-ignore property.notFound
+        assert($this->requestsObjectShape->properties[$route] instanceof ObjectType);
+
+        $this->requestsObjectShape->properties[$route]->properties[$method] ??= (new ObjectType)->setRequired(true);
+        assert($this->requestsObjectShape->properties[$route]->properties[$method] instanceof ObjectType);
+
         $this->requestsObjectShape->properties[$route]->properties[$method]->properties['query'] ??= (new ObjectType)->setRequired(true);
+        assert($this->requestsObjectShape->properties[$route]->properties[$method]->properties['query'] instanceof ObjectType);
+
         $this->requestsObjectShape->properties[$route]->properties[$method]->properties['query']->properties[$name] = $parameterType->setRequired(true);
     }
 
     private function addResponse(string $route, string $method, int|string $responseCode, Type $responseType): void
     {
         $this->responsesObjectShape->properties[$route] ??= (new ObjectType)->setRequired(true);
-        $this->responsesObjectShape->properties[$route]->properties[$method] ??= (new ObjectType)->setRequired(true); // @phpstan-ignore property.notFound
-        $this->responsesObjectShape->properties[$route]->properties[$method]->properties[$responseCode] = $responseType->setRequired(true);
+        assert($this->responsesObjectShape->properties[$route] instanceof ObjectType);
+
+        $this->responsesObjectShape->properties[$route]->properties[$method] ??= (new ObjectType)->setRequired(true);
+        assert($this->responsesObjectShape->properties[$route]->properties[$method] instanceof ObjectType);
+
+        $this->responsesObjectShape->properties[$route]->properties[$method]->properties[(string) $responseCode] = $responseType->setRequired(true);
     }
 
 

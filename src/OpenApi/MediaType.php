@@ -7,12 +7,14 @@ use JsonSerializable;
 
 /**
  * https://spec.openapis.org/oas/v3.1.0.html#media-type-object
+ *
+ * @phpstan-import-type TypeSchema from Type
  */
 class MediaType implements JsonSerializable
 {
     public function __construct(
         /**
-         * @var ?array<string, mixed>
+         * @var ?TypeSchema
          */
         public ?array $schema = null,
 

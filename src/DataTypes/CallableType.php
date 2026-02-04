@@ -27,7 +27,7 @@ class CallableType extends Type
         return array_filter([
             'type' => 'string',
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
         ]);
     }
 }

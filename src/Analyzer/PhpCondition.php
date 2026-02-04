@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use LogicException;
 use PhpParser\Node;
 use PhpParser\Node\Expr\Exit_;
 use PhpParser\Node\Stmt\Expression;
@@ -31,9 +32,9 @@ class PhpCondition
      */
     public function getConditionBranches(): array
     {
-        $getPosition = fn ($node): array => [
-            'startFilePos' => $node->getAttribute('startFilePos'),
-            'endFilePos' => $node->getAttribute('endFilePos'),
+        $getPosition = fn (Node $node): array => [
+            'startFilePos' => $this->requireFilePosAttribute($node, 'startFilePos'),
+            'endFilePos' => $this->requireFilePosAttribute($node, 'endFilePos'),
             'breakOutNode' => $this->getBreakOutNode($node),
         ];
 
@@ -53,6 +54,17 @@ class PhpCondition
         return [
             $getPosition($this->node),
         ];
+    }
+
+    private function requireFilePosAttribute(Node $node, string $attribute): int
+    {
+        $value = $node->getAttribute($attribute);
+
+        if (! is_int($value)) {
+            throw new LogicException(sprintf('Expected %s to be present on node of type %s.', $attribute, $node::class));
+        }
+
+        return $value;
     }
 
     private function getBreakOutNode(Node $node): ?Node

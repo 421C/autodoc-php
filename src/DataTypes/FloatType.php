@@ -18,7 +18,7 @@ class FloatType extends Type
 
 
     /**
-     * @return float[]|null
+     * @return list<float>|null
      */
     public function getPossibleValues(): ?array
     {
@@ -26,7 +26,7 @@ class FloatType extends Type
             return null;
         }
 
-        return is_float($this->value) ? [$this->value] : $this->value;
+        return is_float($this->value) ? [$this->value] : array_values($this->value);
     }
 
 
@@ -36,7 +36,7 @@ class FloatType extends Type
             'type' => 'number',
             'format' => 'float',
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
         ]);
 
         if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {

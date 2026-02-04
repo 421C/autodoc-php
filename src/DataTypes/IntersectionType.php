@@ -29,7 +29,7 @@ class IntersectionType extends Type
         }
 
         return [
-            'allOf' => array_map(fn ($type) => $type->toSchema($config), $this->types),
+            'allOf' => array_values(array_map(fn ($type) => $type->toSchema($config), $this->types)),
         ];
     }
 }

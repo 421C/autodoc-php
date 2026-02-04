@@ -77,6 +77,7 @@ class PhpDoc
 
     private function parse(): PhpDocNode
     {
+        /** @var PhpDocParser|null */
         static $phpDocParser = null;
 
         $parserConfig = new ParserConfig([]);

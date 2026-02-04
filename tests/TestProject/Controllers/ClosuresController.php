@@ -104,6 +104,7 @@ class ClosuresController
     ])]
     public function arrowFunctionWithConditional(): mixed
     {
+        /** @phpstan-ignore-next-line */
         $arrowFn = fn ($data) => $data['x'] > 5 ? $data['y'] : $data['z'];
 
         return $arrowFn([
@@ -168,6 +169,8 @@ class ClosuresController
     public function arrowFunctionWithOuterVariable(): mixed
     {
         $outerVar = true;
+
+        /** @phpstan-ignore-next-line */
         $arrowFn = fn ($key) => [$key => $outerVar];
 
         return [

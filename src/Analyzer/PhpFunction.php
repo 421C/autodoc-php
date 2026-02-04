@@ -239,7 +239,7 @@ class PhpFunction
                 } else if ($docTypeNode->type->name === 'class-string') {
                     $paramName = $docTypeNode->genericTypes[0]->name ?? null;
 
-                    if ($paramName && array_key_exists($paramName, $templateTypes)) {
+                    if ((is_int($paramName) || is_string($paramName)) && array_key_exists($paramName, $templateTypes)) {
                         $parameterValue = $this->getParsedArgumentType($name)?->unwrapType($this->scope->config);
 
                         if ($parameterValue instanceof ClassStringType) {

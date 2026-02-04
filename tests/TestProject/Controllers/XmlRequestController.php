@@ -101,10 +101,10 @@ class XmlRequestController
         }
 
         return array_map(function ($order) {
-            $amount = (float) $order->amount;
+            $amount = (float) $order->amount; // @phpstan-ignore property.nonObject, cast.double
 
             return [
-                'customer' => $order->customer,
+                'customer' => $order->customer, // @phpstan-ignore property.nonObject
                 'amount' => $amount,
                 'points' => $amount > 1000 ? 10 : 1,
             ];

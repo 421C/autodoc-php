@@ -156,13 +156,15 @@ class TypeInspector
         foreach ($reflection->getProperties() as $property) {
             $property->setAccessible(true);
 
-            $value = $property->getValue($type);
+            if ($property->isInitialized($type)) {
+                $value = $property->getValue($type);
 
-            if ($value === null || $value === [] || $value === false) {
-                continue;
+                if ($value === null || $value === [] || $value === false) {
+                    continue;
+                }
+
+                $properties[] = $property;
             }
-
-            $properties[] = $property;
         }
 
         return $properties;

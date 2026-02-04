@@ -38,9 +38,11 @@ class ExtensionHandler
     private function getExtensions(string $extensionTypeClass): array
     {
         if (! isset(self::$extensions)) {
-            self::$extensions = [];
-
-            self::$extensions[FuncCallExtension::class][] = ArrayFuncCall::class;
+            self::$extensions = [
+                FuncCallExtension::class => [
+                    ArrayFuncCall::class,
+                ],
+            ];
 
             foreach ($this->scope->config->data['extensions'] ?? [] as $extensionClass) {
                 if (is_subclass_of($extensionClass, MethodCallExtension::class)) {

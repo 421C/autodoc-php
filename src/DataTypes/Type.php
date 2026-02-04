@@ -9,11 +9,72 @@ use ReflectionNamedType;
 use ReflectionType;
 use ReflectionUnionType;
 
-
+/**
+ * @phpstan-type TypeSchema array{
+ *     '$ref'?: string,
+ *     '$schema'?: string,
+ *     '$id'?: string,
+ *     '$anchor'?: string,
+ *     type?: string|list<string>,
+ *     nullable?: bool,
+ *     format?: string,
+ *     enum?: list<mixed>,
+ *     const?: mixed,
+ *     multipleOf?: int|float,
+ *     maximum?: int|float,
+ *     exclusiveMaximum?: bool,
+ *     minimum?: int|float,
+ *     exclusiveMinimum?: bool,
+ *     maxLength?: int,
+ *     minLength?: int,
+ *     pattern?: string,
+ *     maxItems?: int,
+ *     minItems?: int,
+ *     uniqueItems?: bool,
+ *     maxProperties?: int,
+ *     minProperties?: int,
+ *     required?: list<string>,
+ *     properties?: array<string, TypeSchemaRecursive>,
+ *     patternProperties?: array<string, TypeSchemaRecursive>,
+ *     additionalProperties?: bool|TypeSchemaRecursive,
+ *     propertyNames?: TypeSchemaRecursive,
+ *     items?: TypeSchemaRecursive|list<TypeSchemaRecursive>,
+ *     prefixItems?: list<TypeSchemaRecursive>,
+ *     contains?: TypeSchemaRecursive,
+ *     minContains?: int,
+ *     maxContains?: int,
+ *     unevaluatedItems?: bool|TypeSchemaRecursive,
+ *     unevaluatedProperties?: bool|TypeSchemaRecursive,
+ *     dependentRequired?: array<string, list<string>>,
+ *     dependentSchemas?: array<string, TypeSchemaRecursive>,
+ *     if?: TypeSchemaRecursive,
+ *     then?: TypeSchemaRecursive,
+ *     else?: TypeSchemaRecursive,
+ *     allOf?: list<TypeSchemaRecursive>,
+ *     anyOf?: list<TypeSchemaRecursive>,
+ *     oneOf?: list<TypeSchemaRecursive>,
+ *     not?: TypeSchemaRecursive,
+ *     title?: string,
+ *     description?: string,
+ *     default?: mixed,
+ *     examples?: list<mixed>,
+ *     readOnly?: bool,
+ *     writeOnly?: bool,
+ *     discriminator?: array{propertyName: string, mapping?: array<string, string>},
+ *     xml?: array{name?: string, namespace?: string, prefix?: string, attribute?: bool, wrapped?: bool},
+ *     externalDocs?: array{description?: string, url: string},
+ *     deprecated?: bool,
+ *     contentEncoding?: string,
+ *     contentMediaType?: string,
+ *     contentSchema?: TypeSchemaRecursive
+ * }
+ *
+ * @phpstan-type TypeSchemaRecursive array<string, mixed>
+ */
 abstract class Type
 {
     /**
-     * @return array<string, mixed>
+     * @return TypeSchema
      */
     abstract public function toSchema(?Config $config = null): array;
 

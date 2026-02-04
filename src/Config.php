@@ -200,11 +200,14 @@ class Config
 
         /** @phpstan-ignore function.alreadyNarrowedType */
         if (is_callable($pathPrefixesLoader)) {
-            $tsConfig['path_prefixes'] = $pathPrefixesLoader($this);
+            /** @var ?iterable<string, string> */
+            $prefixes = $pathPrefixesLoader($this);
 
-            if (! is_iterable($tsConfig['path_prefixes'])) {
+            if (! is_iterable($prefixes)) {
                 throw new Exception('Error: path_prefixes in autodoc config must return an iterable.');
             }
+
+            $tsConfig['path_prefixes'] = $prefixes;
 
         } else {
             $type = gettype($pathPrefixesLoader);

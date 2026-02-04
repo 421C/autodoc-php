@@ -19,7 +19,7 @@ class NumberType extends Type
 
 
     /**
-     * @return array<int|float>|null
+     * @return list<int|float>|null
      */
     public function getPossibleValues(): ?array
     {
@@ -27,7 +27,7 @@ class NumberType extends Type
             return null;
         }
 
-        return is_array($this->value) ? $this->value : [$this->value];
+        return is_array($this->value) ? array_values($this->value) : [$this->value];
     }
 
 
@@ -36,7 +36,7 @@ class NumberType extends Type
         $schema = array_filter([
             'type' => 'number',
             'description' => $this->description,
-            'examples' => $this->examples,
+            'examples' => $this->examples ? array_values($this->examples) : null,
         ]);
 
         if ($this->minimum !== null) {
