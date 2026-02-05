@@ -654,6 +654,32 @@ class PhpDoc
 
 
     /**
+     * @return array<string, object{
+     *     returnType: ?Type,
+     * }>
+     */
+    public function getMethodTags(): array
+    {
+        $methodTags = [];
+
+        foreach ($this->node->getMethodTagValues() as $methodTag) {
+            try {
+                $methodTags[$methodTag->methodName] = (object) [
+                    'returnType' => $methodTag->returnType ? $this->createUnresolvedType($methodTag->returnType) : null,
+                ];
+
+            } catch (Throwable $exception) {
+                if ($this->scope->isDebugModeEnabled()) {
+                    throw new AutoDocException('Error resolving "@method ' . ((string) $methodTag) . '": ', $exception);
+                }
+            }
+        }
+
+        return $methodTags;
+    }
+
+
+    /**
      * @return null|object{
      *     className: class-string,
      *     genericTypes: UnresolvedPhpDocType[],

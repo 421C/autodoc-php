@@ -15,9 +15,10 @@ use AutoDoc\OpenApi\RequestBody;
 use AutoDoc\OpenApi\Response;
 use ReflectionException;
 use ReflectionMethod;
+use Throwable;
 
 /**
- * @template-covariant TClass of object
+ * @template TClass of object
  */
 class PhpClassMethod
 {
@@ -233,9 +234,26 @@ class PhpClassMethod
 
     public function getReturnType(bool $usePhpDocIfAvailable = true, bool $doNotAnalyzeBody = false): Type
     {
-        $phpFunction = $this->getPhpFunction();
+        $phpFunction = null;
+
+        try {
+            $phpFunction = $this->getPhpFunction();
+
+        } catch (Throwable $exception) {
+            $methodTags = $this->phpClass->getPhpDoc()?->getMethodTags();
+
+            if (! isset($methodTags[$this->methodName])) {
+                throw $exception;
+            }
+        }
 
         if (! $phpFunction) {
+            $methodTags ??= $this->phpClass->getPhpDoc()?->getMethodTags();
+
+            if (isset($methodTags[$this->methodName]->returnType)) {
+                return $methodTags[$this->methodName]->returnType;
+            }
+
             return new UnknownType;
         }
 
