@@ -14,6 +14,7 @@ use AutoDoc\Tests\TestProject\Controllers\DynamicMethodController;
 use AutoDoc\Tests\TestProject\Controllers\ExceptionsController;
 use AutoDoc\Tests\TestProject\Controllers\GenericTypesController;
 use AutoDoc\Tests\TestProject\Controllers\IntersectionUnionController;
+use AutoDoc\Tests\TestProject\Controllers\PipeOperationController;
 use AutoDoc\Tests\TestProject\Controllers\RequestParamsController;
 use AutoDoc\Tests\TestProject\Controllers\TraitMethodsController;
 use AutoDoc\Tests\TestProject\Controllers\XmlRequestController;
@@ -38,11 +39,16 @@ class RouteLoader extends AbstractRouteLoader
         DynamicKeysController::class,
         DynamicMethodController::class,
         XmlRequestController::class,
+        PipeOperationController::class, // @phpstan-ignore class.notFound
     ];
 
     public function getRoutes(): iterable
     {
         foreach ($this->controllers as $controllerClass) {
+            if ($controllerClass === PipeOperationController::class && PHP_VERSION_ID < 80500) {
+                continue;
+            }
+
             $controller = new ReflectionClass($controllerClass);
             $publicMethods = $controller->getMethods(ReflectionMethod::IS_PUBLIC);
 

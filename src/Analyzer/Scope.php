@@ -535,6 +535,10 @@ class Scope
                 return new NumberType;
             }
 
+            if ($node instanceof Node\Expr\BinaryOp\Pipe) {
+                return (new PhpPipeOperator($node, $this))->resolveType();
+            }
+
             if ($node instanceof Node\Expr\ArrowFunction
                 || $node instanceof Node\Expr\Closure
             ) {

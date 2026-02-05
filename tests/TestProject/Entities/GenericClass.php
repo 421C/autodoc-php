@@ -13,4 +13,14 @@ class GenericClass
          */
         public $data,
     ) {}
+
+    /**
+     * @template X
+     * @param X $data
+     * @return self<X>
+     */
+    public static function from(mixed $data): self
+    {
+        return new self($data);
+    }
 }
