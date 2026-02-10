@@ -198,10 +198,18 @@ trait WithMergeableTypes
     private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, bool $mergeAsIntersection = false, ?Config $config = null): ?ArrayType
     {
         if (! $array1->shape && ! $array1->itemType && ! $array1->keyType) {
+            foreach ($array2->shape as $key => $type) {
+                $array2->shape[$key] = $type->setRequired(false);
+            }
+
             return $array2;
         }
 
         if (! $array2->shape && ! $array2->itemType && ! $array2->keyType) {
+            foreach ($array1->shape as $key => $type) {
+                $array1->shape[$key] = $type->setRequired(false);
+            }
+
             return $array1;
         }
 
