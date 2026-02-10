@@ -48,12 +48,26 @@ class EnumCaseNodeVisitor extends NodeVisitorAbstract
                     }
                 }
 
+                if ($enumCase->expr instanceof Node\Scalar\Int_
+                    || $enumCase->expr instanceof Node\Scalar\String_
+                ) {
+                    $value = $enumCase->expr->value;
+
+                } else if ($enumCase->expr instanceof Node\Expr\UnaryMinus
+                    && $enumCase->expr->expr instanceof Node\Scalar\Int_
+                ) {
+                    $value = -$enumCase->expr->expr->value;
+
+                } else if ($enumCase->expr === null) {
+                    $value = (string) $enumCase->name;
+
+                } else {
+                    continue;
+                }
+
                 $case = [
                     'name' => (string) $enumCase->name,
-                    'value' => $enumCase->expr instanceof Node\Scalar\Int_
-                        || $enumCase->expr instanceof Node\Scalar\String_
-                            ? $enumCase->expr->value
-                            : (string) $enumCase->name,
+                    'value' => $value,
                 ];
 
                 $description = $phpDoc?->getText();

@@ -19,10 +19,12 @@ use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
+use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
+use Throwable;
 use WeakMap;
 
 class Scope
@@ -203,15 +205,22 @@ class Scope
                 }
 
                 if ($node->name instanceof Node\Name) {
-                    $phpFunction = new PhpFunction(
-                        nameOrReflection: $node->name->name,
-                        scope: $this,
-                        args: PhpFunctionArgument::list($node->args, scope: $this),
-                    );
+                    try {
+                        $phpFunction = new PhpFunction(
+                            nameOrReflection: $node->name->name,
+                            scope: $this,
+                            args: PhpFunctionArgument::list($node->args, scope: $this),
+                        );
 
-                    $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
+                        $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
 
-                    return $phpFunction->getReturnType(phpDocType: $phpDocReturnType)->unwrapType($this->config);
+                        return $phpFunction->getReturnType(phpDocType: $phpDocReturnType)->unwrapType($this->config);
+
+                    } catch (Throwable $exception) {
+                        if ($this->isDebugModeEnabled()) {
+                            throw new AutoDocException('Error resolving function "' . $node->name->name . '": ', $exception);
+                        }
+                    }
 
                 } else {
                     $functionNodeType = $this->resolveType($node->name);
@@ -401,7 +410,7 @@ class Scope
                     }
                 }
 
-                return new UnknownType;
+                return new NumberType;
             }
 
             if ($node instanceof Node\Expr\Ternary) {
