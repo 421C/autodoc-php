@@ -66,7 +66,8 @@ use ReflectionUnionType;
  *     deprecated?: bool,
  *     contentEncoding?: string,
  *     contentMediaType?: string,
- *     contentSchema?: TypeSchemaRecursive
+ *     contentSchema?: TypeSchemaRecursive,
+ *     'x-deprecated-description'?: string,
  * }
  *
  * @phpstan-type TypeSchemaRecursive array<string, mixed>
@@ -88,6 +89,8 @@ abstract class Type
     public bool $required = false;
 
     public bool $deprecated = false;
+
+    public ?string $deprecatedDescription = null;
 
     /**
      * @var array<string, mixed>|string|null
@@ -134,6 +137,13 @@ abstract class Type
         } else {
             $this->description = trim($this->description . "\n\n" . $description) ?: null;
         }
+
+        return $this;
+    }
+
+    public function addDeprecatedDescription(?string $description): self
+    {
+        $this->deprecatedDescription = trim($this->deprecatedDescription . "\n\n" . $description) ?: null;
 
         return $this;
     }

@@ -66,6 +66,7 @@ class TraitMethodsController
                                     ],
                                     'is_flying' => [
                                         'type' => 'boolean',
+                                        'deprecated' => true,
                                     ],
                                     'launch_date' => [
                                         'format' => 'date-time',
@@ -125,6 +126,7 @@ class TraitMethodsController
                                         ],
                                         'is_flying' => [
                                             'type' => 'boolean',
+                                            'deprecated' => true,
                                         ],
                                         'launch_date' => [
                                             'format' => 'date-time',

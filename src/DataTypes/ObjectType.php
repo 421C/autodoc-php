@@ -59,6 +59,8 @@ class ObjectType extends Type
                     array_keys($this->properties),
                 )
             )),
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
     }
 }

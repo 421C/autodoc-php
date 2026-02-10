@@ -29,23 +29,27 @@ class ArrayType extends Type
     public function toSchema(?Config $config = null): array
     {
         if ($this->shape) {
-            return array_filter([
-                'type' => 'object',
-                'properties' => array_combine(
-                    array_map(fn ($key) => (string) $key, array_keys($this->shape)),
-                    array_map(fn ($prop) => $prop->toSchema($config), $this->shape)
-                ),
-                'description' => $this->description,
-                'examples' => $this->examples ? array_values($this->examples) : null,
-                'required' => array_values(array_filter(
-                    array_map(
-                        fn ($prop, $propName) => $prop->required ? (string) $propName : null,
-                        $this->shape,
-                        array_keys($this->shape),
+            return [
+                ...array_filter([
+                    'type' => 'object',
+                    'properties' => array_combine(
+                        array_map(fn ($key) => (string) $key, array_keys($this->shape)),
+                        array_map(fn ($prop) => $prop->toSchema($config), $this->shape)
                     ),
-                    fn ($propName) => $propName !== null,
-                )),
-            ]);
+                    'description' => $this->description,
+                    'examples' => $this->examples ? array_values($this->examples) : null,
+                    'required' => array_values(array_filter(
+                        array_map(
+                            fn ($prop, $propName) => $prop->required ? (string) $propName : null,
+                            $this->shape,
+                            array_keys($this->shape),
+                        ),
+                        fn ($propName) => $propName !== null,
+                    )),
+                    'deprecated' => $this->deprecated,
+                    'x-deprecated-description' => $this->deprecatedDescription,
+                ]),
+            ];
         }
 
         $this->keyType = $this->keyType?->unwrapType($config);
@@ -69,6 +73,8 @@ class ArrayType extends Type
                 'examples' => $this->examples ? array_values($this->examples) : null,
                 'minProperties' => $this->minItems,
                 'maxProperties' => $this->maxItems,
+                'deprecated' => $this->deprecated,
+                'x-deprecated-description' => $this->deprecatedDescription,
             ]);
 
         } else {
@@ -79,6 +85,8 @@ class ArrayType extends Type
                 'examples' => $this->examples ? array_values($this->examples) : null,
                 'minItems' => $this->minItems,
                 'maxItems' => $this->maxItems,
+                'deprecated' => $this->deprecated,
+                'x-deprecated-description' => $this->deprecatedDescription,
             ]);
         }
     }

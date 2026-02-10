@@ -37,7 +37,17 @@ class FloatType extends Type
             'format' => 'float',
             'description' => $this->description,
             'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
+
+        if ($this->minimum !== null) {
+            $schema['minimum'] = $this->minimum;
+        }
+
+        if ($this->maximum !== null) {
+            $schema['maximum'] = $this->maximum;
+        }
 
         if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
             $possibleValues = $this->getPossibleValues();

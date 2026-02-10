@@ -80,15 +80,18 @@ class PhpDoc
         /** @var PhpDocParser|null */
         static $phpDocParser = null;
 
-        $parserConfig = new ParserConfig([]);
+        /** @var Lexer */
+        static $lexer;
 
         if ($phpDocParser === null) {
+            $parserConfig = new ParserConfig([]);
+            $lexer = new Lexer($parserConfig);
             $constExprParser = new ConstExprParser($parserConfig);
             $typeParser = new TypeParser($parserConfig, $constExprParser);
             $phpDocParser = new PhpDocParser($parserConfig, $typeParser, $constExprParser);
         }
 
-        $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($this->docComment));
+        $tokens = new TokenIterator($lexer->tokenize($this->docComment));
 
         return $phpDocParser->parse($tokens);
     }
@@ -481,6 +484,22 @@ class PhpDoc
         return $tags;
     }
 
+    /**
+     * @return array{description: string}[]
+     */
+    public function getDeprecatedTags(): array
+    {
+        $tags = [];
+
+        foreach ($this->node->getDeprecatedTagValues() as $deprecatedTag) {
+            $tags[] = [
+                'description' => $deprecatedTag->description,
+            ];
+        }
+
+        return $tags;
+    }
+
 
     public function getReturnTag(): ?ReturnTagValueNode
     {
@@ -718,6 +737,11 @@ class PhpDoc
         return array_column($this->node->getTagsByName('@autodoc'), 'value')[0] ?? null;
     }
 
+    public function getAutodocIgnoreTag(): ?PhpDocTagValueNode
+    {
+        return array_column($this->node->getTagsByName('@autodoc-ignore'), 'value')[0] ?? null;
+    }
+
 
     /**
      * @return array<string, Type>
@@ -817,12 +841,22 @@ class PhpDoc
 
     public function createTypeNode(string $phpDocType): TypeNode
     {
-        $parserConfig = new ParserConfig([]);
-        $tokens = new TokenIterator((new Lexer($parserConfig))->tokenize($phpDocType));
-        $constExprParser = new ConstExprParser($parserConfig);
+        /** @var TypeParser|null */
+        static $typeParser = null;
+
+        /** @var Lexer */
+        static $lexer;
+
+        if ($typeParser === null) {
+            $parserConfig = new ParserConfig([]);
+            $lexer = new Lexer($parserConfig);
+            $typeParser = new TypeParser($parserConfig, new ConstExprParser($parserConfig));
+        }
+
+        $tokens = new TokenIterator($lexer->tokenize($phpDocType));
 
         try {
-            return (new TypeParser($parserConfig, $constExprParser))->parse($tokens);
+            return $typeParser->parse($tokens);
 
         } catch (Throwable $exception) {
             throw new AutoDocException('Error parsing type "' . $phpDocType . '": ', $exception);

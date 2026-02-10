@@ -10,5 +10,9 @@ class Rocket
     public string $name;
     public RocketCategory $category;
     public ?DateTimeImmutable $launch_date;
+
+    /**
+     * @deprecated
+     */
     public bool $is_flying;
 }

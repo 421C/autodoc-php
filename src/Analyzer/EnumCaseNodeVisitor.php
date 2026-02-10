@@ -16,9 +16,11 @@ class EnumCaseNodeVisitor extends NodeVisitorAbstract
     ) {}
 
     /**
-     * @var array<int|string, string>
+     * @var array{name: string, value: int|string, description?: string}[]
      */
-    public array $caseDescriptions = [];
+    public array $enumCases = [];
+
+    public ?string $backingType = null;
 
     /**
      * @return null|NodeVisitor::*
@@ -27,6 +29,8 @@ class EnumCaseNodeVisitor extends NodeVisitorAbstract
     public function enterNode(Node $node)
     {
         if ($node instanceof Node\Stmt\Enum_) {
+            $this->backingType = $node->scalarType?->name;
+
             foreach ($node->stmts as $enumCase) {
                 if (! ($enumCase instanceof Node\Stmt\EnumCase)) {
                     continue;
@@ -37,16 +41,28 @@ class EnumCaseNodeVisitor extends NodeVisitorAbstract
                 foreach ($enumCase->getComments() as $comment) {
                     if ($comment instanceof Comment\Doc) {
                         $phpDoc = new PhpDoc($comment->getText(), $this->scope);
+
+                        if ($phpDoc->getAutodocIgnoreTag()) {
+                            continue 2;
+                        }
                     }
                 }
 
-                if ($enumCase->expr instanceof Node\Scalar\Int_
-                    || $enumCase->expr instanceof Node\Scalar\String_
-                ) {
-                    $caseValue = $enumCase->expr->value;
+                $case = [
+                    'name' => (string) $enumCase->name,
+                    'value' => $enumCase->expr instanceof Node\Scalar\Int_
+                        || $enumCase->expr instanceof Node\Scalar\String_
+                            ? $enumCase->expr->value
+                            : (string) $enumCase->name,
+                ];
 
-                    $this->caseDescriptions[$caseValue] = $phpDoc?->getText() ?? (string) $enumCase->name;
+                $description = $phpDoc?->getText();
+
+                if ($description) {
+                    $case['description'] = $description;
                 }
+
+                $this->enumCases[] = $case;
             }
 
             return NodeVisitor::DONT_TRAVERSE_CHILDREN;

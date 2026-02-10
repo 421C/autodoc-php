@@ -3,6 +3,7 @@
 namespace AutoDoc\Tests\TestProject\Controllers;
 
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
 
@@ -370,5 +371,30 @@ class BasicResponsesController
     public function recursiveMethodReturnsNull(): mixed
     {
         return $this->recursiveMethodReturnsNull();
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'description' => '[PermissionEnum](#/schemas/PermissionEnum)',
+                            'enum' => [
+                                'read',
+                                'write',
+                            ],
+                            'type' => 'string',
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function enumWithIgnoredCase(): PermissionEnum
+    {
+        return PermissionEnum::None;
     }
 }

@@ -109,6 +109,7 @@ class PhpArray
                 } else {
                     $comments = $arrayItemNode->getComments();
                     $phpDocDescription = null;
+                    $deprecations = [];
                     $exampleValues = null;
                     $typeFromPhpDoc = null;
 
@@ -116,8 +117,13 @@ class PhpArray
                         if ($comment instanceof Comment\Doc) {
                             $phpDoc = new PhpDoc($comment->getText(), $this->scope);
 
+                            if ($phpDoc->getAutodocIgnoreTag()) {
+                                continue 2;
+                            }
+
                             $phpDocDescription = $phpDoc->getText();
                             $exampleValues = $phpDoc->getExampleValues();
+                            $deprecations = array_merge($deprecations, $phpDoc->getDeprecatedTags());
 
                             foreach ($phpDoc->getVarTags() as $var) {
                                 [$varName, $varType] = $var;
@@ -141,6 +147,11 @@ class PhpArray
 
                     $itemType->examples = $exampleValues ?: $itemType->examples ?: null;
                     $itemType->required = true;
+                    $itemType->deprecated = !! $deprecations;
+
+                    foreach ($deprecations as $deprecation) {
+                        $itemType->addDeprecatedDescription($deprecation['description']);
+                    }
 
                     $itemTypes[] = $itemType;
 

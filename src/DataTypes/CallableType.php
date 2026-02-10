@@ -28,6 +28,8 @@ class CallableType extends Type
             'type' => 'string',
             'description' => $this->description,
             'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
     }
 }

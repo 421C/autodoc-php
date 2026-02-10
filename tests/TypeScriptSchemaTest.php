@@ -309,6 +309,7 @@ final class TypeScriptSchemaTest extends TestCase
                         examples: unknown|null
                         required: boolean
                         deprecated: boolean
+                        deprecatedDescription: string|null
                         example: Record<string, unknown>|string|null
                         isEnum: boolean
                         contentType: string|null
@@ -320,6 +321,7 @@ final class TypeScriptSchemaTest extends TestCase
                     examples: unknown|null
                     required: boolean
                     deprecated: boolean
+                    deprecatedDescription: string|null
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
@@ -330,6 +332,7 @@ final class TypeScriptSchemaTest extends TestCase
                     examples: unknown|null
                     required: boolean
                     deprecated: boolean
+                    deprecatedDescription: string|null
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
@@ -340,6 +343,7 @@ final class TypeScriptSchemaTest extends TestCase
                     examples: unknown|null
                     required: boolean
                     deprecated: boolean
+                    deprecatedDescription: string|null
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null
@@ -350,6 +354,7 @@ final class TypeScriptSchemaTest extends TestCase
                     examples: unknown|null
                     required: boolean
                     deprecated: boolean
+                    deprecatedDescription: string|null
                     example: Record<string, unknown>|string|null
                     isEnum: boolean
                     contentType: string|null

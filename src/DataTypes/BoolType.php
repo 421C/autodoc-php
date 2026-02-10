@@ -15,6 +15,8 @@ class BoolType extends Type
         return array_filter([
             'type' => 'boolean',
             'description' => $this->description,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
     }
 }

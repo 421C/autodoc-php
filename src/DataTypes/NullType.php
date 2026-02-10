@@ -11,6 +11,8 @@ class NullType extends Type
         return array_filter([
             'type' => 'null',
             'description' => $this->description,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
     }
 }

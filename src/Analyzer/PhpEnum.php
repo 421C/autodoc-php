@@ -2,10 +2,10 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\Workspace;
-use ReflectionEnum;
 use UnitEnum;
 
 /**
@@ -25,31 +25,22 @@ class PhpEnum
 
     public function resolveType(): Type
     {
-        $enumReflection = new ReflectionEnum($this->phpClass->className);
+        if (isset(self::$cache[$this->phpClass->className])) {
+            return clone self::$cache[$this->phpClass->className];
+        }
 
         $enumConfig = $this->phpClass->scope->config->getEnumConfig($this->phpClass->className);
         $enumPhpDoc = $this->phpClass->getPhpDoc();
 
-        $reflectionType = $enumReflection->getBackingType();
+        $enumCaseNodeVisitor = new EnumCaseNodeVisitor($this->phpClass->scope);
+        $this->phpClass->traverse($enumCaseNodeVisitor);
 
-        if ($reflectionType) {
-            $type = Type::resolveFromReflection($reflectionType);
+        $type = $enumCaseNodeVisitor->backingType === 'int'
+            ? new IntegerType
+            : new StringType;
 
-            if ($enumConfig['show_allowed_values'] ?? true) {
-                /** @var list<float|int|string> */
-                $caseValues = array_column(array_map(fn ($case) => $case->getValue(), $enumReflection->getCases()), 'value');
-
-                $type->setEnumValues($caseValues);
-            }
-
-        } else {
-            $type = new StringType;
-
-            if ($enumConfig['show_allowed_values'] ?? true) {
-                $caseNames = array_column($enumReflection->getCases(), 'name');
-
-                $type->setEnumValues($caseNames);
-            }
+        if ($enumConfig['show_allowed_values'] ?? true) {
+            $type->setEnumValues(array_column($enumCaseNodeVisitor->enumCases, 'value'));
         }
 
         $removeDescriptions = $enumConfig['remove_description'] ?? false;
@@ -85,7 +76,7 @@ class PhpEnum
                         $typeForEnumComponent->addDescription($title, prepend: true);
                     }
 
-                    $typeForEnumComponent->addDescription($this->generateDescriptionFromCases());
+                    $typeForEnumComponent->addDescription($this->generateDescriptionFromCases($enumCaseNodeVisitor));
                     $typeForEnumComponent->setEnumValues([]);
                 }
 
@@ -97,23 +88,15 @@ class PhpEnum
             }
         }
 
+        self::$cache[$this->phpClass->className] = clone $type;
+
         return $type;
     }
 
 
-    private function generateDescriptionFromCases(): string
+    private function generateDescriptionFromCases(EnumCaseNodeVisitor $enumCaseNodeVisitor): string
     {
-        $enumFileName = $this->phpClass->getReflection()->getFileName();
-
-        if (! $enumFileName) {
-            return '';
-        }
-
-        $enumCaseNodeVisitor = new EnumCaseNodeVisitor($this->phpClass->scope);
-
-        $this->phpClass->traverse($enumCaseNodeVisitor);
-
-        if (! $enumCaseNodeVisitor->caseDescriptions) {
+        if (! $enumCaseNodeVisitor->enumCases) {
             return '';
         }
 
@@ -121,13 +104,13 @@ class PhpEnum
 
         $darkMode = ($this->phpClass->scope->config->data['ui']['theme'] ?? 'light') === 'dark';
 
-        foreach ($enumCaseNodeVisitor->caseDescriptions as $caseValue => $caseDescription) {
+        foreach ($enumCaseNodeVisitor->enumCases as $case) {
             $rows[] = '<tr>'
                 . '<td style="padding: 8px; font-family: monospace; color:' . ($darkMode ? '#eee' : '#111') . '">'
-                    . $caseDescription
+                    . ($case['description'] ?? $case['name'])
                 . '</td>'
                 . '<td style="padding: 8px; font-family: monospace; color:' . ($darkMode ? '#ccc' : '#333') . '">'
-                    . $caseValue
+                    . $case['value']
                 . '</td>'
             . '</tr>';
         }
@@ -153,4 +136,9 @@ class PhpEnum
             $text,
         );
     }
+
+    /**
+     * @var array<class-string, Type>
+     */
+    private static array $cache = [];
 }

@@ -68,15 +68,17 @@ class Parameter implements JsonSerializable
     public static function fromType(Type $type, string $name, string $in, Config $config): self
     {
         $description = $type->description;
+        $deprecated = $type->deprecated;
 
         $type->description = null;
+        $type->deprecated = false;
 
         return new Parameter(
             name: $name,
             in: $in,
             description: $description,
             required: $type->required,
-            deprecated: $type->deprecated,
+            deprecated: $deprecated,
             schema: $type->toSchema($config),
             type: $type,
         );

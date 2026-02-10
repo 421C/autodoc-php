@@ -37,6 +37,8 @@ class NumberType extends Type
             'type' => 'number',
             'description' => $this->description,
             'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
 
         if ($this->minimum !== null) {

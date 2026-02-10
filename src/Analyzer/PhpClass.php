@@ -215,6 +215,13 @@ class PhpClass
             if ($propertyPhpDoc) {
                 $propertyType->description = $propertyPhpDoc->getText();
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
+
+                $deprecations = $propertyPhpDoc->getDeprecatedTags();
+                $propertyType->deprecated = !! $deprecations;
+
+                foreach ($deprecations as $deprecation) {
+                    $propertyType->addDeprecatedDescription($deprecation['description']);
+                }
             }
 
             if ($isPublic) {

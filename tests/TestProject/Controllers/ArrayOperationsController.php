@@ -474,6 +474,7 @@ class ArrayOperationsController
                 'content' => [
                     'application/json' => [
                         'schema' => [
+                            'type' => 'object',
                             'properties' => [
                                 'a' => [
                                     'type' => 'integer',
@@ -482,11 +483,6 @@ class ArrayOperationsController
                                     'type' => 'integer',
                                 ],
                             ],
-                            'required' => [
-                                'a',
-                                'b',
-                            ],
-                            'type' => 'object',
                         ],
                     ],
                 ],
@@ -498,7 +494,12 @@ class ArrayOperationsController
     {
         $numbers = rand(0, 1) ? [
             'a' => 1,
+
+            /** @deprecated Unused parameter */
             'b' => 2,
+
+            /** @autodoc-ignore */
+            'c' => 3,
         ] : null;
 
         return $numbers ?? [];

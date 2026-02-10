@@ -46,6 +46,8 @@ class IntegerType extends Type
             'type' => 'integer',
             'description' => $this->description,
             'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
         ]);
 
         if ($this->minimum !== null) {
