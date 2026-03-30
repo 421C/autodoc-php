@@ -721,6 +721,10 @@ class Scope
             return $this->className;
         }
 
+        if ($name === 'parent') {
+            return $this->getCurrentPhpClass()?->getParent()?->className;
+        }
+
         if (str_starts_with($name, '\\')) {
             return PhpClass::removeLeadingBackslash($name);
         }
