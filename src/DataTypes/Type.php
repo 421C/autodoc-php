@@ -319,6 +319,9 @@ abstract class Type
                 }
 
                 return true;
+
+            } else if ($this->shape) {
+                return true;
             }
 
             $thisAsTypePair = (clone $this)->convertShapeToTypePair();

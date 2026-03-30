@@ -56,6 +56,22 @@ final class OpenApiSchemaTest extends TestCase
     }
 
 
+    #[Test]
+    public function deepArrayShapeInference(): void
+    {
+        $config = self::loadConfig();
+
+        $config->data['openapi']['show_values_for_scalar_types'] = false;
+        $config->data['arrays']['deep_shape_inference'] = true;
+
+        $config->data['extensions'] = [
+            NotFoundExceptionExtension::class,
+        ];
+
+        $this->checkOpenApiJsonSchema($config, __FUNCTION__);
+    }
+
+
     private function checkOpenApiJsonSchema(Config $config, string $testMethod): void
     {
         $config->data['openapi_export_dir'] = __DIR__ . '/../../openapi';

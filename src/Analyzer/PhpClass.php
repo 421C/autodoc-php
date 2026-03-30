@@ -27,7 +27,7 @@ use SplFixedArray;
 use Stringable;
 
 /**
- * @template TClass of object
+ * @template-covariant TClass of object
  */
 class PhpClass
 {

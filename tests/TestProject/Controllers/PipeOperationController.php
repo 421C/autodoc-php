@@ -113,8 +113,6 @@ class PipeOperationController
     }
 
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'description' => '',
-        'summary' => '',
         'responses' => [
             200 => [
                 'content' => [

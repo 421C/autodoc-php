@@ -639,6 +639,25 @@ class Scope
      * @param (callable(): TResult) $callback
      * @return TResult
      */
+    public function withDeepShapeInference(callable $callback): mixed
+    {
+        $initialValue = $this->config->data['arrays']['deep_shape_inference'] ?? false;
+
+        $this->config->data['arrays']['deep_shape_inference'] = true;
+
+        $returnValue = $callback();
+
+        $this->config->data['arrays']['deep_shape_inference'] = $initialValue;
+
+        return $returnValue;
+    }
+
+
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
     public function withShapeMerging(callable $callback): mixed
     {
         $initialArrayValue = $this->config->data['arrays']['merge_shapes_in_type_unions'] ?? false;

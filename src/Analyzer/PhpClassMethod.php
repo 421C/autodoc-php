@@ -18,7 +18,7 @@ use ReflectionMethod;
 use Throwable;
 
 /**
- * @template TClass of object
+ * @template-covariant TClass of object
  */
 class PhpClassMethod
 {
@@ -268,12 +268,34 @@ class PhpClassMethod
             }
         }
 
-        $isPhpDocReturnTypePlainArray = $phpDocReturnType instanceof ArrayType
-            && ! $phpDocReturnType->shape
-            && ! $phpDocReturnType->itemType;
-
         if (! $doNotAnalyzeBody && $this->scope->depth <= $this->scope->config->data['max_depth']) {
-            $analyzeReturnType = ! $phpDocReturnType || $isPhpDocReturnTypePlainArray;
+            $analyzeReturnType = true;
+
+            $isPhpDocReturnTypePlainArray = $phpDocReturnType instanceof ArrayType
+                && ! $phpDocReturnType->shape
+                && ! $phpDocReturnType->itemType;
+
+            $analyzeReturnType = ! $phpDocReturnType
+                || $isPhpDocReturnTypePlainArray;
+
+            if (! $analyzeReturnType
+                && ($this->scope->config->data['arrays']['deep_shape_inference'] ?? false)
+            ) {
+                if ($phpDocReturnType instanceof ArrayType
+                    && ! $phpDocReturnType->shape
+                ) {
+                    $phpDocReturnType->itemType = $phpDocReturnType->itemType?->unwrapType($this->scope->config);
+
+                    if ($phpDocReturnType->itemType instanceof ArrayType
+                        && $phpDocReturnType->itemType->shape
+                    ) {
+                        $analyzeReturnType = false;
+
+                    } else {
+                        $analyzeReturnType = true;
+                    }
+                }
+            }
 
             $methodNodeVisitor = new ClassMethodNodeVisitor(
                 methodName: $this->methodName,
