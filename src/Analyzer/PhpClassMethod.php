@@ -164,8 +164,8 @@ class PhpClassMethod
                     $operation->requestBody = new RequestBody(
                         content: [
                             $contentType => new MediaType(
-                                schema: $requestBodyType->toSchema($this->scope->config),
                                 type: $requestBodyType,
+                                config: $this->scope->config,
                             ),
                         ],
                     );
@@ -204,8 +204,8 @@ class PhpClassMethod
                 $operation->responses[$httpStatusCode] = new Response(
                     content: [
                         $contentType => new MediaType(
-                            schema: $responseType->toSchema($this->scope->config),
                             type: $responseType,
+                            config: $this->scope->config,
                         ),
                     ],
                 );
@@ -221,8 +221,8 @@ class PhpClassMethod
             $operation->responses[$httpStatusCode] = new Response(
                 content: [
                     $contentType => new MediaType(
-                        schema: $type->toSchema($this->scope->config),
                         type: $type,
+                        config: $this->scope->config,
                     ),
                 ],
             );

@@ -2,21 +2,18 @@
 
 namespace AutoDoc\OpenApi;
 
+use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use JsonSerializable;
 
 /**
  * https://spec.openapis.org/oas/v3.1.0.html#media-type-object
- *
- * @phpstan-import-type TypeSchema from Type
  */
 class MediaType implements JsonSerializable
 {
     public function __construct(
-        /**
-         * @var ?TypeSchema
-         */
-        public ?array $schema = null,
+        public ?Type $type = null,
+        public ?Config $config = null,
 
         /**
          * @var ?array<string, EncodingObject>
@@ -28,13 +25,12 @@ class MediaType implements JsonSerializable
          */
         public ?array $examples = null,
         public mixed $example = null,
-        public ?Type $type = null,
     ) {}
 
     public function jsonSerialize(): mixed
     {
         return array_filter([
-            'schema' => $this->schema,
+            'schema' => $this->type?->toSchema($this->config),
             'encoding' => $this->encoding,
             'examples' => $this->examples,
             'example' => $this->example,

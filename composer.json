@@ -3,7 +3,7 @@
     "description": "Automatic OpenApi documentation and TypeScript generation tool for PHP projects",
     "license": "MIT",
     "require": {
-        "php": "^8.1",
+        "php": "^8.5",
         "nikic/php-parser": "^5.2",
         "phpstan/phpdoc-parser": "^2.1"
     },
@@ -26,7 +26,11 @@
             "AutoDoc\\Tests\\": "tests/"
         }
     },
-    "bin": ["bin/openapi-export", "bin/ts-sync", "bin/autodoc-debug"],
+    "bin": [
+        "bin/openapi-export",
+        "bin/ts-sync",
+        "bin/autodoc-debug"
+    ],
     "scripts": {
         "stan": [
             "./vendor/bin/phpstan analyse --memory-limit=2G"

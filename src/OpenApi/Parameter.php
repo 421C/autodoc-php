@@ -24,12 +24,8 @@ class Parameter implements JsonSerializable
         public ?string $style = null,
         public ?bool $allowEmptyValue = null,
         public ?bool $allowReserved = null,
-
-        /**
-         * @var ?array<string, mixed>
-         */
-        public ?array $schema = null,
         public ?Type $type = null,
+        public ?Config $config = null,
 
         /**
          * @var ?array<string, MediaType>
@@ -54,7 +50,7 @@ class Parameter implements JsonSerializable
             'style' => $this->style,
             'allowEmptyValue' => $this->allowEmptyValue ?: null,
             'allowReserved' => $this->allowReserved ?: null,
-            'schema' => $this->schema,
+            'schema' => $this->type?->toSchema($this->config),
             'content' => $this->content,
             'examples' => $this->examples,
             'example' => $this->example,
@@ -79,8 +75,8 @@ class Parameter implements JsonSerializable
             description: $description,
             required: $type->required,
             deprecated: $deprecated,
-            schema: $type->toSchema($config),
             type: $type,
+            config: $config,
         );
     }
 }

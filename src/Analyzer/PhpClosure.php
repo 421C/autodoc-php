@@ -115,8 +115,8 @@ class PhpClosure
                     $operation->requestBody = new RequestBody(
                         content: [
                             'application/json' => new MediaType(
-                                schema: $requestBodyType->toSchema($this->scope->config),
                                 type: $requestBodyType,
+                                config: $this->scope->config,
                             ),
                         ],
                     );
@@ -133,8 +133,8 @@ class PhpClosure
                 '200' => new Response(
                     content: [
                         'application/json' => new MediaType(
-                            schema: $responseBodyType->toSchema($this->scope->config),
                             type: $responseBodyType,
+                            config: $this->scope->config,
                         ),
                     ],
                 ),
