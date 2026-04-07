@@ -11,7 +11,8 @@
         "phpstan/phpstan": "^2.1",
         "friendsofphp/php-cs-fixer": "^3.64",
         "phpunit/phpunit": "^11.4",
-        "symfony/var-dumper": "^7.1"
+        "symfony/var-dumper": "^7.1",
+        "rector/rector": "^2.4"
     },
     "conflict": {
         "phpstan/phpstan": "<2.0"
@@ -32,6 +33,10 @@
         "bin/autodoc-debug"
     ],
     "scripts": {
+        "test": [
+            "Composer\\Config::disableProcessTimeout",
+            "./vendor/bin/phpunit tests"
+        ],
         "stan": [
             "./vendor/bin/phpstan analyse --memory-limit=2G"
         ],
@@ -41,9 +46,16 @@
         "cs-fix": [
             "./vendor/bin/php-cs-fixer fix -vvv --show-progress=dots"
         ],
-        "test": [
-            "Composer\\Config::disableProcessTimeout",
-            "./vendor/bin/phpunit tests"
+        "rector-check": [
+            "./vendor/bin/rector --dry-run"
+        ],
+        "rector": [
+            "./vendor/bin/rector"
+        ],
+        "fix": [
+            "@rector",
+            "@cs-fix",
+            "@stan"
         ]
     }
 }

@@ -2,19 +2,18 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\Scope;
+use AutoDoc\Analyzer\MethodCallContext;
 use AutoDoc\DataTypes\Type;
-use PhpParser\Node\Expr\MethodCall;
 
 
 abstract class MethodCallExtension
 {
-    public function getReturnType(MethodCall $methodCall, Scope $scope): ?Type
+    public function getReturnType(MethodCallContext $context): ?Type
     {
         return null;
     }
 
-    public function getRequestType(MethodCall $methodCall, Scope $scope): ?Type
+    public function getRequestType(MethodCallContext $context): ?Type
     {
         return null;
     }

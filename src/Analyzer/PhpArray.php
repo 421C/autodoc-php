@@ -147,7 +147,7 @@ class PhpArray
 
                     $itemType->examples = $exampleValues ?: $itemType->examples ?: null;
                     $itemType->required = true;
-                    $itemType->deprecated = !! $deprecations;
+                    $itemType->deprecated = (bool) $deprecations;
 
                     foreach ($deprecations as $deprecation) {
                         $itemType->addDeprecatedDescription($deprecation['description']);
@@ -209,10 +209,10 @@ class PhpArray
             }
 
             if ($hasAtLeastOneUnknownKey && !$resolvePartialArrayShapes) {
-                $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
+                $arrayType->itemType = new UnionType($itemTypes)->unwrapType($this->scope->config);
 
                 if ($keyTypes) {
-                    $arrayType->keyType = (new UnionType($keyTypes))->unwrapType($this->scope->config);
+                    $arrayType->keyType = new UnionType($keyTypes)->unwrapType($this->scope->config);
                 }
 
                 $arrayType->shape = [];
@@ -258,10 +258,10 @@ class PhpArray
             }
 
             if (! $arrayType->shape && ! $resolvePartialArrayShapes) {
-                $arrayType->itemType = (new UnionType($itemTypes))->unwrapType($this->scope->config);
+                $arrayType->itemType = new UnionType($itemTypes)->unwrapType($this->scope->config);
 
                 if ($keyTypes) {
-                    $arrayType->keyType = (new UnionType($keyTypes))->unwrapType($this->scope->config);
+                    $arrayType->keyType = new UnionType($keyTypes)->unwrapType($this->scope->config);
                 }
             }
 

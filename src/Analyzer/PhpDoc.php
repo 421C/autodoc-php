@@ -57,7 +57,7 @@ class PhpDoc
         $this->node = $this->parse();
     }
 
-    private PhpDocNode $node;
+    private readonly PhpDocNode $node;
 
     /**
      * @var array<string, ?Type>
@@ -559,7 +559,7 @@ class PhpDoc
 
         foreach ($tagTypes as $tagName => $paramLocation) {
             foreach ($this->node->getTagsByName($tagName) as $tag) {
-                $param = (new PhpDocRequestParamTag($tag, $this))->resolve();
+                $param = new PhpDocRequestParamTag($tag, $this)->resolve();
 
                 if (! $param) {
                     continue;

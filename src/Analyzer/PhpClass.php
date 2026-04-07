@@ -73,7 +73,7 @@ class PhpClass
         $objectType = new ObjectType(className: $this->className);
 
         if ($useExtensions) {
-            $returnType = $this->scope->getReturnTypeFromExtensions($this);
+            $returnType = $this->scope->getReturnTypeFromClassExtensions($this);
 
             if ($returnType !== null) {
                 $returnType = $returnType->unwrapType($this->scope->config);
@@ -92,7 +92,7 @@ class PhpClass
             $objectType->typeToDisplay = $this->typeToDisplay->unwrapType($this->scope->config);
 
         } else if ($this->getReflection()->isEnum()) {
-            $objectType->typeToDisplay = (new PhpEnum($this))->resolveType();
+            $objectType->typeToDisplay = new PhpEnum($this)->resolveType();
 
         } else if (is_a($this->className, DateTimeInterface::class, true)) {
             $objectType->typeToDisplay = new StringType(format: 'date-time');
@@ -138,8 +138,6 @@ class PhpClass
         }
 
         $objectType->properties = $this->getProperties();
-
-        $objectType->constructorArgs = $this->scope->constructorArgs;
 
         return $objectType;
     }
@@ -217,7 +215,7 @@ class PhpClass
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
 
                 $deprecations = $propertyPhpDoc->getDeprecatedTags();
-                $propertyType->deprecated = !! $deprecations;
+                $propertyType->deprecated = (bool) $deprecations;
 
                 foreach ($deprecations as $deprecation) {
                     $propertyType->addDeprecatedDescription($deprecation['description']);
@@ -313,7 +311,7 @@ class PhpClass
     public function resolveConstantType(string $name): Type
     {
         if ($this->getReflection()->isEnum()) {
-            return (new PhpEnum($this))->resolveType();
+            return new PhpEnum($this)->resolveType();
         }
 
         $classConstants = $this->getReflection()->getConstants();
@@ -391,7 +389,7 @@ class PhpClass
 
     public function getPhpDoc(): ?PhpDoc
     {
-        if (isset($this->docComment)) {
+        if ($this->docComment !== null) {
             return $this->docComment;
         }
 
@@ -417,18 +415,15 @@ class PhpClass
     }
 
 
-    /**
-     * @param PhpFunctionArgument[] $args
-     *
-     * @return PhpClassMethod<TClass>
-     */
-    public function getMethod(string $name, array $args = []): PhpClassMethod
+    public function getMethod(string $name, ?ArgumentList $args = null): PhpCallable
     {
-        return new PhpClassMethod(
+        $childScope = $this->scope->createChildScope(className: $this->className, methodName: $name);
+
+        return new PhpCallable(
+            scope: $childScope,
+            args: $args ?? new ArgumentList($childScope),
             phpClass: $this,
             methodName: $name,
-            scope: $this->scope->createChildScope(className: $this->className, methodName: $name),
-            args: $args,
         );
     }
 
@@ -493,7 +488,7 @@ class PhpClass
 
     public function getNameResolver(): ?NameResolver
     {
-        if (! isset($this->nameResolver)) {
+        if ($this->nameResolver === null) {
             $nameResolver = new NameResolver;
 
             $traversed = $this->traverse($nameResolver);
@@ -517,11 +512,7 @@ class PhpClass
     {
         $className = PhpClass::addLeadingBackslash($this->className);
 
-        if (class_exists($className) || interface_exists($className)) {
-            return true;
-        }
-
-        return false;
+        return class_exists($className) || interface_exists($className);
     }
 
 

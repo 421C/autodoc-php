@@ -56,14 +56,7 @@ class ArrayType extends Type
         $this->itemType = $this->itemType?->unwrapType($config);
 
         $keyTypes = $this->keyType instanceof UnionType ? $this->keyType->types : array_filter([$this->keyType]);
-        $hasStringKeys = false;
-
-        foreach ($keyTypes as $keyType) {
-            if (! ($keyType instanceof IntegerType || $keyType instanceof NumberType)) {
-                $hasStringKeys = true;
-                break;
-            }
-        }
+        $hasStringKeys = array_any($keyTypes, fn ($keyType) => !$keyType instanceof IntegerType && !$keyType instanceof NumberType);
 
         if ($hasStringKeys) {
             return array_filter([
@@ -111,8 +104,8 @@ class ArrayType extends Type
                 $itemTypes[] = $value->unwrapType($config);
             }
 
-            $this->keyType = (new UnionType($keyTypes))->unwrapType($config)->unwrapType($config);
-            $this->itemType = (new UnionType($itemTypes))->unwrapType($config)->unwrapType($config);
+            $this->keyType = new UnionType($keyTypes)->unwrapType($config)->unwrapType($config);
+            $this->itemType = new UnionType($itemTypes)->unwrapType($config)->unwrapType($config);
             $this->shape = [];
         }
 
@@ -150,7 +143,7 @@ class ArrayType extends Type
     {
         if ($key === null || is_int($key)) {
             $this->convertShapeToTypePair($config);
-            $this->keyType = (new UnionType(array_values(array_filter([$this->keyType, new IntegerType]))))->unwrapType($config);
+            $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new IntegerType])))->unwrapType($config);
 
             if ($this->itemType === null) {
                 $this->itemType = $itemType;
@@ -160,8 +153,8 @@ class ArrayType extends Type
             $this->shape[$key] = $itemType;
 
         } else {
-            $this->keyType = (new UnionType(array_values(array_filter([$this->keyType, new StringType]))))->unwrapType($config);
-            $this->itemType = (new UnionType([$this->itemType, $itemType]))->unwrapType($config);
+            $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new StringType])))->unwrapType($config);
+            $this->itemType = new UnionType([$this->itemType, $itemType])->unwrapType($config);
         }
 
         return $this;

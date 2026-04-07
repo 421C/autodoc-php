@@ -14,8 +14,8 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagNode;
 class PhpDocRequestParamTag
 {
     public function __construct(
-        private PhpDocTagNode $tag,
-        private PhpDoc $phpDoc,
+        private readonly PhpDocTagNode $tag,
+        private readonly PhpDoc $phpDoc,
     ) {}
 
     /**

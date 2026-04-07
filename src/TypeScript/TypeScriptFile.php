@@ -9,7 +9,7 @@ class TypeScriptFile
 {
     public function __construct(
         public ?string $filePath = null,
-        private ?TypeScriptGenerator $generator = null,
+        private readonly ?TypeScriptGenerator $generator = null,
     ) {
         if ($this->filePath) {
             $this->lines = $this->readLines();
@@ -168,8 +168,9 @@ class TypeScriptFile
         $inString = false;
         $stringChar = '';
         $lineCount = 0;
+        $counter = count($this->lines);
 
-        for ($lineIndex = $startIndex; $lineIndex < count($this->lines); $lineIndex++) {
+        for ($lineIndex = $startIndex; $lineIndex < $counter; $lineIndex++) {
             $line = $this->lines[$lineIndex];
             $lineCount++;
 
@@ -273,8 +274,9 @@ class TypeScriptFile
         }
 
         $commentLines = [];
+        $counter = count($this->lines);
 
-        for ($i = $tag->lineIndex + 1; $i < count($this->lines); $i++) {
+        for ($i = $tag->lineIndex + 1; $i < $counter; $i++) {
             $currentLine = $this->lines[$i];
 
             $commentLines[] = $currentLine;

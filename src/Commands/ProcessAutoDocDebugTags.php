@@ -2,7 +2,8 @@
 
 namespace AutoDoc\Commands;
 
-use AutoDoc\Analyzer\ClassMethodNodeVisitor;
+use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\FunctionNodeVisitor;
 use AutoDoc\Analyzer\NameResolver;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
@@ -163,10 +164,11 @@ class ProcessAutoDocDebugTags
         }
 
         if ($scope->methodName) {
-            $methodNodeVisitor = new ClassMethodNodeVisitor(
-                methodName: $scope->methodName,
+            $methodNodeVisitor = new FunctionNodeVisitor(
                 scope: $scope,
                 analyzeReturnValue: false,
+                args: new ArgumentList($scope),
+                methodName: $scope->methodName,
             );
 
             $traverser = new NodeTraverser;
@@ -206,7 +208,7 @@ class ProcessAutoDocDebugTags
         $classMethodNodeVisitor = new class ($line) extends NodeVisitorAbstract
         {
             public function __construct(
-                private int $targetLine,
+                private readonly int $targetLine,
             ) {}
 
             public ?string $className = null;

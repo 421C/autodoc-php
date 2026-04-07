@@ -17,7 +17,7 @@ class PhpEnum
         /**
          * @var PhpClass<TEnum>
          */
-        private PhpClass $phpClass,
+        private readonly PhpClass $phpClass,
         public ?string $summary = null,
         public ?string $description = null,
     ) {}

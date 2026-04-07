@@ -162,7 +162,7 @@ class UnionType extends Type
      */
     private function deepUnique(array $array): array
     {
-        $serialized = array_map('serialize', $array);
+        $serialized = array_map(serialize(...), $array);
         $unique = array_unique($serialized);
 
         return array_intersect_key($array, $unique);

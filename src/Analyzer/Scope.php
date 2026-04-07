@@ -24,6 +24,7 @@ use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
+use ReflectionFunction;
 use Throwable;
 use WeakMap;
 
@@ -48,19 +49,17 @@ class Scope
         public array $constructorTemplateTypes = [],
 
         /**
-         * @var array<PhpFunctionArgument>
-         */
-        public array $constructorArgs = [],
-
-        /**
          * @var array<string, PhpVariable>
          */
         public array $variables = [],
     ) {
+        $this->constructorArgs = new ArgumentList($this);
         $this->objectsHandlingRequestBody = new WeakMap;
         $this->resolvedVariables = new WeakMap;
         $this->nodesBeingResolved = new WeakMap;
     }
+
+    public ArgumentList $constructorArgs;
 
 
     public ?Node $callerNode = null;
@@ -146,24 +145,21 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
-                if ($node instanceof Node\Expr\MethodCall) {
-                    $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new MethodCallContext(node: $node, scope: $this);
 
-                    if ($returnType !== null) {
-                        return $returnType->unwrapType($this->config);
-                    }
+                $returnType = $this->getReturnTypeFromMethodCallExtensions($context);
+
+                if ($returnType !== null) {
+                    return $returnType->unwrapType($this->config);
                 }
 
-                $methodName = (string) $this->getRawValueFromNode($node->name);
-                $varType = $this->resolveType($node->var);
+                $varType = $context->getVarType();
 
-                $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($methodName, $node) {
+                $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($context) {
                     if (isset($varType->className)) {
-                        $className = $varType->className;
-
-                        $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
-                            name: $methodName,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
+                        $phpClassMethod = $this->getPhpClassInDeeperScope($varType->className)->getMethod(
+                            name: $context->methodName,
+                            args: $context->argTypes,
                         );
 
                         return $phpClassMethod->getReturnType()->unwrapType($this->config);
@@ -191,34 +187,34 @@ class Scope
                         }
                     }
 
-                    return (new UnionType($returnTypes))->unwrapType($this->config);
+                    return new UnionType($returnTypes)->unwrapType($this->config);
                 }
 
                 return new UnknownType;
             }
 
             if ($node instanceof Node\Expr\FuncCall) {
-                $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new FuncCallContext(node: $node, scope: $this);
+
+                $returnType = $this->getReturnTypeFromFuncCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
                 }
 
-                if ($node->name instanceof Node\Name) {
+                if ($context->functionName !== null) {
                     try {
-                        $phpFunction = new PhpFunction(
-                            nameOrReflection: $node->name->name,
+                        $phpCallable = new PhpCallable(
                             scope: $this,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
+                            reflection: new ReflectionFunction($context->functionName),
+                            args: $context->argTypes,
                         );
 
-                        $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
-
-                        return $phpFunction->getReturnType(phpDocType: $phpDocReturnType)->unwrapType($this->config);
+                        return $phpCallable->getReturnType()->unwrapType($this->config);
 
                     } catch (Throwable $exception) {
                         if ($this->isDebugModeEnabled()) {
-                            throw new AutoDocException('Error resolving function "' . $node->name->name . '": ', $exception);
+                            throw new AutoDocException('Error resolving function "' . $context->functionName . '": ', $exception);
                         }
                     }
 
@@ -226,36 +222,34 @@ class Scope
                     $functionNodeType = $this->resolveType($node->name);
 
                     if ($functionNodeType instanceof CallableType) {
-                        return $functionNodeType->getReturnType(PhpFunctionArgument::list($node->args, scope: $this), $node);
+                        return $functionNodeType->getReturnType($context->argTypes, $node);
                     }
                 }
             }
 
             if ($node instanceof Node\Expr\StaticCall) {
-                $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new StaticCallContext(node: $node, scope: $this);
+
+                $returnType = $this->getReturnTypeFromStaticCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
                 }
 
-                if ($node->class instanceof Node\Name && $node->name instanceof Node\Identifier) {
-                    $className = $this->getResolvedClassName($node->class);
+                if ($context->className && $node->name instanceof Node\Identifier) {
+                    $phpClassMethod = $this->getPhpClassInDeeperScope($context->className)->getMethod(
+                        name: $context->methodName,
+                        args: $context->argTypes,
+                    );
 
-                    if ($className) {
-                        $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
-                            name: $node->name->name,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
-                        );
-
-                        return $phpClassMethod->getReturnType()->unwrapType($this->config);
-                    }
+                    return $phpClassMethod->getReturnType()->unwrapType($this->config);
                 }
 
                 return new UnknownType;
             }
 
             if ($node instanceof Node\Expr\Array_) {
-                return (new PhpArray(scope: $this, node: $node))->resolveType();
+                return new PhpArray(scope: $this, node: $node)->resolveType();
             }
 
             if ($node instanceof Node\ArrayItem || $node instanceof Node\Arg) {
@@ -333,7 +327,7 @@ class Scope
                         }
                     }
 
-                    return (new UnionType($types))->unwrapType($this->config);
+                    return new UnionType($types)->unwrapType($this->config);
                 }
 
                 return new UnknownType;
@@ -376,7 +370,7 @@ class Scope
                         $types[] = $getArrayItemType($type);
                     }
 
-                    return (new UnionType($types))->unwrapType($this->config);
+                    return new UnionType($types)->unwrapType($this->config);
                 }
 
                 return $getArrayItemType($varType);
@@ -469,16 +463,13 @@ class Scope
                 $phpClass = $this->getPhpClassInDeeperScope($className);
 
                 $phpClass->isFinalResponse = $isFinalResponse;
-                $phpClass->scope->constructorArgs = PhpFunctionArgument::list($node->args, scope: $this);
+                $phpClass->scope->constructorArgs = ArgumentList::fromArgNodes($node->args, $this);
 
                 $templateTypes = $phpClass->getPhpDoc()?->getTemplateTypes();
 
                 if ($templateTypes) {
-                    $constructor = $phpClass->getMethod('__construct', $phpClass->scope->constructorArgs)->getPhpFunction();
-
-                    if ($constructor) {
-                        $phpClass->scope->constructorTemplateTypes = $constructor->fillTemplateTypesFromParameters();
-                    }
+                    $constructor = $phpClass->getMethod('__construct', $phpClass->scope->constructorArgs);
+                    $phpClass->scope->constructorTemplateTypes = $constructor->fillTemplateTypesFromParameters();
                 }
 
                 return $phpClass->resolveType();
@@ -505,7 +496,7 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Cast\Object_) {
-                if ($node->expr instanceof Node\Expr\Array_) {
+                if ($node->expr instanceof Node\Expr\Array_ && $node->expr->items) {
                     return new ObjectType(typeToDisplay: new UnresolvedParserNodeType($node->expr, $this));
                 }
 
@@ -545,16 +536,16 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\BinaryOp\Pipe) {
-                return (new PhpPipeOperator($node, $this))->resolveType();
+                return new PhpPipeOperator($node, $this)->resolveType();
             }
 
             if ($node instanceof Node\Expr\ArrowFunction
                 || $node instanceof Node\Expr\Closure
             ) {
                 return new CallableType(
-                    anonymousFunction: new PhpAnonymousFunction(
-                        node: $node,
+                    phpCallable: new PhpCallable(
                         scope: $this,
+                        node: $node,
                     ),
                 );
             }
@@ -821,25 +812,50 @@ class Scope
     }
 
 
-    public function handleThrowExtensions(Node\Expr $expr): ?Type
+    public function handleExpectedRequestTypeFromExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
     {
-        return (new ExtensionHandler($this))->handleThrowExtensions($expr);
+        $handler = new ExtensionHandler($this);
+
+        if ($context instanceof MethodCallContext) {
+            $handler->handleMethodCallExtensions($context, getReturnType: false);
+
+        } else if ($context instanceof FuncCallContext) {
+            $handler->handleFuncCallExtensions($context, getReturnType: false);
+
+        } else {
+            $handler->handleStaticCallExtensions($context, getReturnType: false);
+        }
+    }
+
+    public function getReturnTypeFromMethodCallExtensions(MethodCallContext $context): ?Type
+    {
+        return new ExtensionHandler($this)->handleMethodCallExtensions($context);
+    }
+
+    public function getReturnTypeFromFuncCallExtensions(FuncCallContext $context): ?Type
+    {
+        return new ExtensionHandler($this)->handleFuncCallExtensions($context);
+    }
+
+    public function getReturnTypeFromStaticCallExtensions(StaticCallContext $context): ?Type
+    {
+        return new ExtensionHandler($this)->handleStaticCallExtensions($context);
     }
 
     /**
-     * @param Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass<object> $classOrExpr
+     * @param PhpClass<object> $phpClass
      */
-    public function handleExpectedRequestTypeFromExtensions(Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass $classOrExpr): void
+    public function getReturnTypeFromClassExtensions(PhpClass $phpClass): ?Type
     {
-        (new ExtensionHandler($this))->handleTypeExtensions($classOrExpr, getReturnType: false);
+        return new ExtensionHandler($this)->handleClassExtensions($phpClass);
     }
 
     /**
-     * @param Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass<object> $classOrExpr
+     * @param PhpClass<object> $phpClass
      */
-    public function getReturnTypeFromExtensions(Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass $classOrExpr): ?Type
+    public function handleExpectedRequestTypeFromClassExtensions(PhpClass $phpClass): void
     {
-        return (new ExtensionHandler($this))->handleTypeExtensions($classOrExpr);
+        new ExtensionHandler($this)->handleClassExtensions($phpClass, getReturnType: false);
     }
 
     /**
@@ -847,7 +863,12 @@ class Scope
      */
     public function getPropertyTypeFromExtensions(PhpClass $phpClass, string $propertyName): ?Type
     {
-        return (new ExtensionHandler($this))->handlePropertyTypeExtensions($phpClass, $propertyName);
+        return new ExtensionHandler($this)->handlePropertyTypeExtensions($phpClass, $propertyName);
+    }
+
+    public function handleThrowExtensions(Node\Expr $expr): ?Type
+    {
+        return new ExtensionHandler($this)->handleThrowExtensions(new ThrowContext($expr, $this));
     }
 
 

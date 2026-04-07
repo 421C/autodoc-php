@@ -22,7 +22,7 @@ class TypeScriptGenerator
         $this->typeConverter = new TypeConverter;
     }
 
-    private TypeConverter $typeConverter;
+    private readonly TypeConverter $typeConverter;
 
     /**
      * @var array<string, string[]>
@@ -40,7 +40,7 @@ class TypeScriptGenerator
 
         if (! preg_match('/^(GET|HEAD|POST|PUT|DELETE|PATCH|CONNECT|OPTIONS|TRACE)\s+(.*)/i', $tag->value)) {
             $phpDoc = new PhpDoc(
-                docComment: '/** ' . ' */',
+                docComment: '/**  */',
                 scope: $tag->scope,
             );
 
@@ -133,12 +133,7 @@ class TypeScriptGenerator
             $type = $type->typeToDisplay->unwrapType($tag->scope->config);
         }
 
-        if ($this->isObjectOrArrayShape($type)) {
-            $structureType = $tag->getExistingStructureType() ?? 'type';
-
-        } else {
-            $structureType = 'type';
-        }
+        $structureType = $this->isObjectOrArrayShape($type) ? $tag->getExistingStructureType() ?? 'type' : 'type';
 
         $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
         $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Request');
@@ -200,12 +195,7 @@ class TypeScriptGenerator
             $type = $type->typeToDisplay->unwrapType($tag->scope->config);
         }
 
-        if ($this->isObjectOrArrayShape($type)) {
-            $structureType = $tag->getExistingStructureType() ?? 'type';
-
-        } else {
-            $structureType = 'type';
-        }
+        $structureType = $this->isObjectOrArrayShape($type) ? $tag->getExistingStructureType() ?? 'type' : 'type';
 
         $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
         $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Response');
@@ -252,11 +242,8 @@ class TypeScriptGenerator
             if ($type instanceof ObjectType && $type->className) {
                 $name = PhpClass::basename($type->className);
 
-            } else if (preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $tag->value)) {
-                $name = $tag->value;
-
             } else {
-                $name = 'UnnamedType';
+                $name = preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $tag->value) ? $tag->value : 'UnnamedType';
             }
         }
 
@@ -283,12 +270,7 @@ class TypeScriptGenerator
                     continue;
                 }
 
-                if ($enumCase instanceof ReflectionEnumBackedCase) {
-                    $value = $enumCase->getBackingValue();
-
-                } else {
-                    $value = $enumCase->name;
-                }
+                $value = $enumCase instanceof ReflectionEnumBackedCase ? $enumCase->getBackingValue() : $enumCase->name;
 
                 if (is_string($value)) {
                     $value = $this->toTsString($value, $tag->getConfig('string_quote'));
@@ -323,7 +305,7 @@ class TypeScriptGenerator
             if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
                 $phpClass = new PhpClass($type->className, $tag->scope);
 
-                $type = (new ExtensionHandler($tag->scope))->handleTypeScriptExportExtensions($phpClass, $type);
+                $type = new ExtensionHandler($tag->scope)->handleTypeScriptExportExtensions($phpClass, $type);
             }
 
             if ($type instanceof ObjectType && $type->typeToDisplay) {

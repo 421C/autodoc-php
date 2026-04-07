@@ -12,7 +12,7 @@ use PhpParser\NodeVisitorAbstract;
 class EnumCaseNodeVisitor extends NodeVisitorAbstract
 {
     public function __construct(
-        private Scope $scope,
+        private readonly Scope $scope,
     ) {}
 
     /**

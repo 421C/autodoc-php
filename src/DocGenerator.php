@@ -51,7 +51,7 @@ class DocGenerator
     {
         $scope = new Scope($config);
 
-        foreach ($config->getSchemasConfig() as $schemaClass => $schemaConfig) {
+        foreach (array_keys($config->getSchemasConfig()) as $schemaClass) {
             try {
                 /**
                  * When an enum is resolved, it is automatically added to `Workspace::$schemaComponents`.

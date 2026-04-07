@@ -11,8 +11,8 @@ use PhpParser\Node\Expr\BinaryOp\Pipe;
 class PhpPipeOperator
 {
     public function __construct(
-        private Pipe $pipeNode,
-        private Scope $scope,
+        private readonly Pipe $pipeNode,
+        private readonly Scope $scope,
     ) {}
 
     public function resolveType(): Type
@@ -49,9 +49,9 @@ class PhpPipeOperator
 
         if ($rightType instanceof CallableType) {
             return $rightType->getReturnType(
-                args: [
-                    new PhpFunctionArgument($this->scope->resolveType($this->pipeNode->left), $this->scope),
-                ],
+                args: ArgumentList::fromTypes([
+                    $this->scope->resolveType($this->pipeNode->left),
+                ], $this->scope),
                 callerNode: $this->pipeNode->right,
             );
         }

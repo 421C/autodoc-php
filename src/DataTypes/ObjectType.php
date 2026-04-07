@@ -2,7 +2,6 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpFunctionArgument;
 use AutoDoc\Config;
 
 class ObjectType extends Type
@@ -19,12 +18,6 @@ class ObjectType extends Type
         public ?string $className = null,
         public ?string $description = null,
         public ?Type $typeToDisplay = null,
-
-        /**
-         * @var array<PhpFunctionArgument>
-         */
-        public array $constructorArgs = [],
-
         /**
          * Properties that do not appear in the generated documentation
          * unless specifically accessed or referenced.

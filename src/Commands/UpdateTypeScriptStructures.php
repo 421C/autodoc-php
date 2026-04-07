@@ -19,7 +19,7 @@ use Throwable;
 class UpdateTypeScriptStructures
 {
     public function __construct(
-        private Config $config,
+        private readonly Config $config,
     ) {}
 
     /**
@@ -64,7 +64,7 @@ class UpdateTypeScriptStructures
     private function exportRequestsAndResponses(): iterable
     {
         foreach ($this->config->data['typescript']['export_http_requests_and_responses'] ?? [] as $filePath => $options) {
-            yield (new RoutesExporter($this->config, $filePath))->export();
+            yield new RoutesExporter($this->config, $filePath)->export();
         }
     }
 

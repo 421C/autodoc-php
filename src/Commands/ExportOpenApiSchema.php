@@ -53,12 +53,7 @@ class ExportOpenApiSchema
                         echo 'Read ' . $this->console['white'] . $route->uri . $this->console['reset'];
                     },
                     'end' => function (Route $route, float $seconds) {
-                        if ($seconds < 1) {
-                            $elapsed = number_format($seconds * 1000, 2) . ' ms';
-
-                        } else {
-                            $elapsed = number_format($seconds, 2) . ' s';
-                        }
+                        $elapsed = $seconds < 1 ? number_format($seconds * 1000, 2) . ' ms' : number_format($seconds, 2) . ' s';
 
                         echo $this->console['muted'] . ' (' . $elapsed . ')' . $this->console['reset'] . PHP_EOL;
                     },

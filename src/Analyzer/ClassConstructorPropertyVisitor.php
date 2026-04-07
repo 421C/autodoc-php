@@ -14,7 +14,7 @@ use PhpParser\NodeVisitorAbstract;
 class ClassConstructorPropertyVisitor extends NodeVisitorAbstract
 {
     public function __construct(
-        private Scope $scope,
+        private readonly Scope $scope,
     ) {}
 
     /**

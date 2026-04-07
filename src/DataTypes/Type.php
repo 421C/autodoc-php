@@ -226,23 +226,11 @@ abstract class Type
         }
 
         if ($superType instanceof UnionType) {
-            foreach ($superType->types as $type) {
-                if ($this->isSubTypeOf($type)) {
-                    return true;
-                }
-            }
-
-            return false;
+            return array_any($superType->types, fn ($type) => $this->isSubTypeOf($type));
         }
 
         if ($superType instanceof IntersectionType) {
-            foreach ($superType->types as $type) {
-                if (! $this->isSubTypeOf($type)) {
-                    return false;
-                }
-            }
-
-            return true;
+            return array_all($superType->types, fn ($type) => $this->isSubTypeOf($type));
         }
 
         if ($superType instanceof ClassStringType && $this instanceof ClassStringType) {
@@ -266,13 +254,7 @@ abstract class Type
                 return false;
             }
 
-            foreach ($subValues as $value) {
-                if (! in_array($value, $superValues, true)) {
-                    return false;
-                }
-            }
-
-            return true;
+            return array_all($subValues, fn ($value) => in_array($value, $superValues, true));
         }
 
         if ($superType instanceof BoolType && $this instanceof BoolType) {
@@ -404,7 +386,7 @@ abstract class Type
         if ($this instanceof UnionType) {
             $types = array_filter($this->types, fn (Type $type) => ! $type instanceof NullType);
 
-            return (new UnionType($types))->unwrapType($config);
+            return new UnionType($types)->unwrapType($config);
 
         } else if ($this instanceof NullType) {
             return new UnknownType;
@@ -492,7 +474,7 @@ abstract class Type
             }
 
             if ($reflectionType->allowsNull() && !($type instanceof NullType)) {
-                $type = new UnionType([$type, new NullType]);
+                return new UnionType([$type, new NullType]);
             }
 
             return $type;

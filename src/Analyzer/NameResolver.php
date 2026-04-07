@@ -26,14 +26,11 @@ class NameResolver extends NodeVisitorAbstract
 
         if (isset($this->aliases[$firstPart])) {
             /** @var class-string */
-            $className = trim($this->aliases[$firstPart] . '\\' . $remainingParts, '\\');
-
-        } else {
-            /** @var class-string */
-            $className = $this->getNamespacePrefix() . $name;
+            return trim($this->aliases[$firstPart] . '\\' . $remainingParts, '\\');
         }
 
-        return $className;
+        /** @var class-string */
+        return $this->getNamespacePrefix() . $name;
     }
 
     public function getNamespacePrefix(): string

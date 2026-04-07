@@ -2,23 +2,17 @@
 
 namespace AutoDoc\Tests\TestProject\Extensions;
 
-use AutoDoc\Analyzer\Scope;
-use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
+use AutoDoc\Analyzer\ThrowContext;
 use AutoDoc\Extensions\ThrowExtension;
 use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
-use PhpParser\Node;
 
 class NotFoundExceptionExtension extends ThrowExtension
 {
-    public function getReturnType(Node\Expr $expr, Scope $scope): ?Type
+    public function getReturnType(ThrowContext $context): ?Type
     {
-        $thrownType = $scope->resolveType($expr);
-
-        if ($thrownType instanceof ObjectType
-            && $thrownType->className === NotFoundException::class
-        ) {
-            return $scope->getPhpClass($thrownType->className)->getMethod('render')->getReturnType();
+        if ($context->getThrownClassName() === NotFoundException::class) {
+            return $context->scope->getPhpClass(NotFoundException::class)->getMethod('render')->getReturnType();
         }
 
         return null;

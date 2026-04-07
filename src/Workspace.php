@@ -9,7 +9,7 @@ use Exception;
 class Workspace
 {
     public function __construct(
-        private Config $config,
+        private readonly Config $config,
         public int|string|null $key = null,
     ) {}
 

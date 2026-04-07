@@ -108,7 +108,7 @@ class UnresolvedVariableType extends UnresolvedType
                     break;
                 }
 
-                $resolvedType = (new UnionType(array_values(array_filter([$resolvedType, $mutation->changes['type']]))))->unwrapType($this->scope->config);
+                $resolvedType = new UnionType(array_values(array_filter([$resolvedType, $mutation->changes['type']])))->unwrapType($this->scope->config);
             }
 
             if (! empty($mutation->changes['attributes'])) {
@@ -146,21 +146,22 @@ class UnresolvedVariableType extends UnresolvedType
 
         $potentialTypes = $baseType instanceof UnionType ? $baseType->types : array_filter([$baseType]);
         $typesWithAddedAttribute = [];
+        $counter = count($potentialTypes);
 
-        for ($i = 0; $i < count($potentialTypes); $i++) {
+        for ($i = 0; $i < $counter; $i++) {
             if ($potentialTypes[$i] instanceof ObjectType) {
                 $potentialTypes[$i] = clone $potentialTypes[$i];
                 $keyString = (string) $key;
 
                 if (isset($potentialTypes[$i]->properties[$keyString])) {
-                    if ($isCertain && ! ($attributeType instanceof ArrayType || $attributeType instanceof ObjectType)) {
+                    if ($isCertain && (!$attributeType instanceof ArrayType && !$attributeType instanceof ObjectType)) {
                         $potentialTypes[$i]->properties[$keyString] = $attributeType;
 
                     } else {
-                        $potentialTypes[$i]->properties[$keyString] = (new UnionType([
+                        $potentialTypes[$i]->properties[$keyString] = new UnionType([
                             $potentialTypes[$i]->properties[$keyString],
                             $attributeType,
-                        ]))->unwrapType($this->scope->config)->unwrapType($this->scope->config);
+                        ])->unwrapType($this->scope->config)->unwrapType($this->scope->config);
                     }
 
                 } else {
@@ -173,14 +174,14 @@ class UnresolvedVariableType extends UnresolvedType
                 $potentialTypes[$i] = clone $potentialTypes[$i];
 
                 if (isset($potentialTypes[$i]->shape[$key])) {
-                    if ($isCertain && ! ($attributeType instanceof ArrayType || $attributeType instanceof ObjectType)) {
+                    if ($isCertain && (!$attributeType instanceof ArrayType && !$attributeType instanceof ObjectType)) {
                         $potentialTypes[$i]->shape[$key] = $attributeType;
 
                     } else {
-                        $potentialTypes[$i]->shape[$key] = (new UnionType([
+                        $potentialTypes[$i]->shape[$key] = new UnionType([
                             $potentialTypes[$i]->shape[$key],
                             $attributeType,
-                        ]))->unwrapType($this->scope->config)->unwrapType($this->scope->config);
+                        ])->unwrapType($this->scope->config)->unwrapType($this->scope->config);
                     }
 
                 } else {
@@ -197,7 +198,7 @@ class UnresolvedVariableType extends UnresolvedType
                 $baseType->addItemToArray($key, $attributeType->setRequired(true));
 
             } else {
-                $baseType = (new UnionType($typesWithAddedAttribute))->unwrapType($this->scope->config);
+                $baseType = new UnionType($typesWithAddedAttribute)->unwrapType($this->scope->config);
             }
 
         } else {
@@ -205,10 +206,10 @@ class UnresolvedVariableType extends UnresolvedType
                 $arrayType = new ArrayType;
                 $arrayType->addItemToArray($key, $attributeType);
 
-                $baseType = (new UnionType([...$potentialTypes, $arrayType]))->unwrapType($this->scope->config);
+                $baseType = new UnionType([...$potentialTypes, $arrayType])->unwrapType($this->scope->config);
 
             } else {
-                $baseType = (new UnionType($potentialTypes))->unwrapType($this->scope->config);
+                $baseType = new UnionType($potentialTypes)->unwrapType($this->scope->config);
             }
         }
 

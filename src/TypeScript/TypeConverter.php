@@ -41,7 +41,7 @@ class TypeConverter
         if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
             $phpClass = new PhpClass($type->className, $scope);
 
-            $type = (new ExtensionHandler($scope))->handleTypeScriptExportExtensions($phpClass, $type);
+            $type = new ExtensionHandler($scope)->handleTypeScriptExportExtensions($phpClass, $type);
         }
 
         if ($type instanceof IntegerType || $type instanceof NumberType) {

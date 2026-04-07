@@ -2,14 +2,13 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\Scope;
+use AutoDoc\Analyzer\ThrowContext;
 use AutoDoc\DataTypes\Type;
-use PhpParser\Node\Expr;
 
 
 abstract class ThrowExtension
 {
-    public function getReturnType(Expr $expression, Scope $scope): ?Type
+    public function getReturnType(ThrowContext $context): ?Type
     {
         return null;
     }

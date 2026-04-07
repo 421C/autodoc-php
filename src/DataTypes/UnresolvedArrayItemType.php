@@ -21,7 +21,7 @@ class UnresolvedArrayItemType extends UnresolvedType
             return $type->convertShapeToTypePair()->itemType ?? new UnknownType;
 
         } else if ($type instanceof ObjectType) {
-            return (new UnionType(array_values($type->properties)))->unwrapType($this->scope->config);
+            return new UnionType(array_values($type->properties))->unwrapType($this->scope->config);
 
         } else if ($type instanceof StringType) {
             return new StringType;

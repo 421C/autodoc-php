@@ -57,7 +57,7 @@ trait WithMergeableTypes
                                 $objectType->properties[$key] = $mergedType;
 
                             } else {
-                                $objectType->properties[$key] = (new IntersectionType([$existingValueType, $valueType]))
+                                $objectType->properties[$key] = new IntersectionType([$existingValueType, $valueType])
                                     ->setRequired($existingValueType->required || $valueType->required);
                             }
                         }
@@ -164,7 +164,7 @@ trait WithMergeableTypes
         }
 
         // If type classes do not match, they can not be merged and will be returned as a UnionType.
-        if (get_class($type1) !== get_class($type2)) {
+        if ($type1::class !== $type2::class) {
             return null;
         }
 
@@ -328,7 +328,7 @@ trait WithMergeableTypes
                 $object1->properties[$key] = $mergedType;
 
             } else if ($mergeAsIntersection) {
-                $object1->properties[$key] = (new IntersectionType([$type1, $type2]))->setRequired($type1->required || $type2->required);
+                $object1->properties[$key] = new IntersectionType([$type1, $type2])->setRequired($type1->required || $type2->required);
 
             } else {
                 $object1->properties[$key] = new UnionType([$type1, $type2]);
@@ -344,7 +344,7 @@ trait WithMergeableTypes
         }
 
         if ($object1->typeToDisplay || $object2->typeToDisplay) {
-            $object1->typeToDisplay = (new UnionType(array_values(array_filter([$object1->typeToDisplay, $object2->typeToDisplay]))))->unwrapType($config);
+            $object1->typeToDisplay = new UnionType(array_values(array_filter([$object1->typeToDisplay, $object2->typeToDisplay])))->unwrapType($config);
         }
 
         return $object1;

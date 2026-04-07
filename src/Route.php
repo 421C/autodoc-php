@@ -69,7 +69,7 @@ class Route
 
     public function getRequestBodyType(?Config $config = null): ?Type
     {
-        $unwrappedType = (new UnionType($this->requestBodyTypes))->unwrapType($config);
+        $unwrappedType = new UnionType($this->requestBodyTypes)->unwrapType($config);
 
         if ($unwrappedType instanceof UnionType) {
             return $unwrappedType->mergeObjectsAndArrayShapes($config)->unwrapType($config);

@@ -14,15 +14,15 @@ use Exception;
 class RoutesExporter
 {
     public function __construct(
-        private Config $config,
-        private string $targetFilePath,
+        private readonly Config $config,
+        private readonly string $targetFilePath,
     ) {
         $this->requestsObjectShape = new ObjectType;
         $this->responsesObjectShape = new ObjectType;
     }
 
-    private ObjectType $requestsObjectShape;
-    private ObjectType $responsesObjectShape;
+    private readonly ObjectType $requestsObjectShape;
+    private readonly ObjectType $responsesObjectShape;
 
 
     /**

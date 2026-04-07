@@ -2,12 +2,13 @@
 
 namespace AutoDoc;
 
-use AutoDoc\Analyzer\PhpClosure;
+use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Path;
 use Exception;
+use ReflectionFunction;
 use Throwable;
 
 
@@ -99,9 +100,12 @@ abstract class AbstractRouteLoader
                     route: $route,
                 );
 
-                $phpClosure = new PhpClosure($route->closure, $scope);
+                $phpCallable = new PhpCallable(
+                    scope: $scope,
+                    reflection: new ReflectionFunction($route->closure),
+                );
 
-                $operation = $phpClosure->toOperation();
+                $operation = $phpCallable->toOperation();
             }
 
         } catch (Throwable $exception) {
@@ -114,7 +118,7 @@ abstract class AbstractRouteLoader
             return null;
         }
 
-        return (new ExtensionHandler($scope))->handleOperationExtensions($operation, $route, $scope);
+        return new ExtensionHandler($scope)->handleOperationExtensions($operation, $route, $scope);
     }
 
 

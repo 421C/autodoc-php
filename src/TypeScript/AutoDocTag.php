@@ -28,7 +28,7 @@ class AutoDocTag
             $this->value = $matches[1];
 
             $optionsString = $matches[2];
-            $phpDoc = new PhpDoc('/** ' . ' */', $this->scope);
+            $phpDoc = new PhpDoc('/**  */', $this->scope);
 
             $optionsType = $phpDoc->createUnresolvedType($phpDoc->createTypeNode('array' . $optionsString))->resolve();
 
