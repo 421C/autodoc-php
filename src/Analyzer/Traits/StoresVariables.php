@@ -2,10 +2,8 @@
 
 namespace AutoDoc\Analyzer\Traits;
 
-use AutoDoc\Analyzer\PhpCondition;
-use AutoDoc\Analyzer\PhpVariable;
-use AutoDoc\Analyzer\PhpVariableMutation;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Analyzer\ScopeEventLog;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
@@ -15,19 +13,18 @@ use PhpParser\Node;
 
 /**
  * @phpstan-require-extends Scope
- * @phpstan-import-type VariableMutationChanges from PhpVariableMutation
  */
 trait StoresVariables
 {
+    public ScopeEventLog $eventLog;
+
     /**
      * @param Comment[] $comments
-     * @param PhpCondition[] $conditions
      */
     public function assignVariable(
         Node\Expr\Variable $varNode,
         Node|Type $valueNode,
         array $comments = [],
-        array $conditions = [],
     ): void {
 
         if ($valueNode instanceof Node) {
@@ -53,39 +50,23 @@ trait StoresVariables
             return;
         }
 
-        if (! isset($this->variables[$varNode->name])) {
-            $this->variables[$varNode->name] = new PhpVariable($varNode->name);
-        }
-
         /** @var int */
         $startFilePos = $varNode->getAttribute('startFilePos');
 
-        $this->variables[$varNode->name]->mutations[$varNode->getStartLine()][$startFilePos] = new PhpVariableMutation(
-            changes: ['type' => $type],
-            startFilePos: $startFilePos,
-            endFilePos: $endFilePos,
-            conditions: $conditions,
-        );
+        $this->eventLog->assign($varNode->name, $type, $startFilePos, $endFilePos);
     }
 
 
     /**
-     * @param VariableMutationChanges $changes
-     * @param PhpCondition[] $conditions
+     * @param array<int|string, Type> $attributes
      */
     public function mutateVariable(
         Node\Expr\Variable $varNode,
-        array $changes,
-        int $depth = 0,
-        array $conditions = [],
+        array $attributes,
     ): void {
 
         if (! is_string($varNode->name)) {
             return;
-        }
-
-        if (! isset($this->variables[$varNode->name])) {
-            $this->variables[$varNode->name] = new PhpVariable($varNode->name);
         }
 
         /** @var int */
@@ -94,12 +75,7 @@ trait StoresVariables
         /** @var int */
         $endFilePos = $varNode->getAttribute('endFilePos');
 
-        $this->variables[$varNode->name]->mutations[$varNode->getStartLine()][$startFilePos] = new PhpVariableMutation(
-            changes: $changes,
-            startFilePos: $startFilePos,
-            endFilePos: $endFilePos,
-            conditions: $conditions,
-        );
+        $this->eventLog->mutate($varNode->name, $attributes, $startFilePos, $endFilePos);
     }
 
 
@@ -115,19 +91,18 @@ trait StoresVariables
             }
         }
 
-        if (empty($this->variables[$varNode->name])) {
+        if (! $this->eventLog->hasVariable($varNode->name)) {
             return null;
         }
 
         /** @var int */
         $nodeStartFilePos = $varNode->getAttribute('startFilePos');
-        $currentLine = $varNode->getStartLine();
 
         return new UnresolvedVariableType(
-            phpVariable: $this->variables[$varNode->name],
+            varName: $varNode->name,
             scope: $this,
-            varLine: $currentLine,
             varStartFilePos: $nodeStartFilePos,
+            readBranchPath: $this->eventLog->getBranchPathAtPosition($nodeStartFilePos),
         );
     }
 
@@ -141,42 +116,26 @@ trait StoresVariables
             return;
         }
 
-        $phpVariables = [];
+        /** @var int */
+        $callerNodeStartFilePos = $this->callerNode->getAttribute('startFilePos');
 
-        if ($variableNames === null) {
-            $phpVariables = $parentScope->variables;
+        $transferNames = $variableNames ?? $parentScope->eventLog->getAssignedVariableNames();
 
-        } else {
-            foreach ($variableNames as $varName) {
-                if (isset($parentScope->variables[$varName])) {
-                    $phpVariables[] = $parentScope->variables[$varName];
-                }
+        $readBranchPath = $parentScope->eventLog->getBranchPathAtPosition($callerNodeStartFilePos);
+
+        foreach ($transferNames as $varName) {
+            if (! $parentScope->eventLog->hasVariable($varName)) {
+                continue;
             }
-        }
 
-        foreach ($phpVariables as $phpVariable) {
-            /** @var int */
-            $callerNodeStartFilePos = $this->callerNode->getAttribute('startFilePos');
-            $callerNodeLine = $this->callerNode->getStartLine();
-
-            $this->variables[$phpVariable->name] = new PhpVariable(
-                name: $phpVariable->name,
-                mutations: [
-                    [new PhpVariableMutation(
-                        changes: [
-                            'type' => new UnresolvedVariableType(
-                                phpVariable: $phpVariable,
-                                scope: $parentScope,
-                                varLine: $callerNodeLine,
-                                varStartFilePos: $callerNodeStartFilePos,
-                            ),
-                        ],
-                        startFilePos: 0,
-                        endFilePos: 0,
-                        conditions: [],
-                    )],
-                ]
+            $parentType = new UnresolvedVariableType(
+                varName: $varName,
+                scope: $parentScope,
+                varStartFilePos: $callerNodeStartFilePos,
+                readBranchPath: $readBranchPath,
             );
+
+            $this->eventLog->assign($varName, $parentType, 0);
         }
     }
 }

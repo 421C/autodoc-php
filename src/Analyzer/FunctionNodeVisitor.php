@@ -37,8 +37,19 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     /** @var Comment[] */
     private array $currentExpressionComments = [];
 
-    /** @var PhpCondition[] */
+    /**
+     * Tracks the active PhpCondition for branch index management.
+     *
+     * @var PhpCondition[]
+     */
     private array $conditionStack = [];
+
+    /**
+     * Tracks the current branch index within each condition.
+     *
+     * @var int[]
+     */
+    private array $branchIndexStack = [];
 
     /**
      * @param Node[] $nodes
@@ -145,7 +156,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->handleForeach($node);
         }
 
-        $this->handleConditionNode($node);
+        $this->handleBranchEnter($node);
 
         if ($this->analyzeReturnValue && $node instanceof Node\Stmt\Return_) {
             $this->handleReturnStatement($node);
@@ -173,7 +184,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->currentExpressionComments = [];
         }
 
-        $this->handleConditionEnd($node);
+        $this->handleBranchExit($node);
 
         return null;
     }
@@ -247,7 +258,6 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     $this->scope->assignVariable(
                         varNode: $varNode,
                         valueNode: $varType,
-                        conditions: $this->conditionStack,
                     );
                 }
             }
@@ -319,7 +329,6 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 varNode: $varNode,
                 valueNode: $valueNode,
                 comments: $comments,
-                conditions: $this->conditionStack,
             );
 
         } else if ($varNode instanceof Node\Expr\ArrayDimFetch || $varNode instanceof Node\Expr\PropertyFetch) {
@@ -332,12 +341,9 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($varNode->var instanceof Node\Expr\Variable) {
                 $this->scope->mutateVariable(
                     varNode: $varNode->var,
-                    changes: [
-                        'attributes' => [
-                            $assignedItemKey => $assignedType,
-                        ],
+                    attributes: [
+                        $assignedItemKey => $assignedType,
                     ],
-                    conditions: $this->conditionStack,
                 );
 
             } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch || $varNode->var instanceof Node\Expr\PropertyFetch) {
@@ -387,8 +393,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
                     $this->scope->mutateVariable(
                         varNode: $baseVariable,
-                        changes: ['attributes' => $attributes],
-                        conditions: $this->conditionStack,
+                        attributes: $attributes,
                     );
                 }
             }
@@ -460,21 +465,114 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     }
 
 
-    protected function handleConditionNode(Node $node): void
+    private function getNodeStartFilePos(Node $node): int
     {
-        if ($node instanceof Node\Stmt\If_
-            || $node instanceof Node\Stmt\While_
+        /** @var int */
+        return $node->getAttribute('startFilePos');
+    }
+
+    private function getNodeEndFilePos(Node $node): int
+    {
+        /** @var int */
+        return $node->getAttribute('endFilePos');
+    }
+
+    private function handleBranchEnter(Node $node): void
+    {
+        if ($node instanceof Node\Stmt\If_) {
+            $condition = new PhpCondition($node);
+            $this->conditionStack[] = $condition;
+            $this->branchIndexStack[] = 0;
+            $this->scope->eventLog->enterBranch($condition->id, 0, $this->getNodeStartFilePos($node), $condition);
+
+            TypeNarrower::emitNarrowingEvents($node->cond, $this->scope, $condition, 0);
+
+        } else if ($node instanceof Node\Stmt\ElseIf_) {
+            $condition = end($this->conditionStack);
+
+            if ($condition !== false) {
+                $branchIndex = array_pop($this->branchIndexStack) + 1;
+                $this->branchIndexStack[] = $branchIndex;
+                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->eventLog->enterBranch($condition->id, $branchIndex, $this->getNodeStartFilePos($node));
+
+                TypeNarrower::emitNarrowingEvents($node->cond, $this->scope, $condition, $branchIndex);
+            }
+
+        } else if ($node instanceof Node\Stmt\Else_) {
+            $condition = end($this->conditionStack);
+
+            if ($condition !== false) {
+                $branchIndex = array_pop($this->branchIndexStack) + 1;
+                $this->branchIndexStack[] = $branchIndex;
+                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->eventLog->enterBranch($condition->id, $branchIndex, $this->getNodeStartFilePos($node));
+
+                if ($condition->node instanceof Node\Stmt\If_) {
+                    TypeNarrower::emitElseNarrowingEvents($condition->node, $this->scope, $condition, $branchIndex);
+                }
+            }
+
+        } else if ($node instanceof Node\Stmt\While_
             || $node instanceof Node\Stmt\For_
             || $node instanceof Node\Stmt\Foreach_
             || $node instanceof Node\Stmt\Switch_
             || $node instanceof Node\Stmt\TryCatch
         ) {
-            $this->conditionStack[] = new PhpCondition($node);
+            $condition = new PhpCondition($node);
+            $this->conditionStack[] = $condition;
+            $this->branchIndexStack[] = 0;
+
+            // For loops: enter branch after the header (condition/expression) so that
+            // header expressions resolve at the parent branch level.
+            $branchStartPos = match (true) {
+                $node instanceof Node\Stmt\Foreach_ => $this->getNodeEndFilePos($node->valueVar),
+                $node instanceof Node\Stmt\For_ => $this->getNodeEndFilePos($node->cond[0] ?? $node),
+                $node instanceof Node\Stmt\While_ => $this->getNodeEndFilePos($node->cond),
+                default => $this->getNodeStartFilePos($node),
+            };
+
+            $this->scope->eventLog->enterBranch($condition->id, 0, $branchStartPos, $condition);
+
+        } else if ($node instanceof Node\Stmt\Catch_) {
+            $condition = end($this->conditionStack);
+
+            if ($condition !== false) {
+                $branchIndex = array_pop($this->branchIndexStack) + 1;
+                $this->branchIndexStack[] = $branchIndex;
+                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->eventLog->enterBranch($condition->id, $branchIndex, $this->getNodeStartFilePos($node));
+            }
+
+        } else if ($node instanceof Node\Stmt\Finally_) {
+            $condition = end($this->conditionStack);
+
+            if ($condition !== false) {
+                $branchIndex = array_pop($this->branchIndexStack) + 1;
+                $this->branchIndexStack[] = $branchIndex;
+                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->eventLog->enterBranch($condition->id, $branchIndex, $this->getNodeStartFilePos($node));
+            }
+
+        } else if ($node instanceof Node\Stmt\Case_) {
+            $condition = end($this->conditionStack);
+
+            if ($condition !== false) {
+                $branchIndex = array_pop($this->branchIndexStack);
+
+                if ($branchIndex > 0) {
+                    $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                }
+
+                $branchIndex++;
+                $this->branchIndexStack[] = $branchIndex;
+                $this->scope->eventLog->enterBranch($condition->id, $branchIndex, $this->getNodeStartFilePos($node));
+            }
         }
     }
 
 
-    protected function handleConditionEnd(Node $node): void
+    private function handleBranchExit(Node $node): void
     {
         if ($node instanceof Node\Stmt\If_
             || $node instanceof Node\Stmt\While_
@@ -484,6 +582,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             || $node instanceof Node\Stmt\TryCatch
         ) {
             array_pop($this->conditionStack);
+            array_pop($this->branchIndexStack);
+            $this->scope->eventLog->exitBranch($this->getNodeEndFilePos($node));
         }
     }
 }

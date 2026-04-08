@@ -3,7 +3,7 @@
 namespace AutoDoc\Debugger;
 
 use AutoDoc\Analyzer\PhpClass;
-use AutoDoc\Analyzer\PhpVariable;
+use AutoDoc\Analyzer\ScopeEventLog;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node;
@@ -113,8 +113,8 @@ class TypeInspector
         } else if ($object instanceof Config && $level > 0) {
             $properties = [];
 
-        } else if ($object instanceof PhpVariable) {
-            return $this->colors['type'] . 'PhpVariable' . $this->colors['muted'] . ' #' . $objectId . $this->colors['variable'] . ' $' . $object->name . $this->colors['reset'] . ' mutations: ' . $this->dumpArray($object->mutations, $level);
+        } else if ($object instanceof ScopeEventLog) {
+            return $this->colors['type'] . 'ScopeEventLog' . $this->colors['muted'] . ' #' . $objectId . $this->colors['reset'] . ' events: ' . $this->dumpArray($object->getAllEvents(), $level);
         }
 
         $out = $this->colors['type'] . $typeName . $this->colors['muted'] . ' #' . $objectId . $this->colors['reset'];

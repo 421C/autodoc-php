@@ -47,15 +47,11 @@ class Scope
          * @var array<string, ?Type>
          */
         public array $constructorTemplateTypes = [],
-
-        /**
-         * @var array<string, PhpVariable>
-         */
-        public array $variables = [],
     ) {
         $this->constructorArgs = new ArgumentList($this);
+        $this->eventLog = new ScopeEventLog;
         $this->objectsHandlingRequestBody = new WeakMap;
-        $this->resolvedVariables = new WeakMap;
+        $this->resolvedVariables = [];
         $this->nodesBeingResolved = new WeakMap;
     }
 
@@ -71,10 +67,12 @@ class Scope
     public WeakMap $objectsHandlingRequestBody;
 
     /**
+     * Cache for resolved variable types, keyed by "varName:filePos".
+     *
      * @internal
-     * @var WeakMap<PhpVariable, array<int, Type>>
+     * @var array<string, Type>
      */
-    public WeakMap $resolvedVariables;
+    public array $resolvedVariables;
 
     /**
      * @internal

@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Analyzer;
 
-use LogicException;
 use PhpParser\Node;
 use PhpParser\Node\Expr\Exit_;
 use PhpParser\Node\Stmt\Expression;
@@ -23,9 +22,74 @@ use PhpParser\Node\Stmt\While_;
  */
 class PhpCondition
 {
+    private static int $nextId = 0;
+
+    public readonly int $id;
+
     public function __construct(
         public readonly If_|While_|For_|Foreach_|Switch_|TryCatch $node,
-    ) {}
+    ) {
+        $this->id = self::$nextId++;
+    }
+
+    public static function resetIdCounter(): void
+    {
+        self::$nextId = 0;
+    }
+
+    /**
+     * Returns the number of branches in this condition.
+     * For if/elseif/else: 1 (if) + N (elseif) + 1? (else)
+     * For all others: 1
+     */
+    public function getBranchCount(): int
+    {
+        if ($this->node instanceof If_) {
+            $count = 1 + count($this->node->elseifs);
+
+            if ($this->node->else !== null) {
+                $count++;
+            }
+
+            return $count;
+        }
+
+        return 1;
+    }
+
+    /**
+     * Whether this condition covers all possible paths (has an else clause).
+     */
+    public function isExhaustive(): bool
+    {
+        if ($this->node instanceof If_) {
+            return $this->node->else !== null;
+        }
+
+        if ($this->node instanceof Switch_) {
+            foreach ($this->node->cases as $case) {
+                if ($case->cond === null) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Check if a specific branch index has a breakout (return/exit).
+     */
+    public function branchHasBreakout(int $branchIndex): bool
+    {
+        $branches = $this->getConditionBranches();
+
+        if (isset($branches[$branchIndex])) {
+            return $branches[$branchIndex]['breakOutNode'] !== null;
+        }
+
+        return false;
+    }
 
     /**
      * @return list<ConditionBranch>
@@ -61,7 +125,7 @@ class PhpCondition
         $value = $node->getAttribute($attribute);
 
         if (! is_int($value)) {
-            throw new LogicException(sprintf('Expected %s to be present on node of type %s.', $attribute, $node::class));
+            throw new \LogicException(sprintf('Expected %s to be present on node of type %s.', $attribute, $node::class));
         }
 
         return $value;

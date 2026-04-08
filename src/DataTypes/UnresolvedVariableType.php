@@ -2,123 +2,37 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpVariable;
+use AutoDoc\Analyzer\BranchPath;
+use AutoDoc\Analyzer\NonNullNarrowedType;
 use AutoDoc\Analyzer\Scope;
-use PhpParser\Node\Stmt\If_;
+use AutoDoc\Analyzer\ScopeEvent;
+use AutoDoc\Analyzer\ScopeEventType;
 
 class UnresolvedVariableType extends UnresolvedType
 {
     public function __construct(
-        public readonly PhpVariable $phpVariable,
+        public readonly string $varName,
         public readonly Scope $scope,
-        public readonly int $varLine,
         public readonly int $varStartFilePos,
+        public readonly BranchPath $readBranchPath,
         public ?string $description = null,
     ) {}
 
     public function resolve(): Type
     {
-        if (isset($this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos])) {
-            return $this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos];
+        $cacheKey = $this->varName . ':' . $this->varStartFilePos;
+
+        if (isset($this->scope->resolvedVariables[$cacheKey])) {
+            return $this->scope->resolvedVariables[$cacheKey];
         }
 
-        krsort($this->phpVariable->mutations);
+        $events = $this->scope->eventLog->getEventsForVariable(
+            $this->varName,
+            $this->varStartFilePos,
+            $this->readBranchPath,
+        );
 
-        $baseType = null;
-        $affectingMutations = [];
-        $currentLine = $this->varLine;
-
-        while ($currentLine >= 0) {
-            if (isset($this->phpVariable->mutations[$currentLine])) {
-                $mutationsOnCurrentLine = $this->phpVariable->mutations[$currentLine];
-
-                krsort($mutationsOnCurrentLine);
-
-                foreach ($mutationsOnCurrentLine as $mutation) {
-                    if ($this->varStartFilePos > $mutation->endFilePos) {
-                        $conditions = array_reverse($mutation->conditions);
-
-                        if ($conditions) {
-                            foreach ($conditions as $condition) {
-                                $branches = $condition->getConditionBranches();
-
-                                $nonBreakingBranches = array_values(array_filter(
-                                    $branches,
-                                    fn ($branch) => ! isset($branch['breakOutNode']),
-                                ));
-
-                                for ($branchIndex = count($branches) - 1; $branchIndex >= 0; $branchIndex--) {
-                                    $branch = $branches[$branchIndex];
-
-                                    $mutationIsInsideCurrentBranch = $mutation->startFilePos > $branch['startFilePos']
-                                        && $mutation->endFilePos < $branch['endFilePos'];
-
-                                    if (! $mutationIsInsideCurrentBranch) {
-                                        continue;
-                                    }
-
-                                    $varIsInsideCurrentBranch = $this->varStartFilePos > $branch['startFilePos']
-                                        && $this->varStartFilePos < $branch['endFilePos'];
-
-                                    if ($varIsInsideCurrentBranch) {
-                                        if (isset($mutation->changes['type'])) {
-                                            $baseType = $mutation->changes['type'];
-                                            break 4;
-                                        }
-
-                                        $affectingMutations[] = [$mutation, true];
-                                        break;
-
-                                    } else if (isset($branch['breakOutNode'])) {
-                                        continue;
-
-                                    } else {
-                                        $isThisTheOnlyNonBreakingIfElseBranch = $condition->node instanceof If_
-                                            && $condition->node->else
-                                            && count($nonBreakingBranches) === 1;
-
-                                        $affectingMutations[] = [$mutation, $isThisTheOnlyNonBreakingIfElseBranch];
-                                    }
-                                }
-                            }
-
-                        } else {
-                            if (isset($mutation->changes['type'])) {
-                                $baseType = $mutation->changes['type'];
-                                break 2;
-                            }
-
-                            $affectingMutations[] = [$mutation, true];
-                        }
-                    }
-                }
-            }
-
-            $currentLine--;
-        }
-
-        $resolvedType = $baseType?->unwrapType($this->scope->config);
-
-        for ($mutationIndex = count($affectingMutations) - 1; $mutationIndex >= 0; $mutationIndex--) {
-            [$mutation, $isCertain] = $affectingMutations[$mutationIndex];
-
-            if (isset($mutation->changes['type'])) {
-                if ($isCertain) {
-                    $resolvedType = $mutation->changes['type']->unwrapType($this->scope->config);
-                    break;
-                }
-
-                $resolvedType = new UnionType(array_values(array_filter([$resolvedType, $mutation->changes['type']])))->unwrapType($this->scope->config);
-            }
-
-            if (! empty($mutation->changes['attributes'])) {
-                $this->scope->withShapeMerging(function () use ($mutation, &$resolvedType, $isCertain) {
-                    foreach ($mutation->changes['attributes'] as $key => $attributeType) {
-                        $resolvedType = $this->mergeAttribute($resolvedType, $key, $attributeType, $isCertain);
-                    }
-                });
-            }
-        }
+        $resolvedType = $this->resolveFromEvents($events);
 
         if (! $resolvedType) {
             $resolvedType = new UnknownType;
@@ -128,13 +42,238 @@ class UnresolvedVariableType extends UnresolvedType
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
 
-        if (! isset($this->scope->resolvedVariables[$this->phpVariable])) {
-            $this->scope->resolvedVariables[$this->phpVariable] = [];
-        }
-
-        $this->scope->resolvedVariables[$this->phpVariable][$this->varStartFilePos] = $resolvedType;
+        $this->scope->resolvedVariables[$cacheKey] = $resolvedType;
 
         return $resolvedType;
+    }
+
+
+    /**
+     * @param ScopeEvent[] $events
+     */
+    private function resolveFromEvents(array $events): ?Type
+    {
+        // Walk events forward, building up the type.
+        // At each point, determine if the event is:
+        //   1. Directly visible (same branch path or ancestor) → apply with certainty
+        //   2. In a sibling branch → collect as uncertain alternative
+        //   3. In a deeper/unrelated branch → skip
+
+        $baseType = null;
+
+        /** @var list<array{ScopeEvent, bool}> $pendingMutations */
+        $pendingMutations = [];
+
+        foreach ($events as $event) {
+            $visibility = $this->getEventVisibility($event);
+
+            if ($visibility === 'hidden') {
+                continue;
+            }
+
+            $isCertain = $visibility === 'certain';
+
+            if ($event->type === ScopeEventType::Assign) {
+                if ($isCertain) {
+                    // Certain assignment replaces everything before it
+                    $baseType = $event->changes['type'] ?? null;
+                    $pendingMutations = [];
+
+                } else {
+                    // Uncertain assignment: union with what we have
+                    $pendingMutations[] = [$event, false];
+                }
+
+            } else if ($event->type === ScopeEventType::Mutate) {
+                $pendingMutations[] = [$event, $isCertain];
+
+            } else {
+                // ScopeEventType::Narrow
+                if ($isCertain) {
+                    $pendingMutations[] = [$event, true];
+                }
+            }
+        }
+
+        // Apply pending mutations to the base type
+        $resolvedType = $baseType?->unwrapType($this->scope->config);
+
+        foreach ($pendingMutations as [$event, $isCertain]) {
+            if ($event->type === ScopeEventType::Assign && isset($event->changes['type'])) {
+                if ($isCertain) {
+                    $resolvedType = $event->changes['type']->unwrapType($this->scope->config);
+
+                } else {
+                    $resolvedType = new UnionType(array_values(array_filter([
+                        $resolvedType,
+                        $event->changes['type'],
+                    ])))->unwrapType($this->scope->config);
+                }
+
+            } else if ($event->type === ScopeEventType::Mutate && ! empty($event->changes['attributes'])) {
+                $this->scope->withShapeMerging(function () use ($event, &$resolvedType, $isCertain) {
+                    foreach ($event->changes['attributes'] as $key => $attributeType) {
+                        $resolvedType = $this->mergeAttribute($resolvedType, $key, $attributeType, $isCertain);
+                    }
+                });
+
+            } else if ($event->type === ScopeEventType::Narrow && isset($event->changes['type'])) {
+                $narrowedType = $event->changes['type'];
+
+                if ($resolvedType !== null) {
+                    $resolvedType = $this->applyNarrowing($resolvedType, $narrowedType);
+                }
+            }
+        }
+
+        return $resolvedType;
+    }
+
+    /**
+     * Determine how an event relates to the read position's branch path.
+     *
+     * @return 'certain'|'uncertain'|'hidden'
+     */
+    private function getEventVisibility(ScopeEvent $event): string
+    {
+        $eventPath = $event->branchPath;
+        $readPath = $this->readBranchPath;
+
+        // Event is at root level (no branch) — always visible and certain
+        if ($eventPath->depth() === 0) {
+            return 'certain';
+        }
+
+        // Event's path is a prefix of (or equal to) read path — visible and certain
+        if ($eventPath->isVisibleFrom($readPath)) {
+            return 'certain';
+        }
+
+        // Check if event is in a sibling branch
+        $siblingInfo = $this->getSiblingBranchInfo($eventPath, $readPath);
+
+        if ($siblingInfo !== null) {
+            [$conditionId, $eventBranchIndex] = $siblingInfo;
+
+            // If the event's branch has a breakout (return/exit), and the read is
+            // OUTSIDE the condition (at a lower depth), the mutation is unreachable.
+            if ($readPath->depth() < $eventPath->depth()) {
+                $condition = $this->scope->eventLog->getConditionById($conditionId);
+
+                if ($condition !== null && $condition->branchHasBreakout($eventBranchIndex)) {
+                    return 'hidden';
+                }
+            }
+
+            // Check if this is the only non-breaking branch in an exhaustive if/else.
+            // If so, the mutation is certain (all other branches break out).
+            $condition = $this->scope->eventLog->getConditionById($conditionId);
+
+            if ($condition !== null && $condition->isExhaustive() && $readPath->depth() < $eventPath->depth()) {
+                $branchCount = $condition->getBranchCount();
+                $allOthersBreakOut = true;
+
+                for ($bi = 0; $bi < $branchCount; $bi++) {
+                    if ($bi !== $eventBranchIndex && ! $condition->branchHasBreakout($bi)) {
+                        $allOthersBreakOut = false;
+                        break;
+                    }
+                }
+
+                if ($allOthersBreakOut) {
+                    return 'certain';
+                }
+            }
+
+            return 'uncertain';
+        }
+
+        // Event is in a deeper or unrelated branch — hidden
+        return 'hidden';
+    }
+
+
+    /**
+     * Check if the event is in a sibling branch and return the diverging condition info.
+     *
+     * @return array{int, int}|null [conditionId, eventBranchIndex] or null if not a sibling
+     */
+    private function getSiblingBranchInfo(BranchPath $eventPath, BranchPath $readPath): ?array
+    {
+        $eventSegments = $eventPath->segments;
+        $readSegments = $readPath->segments;
+        $minDepth = min(count($eventSegments), count($readSegments));
+
+        for ($i = 0; $i < $minDepth; $i++) {
+            if ($eventSegments[$i]['conditionId'] === $readSegments[$i]['conditionId']
+                && $eventSegments[$i]['branchIndex'] !== $readSegments[$i]['branchIndex']
+            ) {
+                return [$eventSegments[$i]['conditionId'], $eventSegments[$i]['branchIndex']];
+            }
+
+            if ($eventSegments[$i] !== $readSegments[$i]) {
+                return null;
+            }
+        }
+
+        // Event is deeper than read path — check if it's in a branch of a condition
+        // that the read position is after (read has exited the condition)
+        if (count($eventSegments) > count($readSegments)) {
+            $divergeLevel = count($readSegments);
+            $conditionId = $eventSegments[$divergeLevel]['conditionId'];
+            $eventBranchIndex = $eventSegments[$divergeLevel]['branchIndex'];
+
+            return [$conditionId, $eventBranchIndex];
+        }
+
+        return null;
+    }
+
+
+    /**
+     * Apply a narrowing type to the resolved type.
+     */
+    private function applyNarrowing(Type $resolvedType, Type $narrowedType): Type
+    {
+        // NonNullNarrowedType means "remove null"
+        if ($narrowedType instanceof NonNullNarrowedType) {
+            return $resolvedType->removeNull($this->scope->config);
+        }
+
+        // For positive narrowing (instanceof, is_array, etc.), intersect with the narrowed type
+        if ($resolvedType instanceof UnionType) {
+            $matchingTypes = [];
+
+            foreach ($resolvedType->types as $type) {
+                if ($this->typeMatchesNarrowing($type, $narrowedType)) {
+                    $matchingTypes[] = $type;
+                }
+            }
+
+            if (! empty($matchingTypes)) {
+                return new UnionType($matchingTypes)->unwrapType($this->scope->config);
+            }
+        }
+
+        // If the current type is compatible with the narrowing, return the narrowed type
+        if ($this->typeMatchesNarrowing($resolvedType, $narrowedType)) {
+            return $resolvedType;
+        }
+
+        // Default: replace with the narrowed type (the condition guarantees it)
+        return $narrowedType;
+    }
+
+
+    private function typeMatchesNarrowing(Type $type, Type $narrowedType): bool
+    {
+        if ($narrowedType instanceof ObjectType && $narrowedType->className) {
+            return $type instanceof ObjectType
+                && $type->className !== null
+                && is_a($type->className, $narrowedType->className, true);
+        }
+
+        return $type::class === $narrowedType::class;
     }
 
 
