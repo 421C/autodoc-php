@@ -60,7 +60,6 @@ class BasicResponsesController
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Nested object with enum and class',
-        'description' => '',
         'responses' => [
             '200' => [
                 'content' => [
@@ -168,8 +167,6 @@ class BasicResponsesController
      * @phpstan-ignore return.missing
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -216,8 +213,6 @@ class BasicResponsesController
      * @phpstan-ignore return.missing
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [

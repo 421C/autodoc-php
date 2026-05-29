@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\DataTypes\Type;
 
 class ScopeEventLog
@@ -79,7 +80,7 @@ class ScopeEventLog
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Assign,
             varName: $varName,
-            branchPath: $this->currentBranchPath,
+            branchPath: $this->getBranchPathAtPosition($startFilePos),
             changes: ['type' => $type],
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
@@ -94,20 +95,46 @@ class ScopeEventLog
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Mutate,
             varName: $varName,
-            branchPath: $this->currentBranchPath,
+            branchPath: $this->getBranchPathAtPosition($startFilePos),
             changes: ['attributes' => $attributes],
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
         );
     }
 
-    public function narrow(string $varName, Type $narrowedType, PhpCondition $condition, int $filePos): void
+    public function narrow(string $varName, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
     {
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Narrow,
             varName: $varName,
             branchPath: $this->currentBranchPath,
-            changes: ['type' => $narrowedType],
+            changes: ['narrowing' => $narrowing],
+            startFilePos: $filePos,
+            endFilePos: $filePos,
+            condition: $condition,
+        );
+    }
+
+    /**
+     * Narrow one property or literal-key element of `$varName`'s type.
+     */
+    public function narrowAttribute(string $varName, int|string $key, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
+    {
+        $this->narrowAttributePath($varName, [$key], $narrowing, $condition, $filePos);
+    }
+
+    /**
+     * Narrow a literal property/array-key path of `$varName`'s type.
+     *
+     * @param non-empty-list<int|string> $path
+     */
+    public function narrowAttributePath(string $varName, array $path, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
+    {
+        $this->events[] = new ScopeEvent(
+            type: ScopeEventType::NarrowAttribute,
+            varName: $varName,
+            branchPath: $this->currentBranchPath,
+            changes: ['narrowingPath' => $path, 'narrowing' => $narrowing],
             startFilePos: $filePos,
             endFilePos: $filePos,
             condition: $condition,
@@ -176,13 +203,7 @@ class ScopeEventLog
      */
     public function hasVariable(string $varName): bool
     {
-        foreach ($this->events as $event) {
-            if ($event->varName === $varName) {
-                return true;
-            }
-        }
-
-        return false;
+        return array_any($this->events, fn ($event) => $event->varName === $varName);
     }
 
     /**

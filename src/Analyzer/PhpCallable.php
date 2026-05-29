@@ -21,6 +21,7 @@ use Exception;
 use Override;
 use PhpParser\Node;
 use PhpParser\NodeTraverser;
+use PhpParser\NodeVisitor\NameResolver as PhpParserNameResolver;
 use PhpParser\ParserFactory;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
@@ -371,6 +372,13 @@ class PhpCallable
         if (! $ast) {
             return null;
         }
+
+        // Resolve `use` imports so class references inside the closure (e.g.
+        // `instanceof Foo`) become fully qualified — there is no surrounding
+        // class scope to resolve them otherwise.
+        $nameResolverTraverser = new NodeTraverser;
+        $nameResolverTraverser->addVisitor(new PhpParserNameResolver);
+        $ast = $nameResolverTraverser->traverse($ast);
 
         $finder = new class ($startLine) extends \PhpParser\NodeVisitorAbstract
         {

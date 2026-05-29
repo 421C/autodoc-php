@@ -144,7 +144,7 @@ class PhpClass
 
 
     /**
-     * @return ReflectionClass<TClass>
+     * @return ReflectionClass<covariant TClass>
      */
     public function getReflection(): ReflectionClass
     {

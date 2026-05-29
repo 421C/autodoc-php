@@ -14,8 +14,6 @@ class RequestParamsController
      * @request-query filter {type: string[]}
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'parameters' => [
             [
                 'in' => 'query',
@@ -44,8 +42,6 @@ class RequestParamsController
      * }
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'parameters' => [
             [
                 'in' => 'header',
@@ -113,8 +109,6 @@ class RequestParamsController
      * @request-url-param yoo
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'parameters' => [
             [
                 'description' => 'CSRF token',

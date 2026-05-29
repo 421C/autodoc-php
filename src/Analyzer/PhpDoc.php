@@ -826,15 +826,18 @@ class PhpDoc
 
 
     /**
-     * @return array{string, string}
+     * @return array{?string, ?string}
      */
     public function getSummaryAndDescription(): array
     {
         $summaryAndDescription = explode("\n\n", str_replace("\r\n", "\n", $this->getText()), 2);
 
+        $summary = $summaryAndDescription[0];
+        $description = $summaryAndDescription[1] ?? '';
+
         return [
-            $summaryAndDescription[0],
-            $summaryAndDescription[1] ?? '',
+            $summary === '' ? null : $summary,
+            $description === '' ? null : $description,
         ];
     }
 

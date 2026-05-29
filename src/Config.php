@@ -2,6 +2,14 @@
 
 namespace AutoDoc;
 
+use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
+use AutoDoc\Extensions\ClassExtension;
+use AutoDoc\Extensions\FuncCallExtension;
+use AutoDoc\Extensions\MethodCallExtension;
+use AutoDoc\Extensions\OperationExtension;
+use AutoDoc\Extensions\StaticCallExtension;
+use AutoDoc\Extensions\ThrowExtension;
+use AutoDoc\Extensions\TypeScriptExportExtension;
 use Exception;
 
 /**
@@ -95,7 +103,7 @@ use Exception;
  *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,
- *     extensions: array<class-string>,
+ *     extensions?: array<class-string>,
  *     use_cache: bool,
  *     memory_limit: ?string,
  *     max_depth: int,
@@ -121,6 +129,11 @@ class Config
         public ?array $selectedWorkspace = null,
         public int|string|null $selectedWorkspaceKey = null,
     ) {}
+
+    /**
+     * @var ?array<class-string, list<class-string>>
+     */
+    private ?array $extensionsByType = null;
 
 
     /**
@@ -227,6 +240,49 @@ class Config
         }
 
         return new $this->data['route_loader']($this);
+    }
+
+
+    /**
+     * @return array<class-string, list<class-string>>
+     */
+    public function getExtensions(): array
+    {
+        if ($this->extensionsByType !== null) {
+            return $this->extensionsByType;
+        }
+
+        $this->extensionsByType = [
+            FuncCallExtension::class => [
+                ArrayFuncCall::class,
+            ],
+        ];
+
+        foreach ($this->data['extensions'] ?? [] as $extensionClass) {
+            if (is_subclass_of($extensionClass, MethodCallExtension::class)) {
+                $this->extensionsByType[MethodCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, FuncCallExtension::class)) {
+                $this->extensionsByType[FuncCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, StaticCallExtension::class)) {
+                $this->extensionsByType[StaticCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, ClassExtension::class)) {
+                $this->extensionsByType[ClassExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, OperationExtension::class)) {
+                $this->extensionsByType[OperationExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, ThrowExtension::class)) {
+                $this->extensionsByType[ThrowExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, TypeScriptExportExtension::class)) {
+                $this->extensionsByType[TypeScriptExportExtension::class][] = $extensionClass;
+            }
+        }
+
+        return $this->extensionsByType;
     }
 
 

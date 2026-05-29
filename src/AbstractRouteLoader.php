@@ -118,7 +118,7 @@ abstract class AbstractRouteLoader
             return null;
         }
 
-        return new ExtensionHandler($scope)->handleOperationExtensions($operation, $route, $scope);
+        return $scope->handleOperationExtensions($operation, $route);
     }
 
 

@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Traits\HandlesExtensions;
 use AutoDoc\Analyzer\Traits\StoresVariables;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
@@ -20,7 +21,6 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
-use AutoDoc\ExtensionHandler;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
@@ -30,6 +30,7 @@ use WeakMap;
 
 class Scope
 {
+    use HandlesExtensions;
     use StoresVariables;
 
     public function __construct(
@@ -51,7 +52,6 @@ class Scope
         $this->constructorArgs = new ArgumentList($this);
         $this->eventLog = new ScopeEventLog;
         $this->objectsHandlingRequestBody = new WeakMap;
-        $this->resolvedVariables = [];
         $this->nodesBeingResolved = new WeakMap;
     }
 
@@ -72,7 +72,7 @@ class Scope
      * @internal
      * @var array<string, Type>
      */
-    public array $resolvedVariables;
+    public array $resolvedVariables = [];
 
     /**
      * @internal
@@ -406,10 +406,29 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Ternary) {
+                // Short ternary (`$a ?: $b`) yields the left operand only when it is
+                // truthy, so null can't leak through it — like the `??` operator.
+                if ($node->if === null) {
+                    return new UnionType([
+                        $this->resolveType($node->cond)->removeNull($this->config),
+                        $this->resolveType($node->else),
+                    ]);
+                }
+
                 return new UnionType([
-                    $this->resolveType($node->if ?? $node->cond),
+                    $this->resolveType($node->if),
                     $this->resolveType($node->else),
                 ]);
+            }
+
+            if ($node instanceof Node\Expr\Match_) {
+                $armTypes = [];
+
+                foreach ($node->arms as $arm) {
+                    $armTypes[] = $this->resolveType($arm->body);
+                }
+
+                return new UnionType($armTypes)->unwrapType($this->config);
             }
 
             if ($node instanceof Node\Expr\ConstFetch) {
@@ -807,66 +826,6 @@ class Scope
         }
 
         return $this->getPhpClass($this->className);
-    }
-
-
-    public function handleExpectedRequestTypeFromExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
-    {
-        $handler = new ExtensionHandler($this);
-
-        if ($context instanceof MethodCallContext) {
-            $handler->handleMethodCallExtensions($context, getReturnType: false);
-
-        } else if ($context instanceof FuncCallContext) {
-            $handler->handleFuncCallExtensions($context, getReturnType: false);
-
-        } else {
-            $handler->handleStaticCallExtensions($context, getReturnType: false);
-        }
-    }
-
-    public function getReturnTypeFromMethodCallExtensions(MethodCallContext $context): ?Type
-    {
-        return new ExtensionHandler($this)->handleMethodCallExtensions($context);
-    }
-
-    public function getReturnTypeFromFuncCallExtensions(FuncCallContext $context): ?Type
-    {
-        return new ExtensionHandler($this)->handleFuncCallExtensions($context);
-    }
-
-    public function getReturnTypeFromStaticCallExtensions(StaticCallContext $context): ?Type
-    {
-        return new ExtensionHandler($this)->handleStaticCallExtensions($context);
-    }
-
-    /**
-     * @param PhpClass<object> $phpClass
-     */
-    public function getReturnTypeFromClassExtensions(PhpClass $phpClass): ?Type
-    {
-        return new ExtensionHandler($this)->handleClassExtensions($phpClass);
-    }
-
-    /**
-     * @param PhpClass<object> $phpClass
-     */
-    public function handleExpectedRequestTypeFromClassExtensions(PhpClass $phpClass): void
-    {
-        new ExtensionHandler($this)->handleClassExtensions($phpClass, getReturnType: false);
-    }
-
-    /**
-     * @param PhpClass<object> $phpClass
-     */
-    public function getPropertyTypeFromExtensions(PhpClass $phpClass, string $propertyName): ?Type
-    {
-        return new ExtensionHandler($this)->handlePropertyTypeExtensions($phpClass, $propertyName);
-    }
-
-    public function handleThrowExtensions(Node\Expr $expr): ?Type
-    {
-        return new ExtensionHandler($this)->handleThrowExtensions(new ThrowContext($expr, $this));
     }
 
 

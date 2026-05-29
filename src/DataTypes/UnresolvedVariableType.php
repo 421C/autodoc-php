@@ -3,7 +3,7 @@
 namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\BranchPath;
-use AutoDoc\Analyzer\NonNullNarrowedType;
+use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Analyzer\ScopeEvent;
 use AutoDoc\Analyzer\ScopeEventType;
@@ -88,7 +88,7 @@ class UnresolvedVariableType extends UnresolvedType
                 $pendingMutations[] = [$event, $isCertain];
 
             } else {
-                // ScopeEventType::Narrow
+                // ScopeEventType::Narrow or ScopeEventType::NarrowAttribute
                 if ($isCertain) {
                     $pendingMutations[] = [$event, true];
                 }
@@ -117,16 +117,97 @@ class UnresolvedVariableType extends UnresolvedType
                     }
                 });
 
-            } else if ($event->type === ScopeEventType::Narrow && isset($event->changes['type'])) {
-                $narrowedType = $event->changes['type'];
-
+            } else if ($event->type === ScopeEventType::Narrow && isset($event->changes['narrowing'])) {
                 if ($resolvedType !== null) {
-                    $resolvedType = $this->applyNarrowing($resolvedType, $narrowedType);
+                    $resolvedType = $event->changes['narrowing']->apply($resolvedType, $this->scope);
+                }
+
+            } else if ($event->type === ScopeEventType::NarrowAttribute
+                && isset($event->changes['narrowing'])
+                && isset($event->changes['narrowingPath'])
+            ) {
+                if ($resolvedType !== null) {
+                    $resolvedType = $this->applyAttributeNarrowing(
+                        $resolvedType,
+                        $event->changes['narrowingPath'],
+                        $event->changes['narrowing'],
+                    );
                 }
             }
         }
 
         return $resolvedType;
+    }
+
+
+    /**
+     * Apply a narrowing to a literal attribute path, leaving the rest untouched.
+     * Distributes over unions.
+     *
+     * @param non-empty-list<int|string> $path
+     */
+    private function applyAttributeNarrowing(Type $base, array $path, Narrowing $narrowing): Type
+    {
+        if ($base instanceof UnionType) {
+            $base = clone $base;
+            $base->types = array_map(
+                fn (Type $type): Type => $this->applyAttributeNarrowing($type, $path, $narrowing),
+                $base->types,
+            );
+
+            return $base->unwrapType($this->scope->config);
+        }
+
+        $key = array_shift($path);
+
+        if ($base instanceof ObjectType) {
+            $current = $this->resolveObjectPropertyType($base, $key);
+
+            if ($current === null) {
+                return $base;
+            }
+
+            $base = clone $base;
+            $base->properties[(string) $key] = $path === []
+                ? $narrowing->apply($current, $this->scope)
+                : $this->applyAttributeNarrowing($current, $path, $narrowing);
+
+            return $base;
+        }
+
+        if ($base instanceof ArrayType) {
+            $current = $base->shape[$key] ?? $base->itemType;
+
+            if ($current === null) {
+                return $base;
+            }
+
+            $base = clone $base;
+            $current = $current->unwrapType($this->scope->config);
+            $base->shape[$key] = $path === []
+                ? $narrowing->apply($current, $this->scope)
+                : $this->applyAttributeNarrowing($current, $path, $narrowing);
+
+            return $base;
+        }
+
+        return $base;
+    }
+
+
+    private function resolveObjectPropertyType(ObjectType $objectType, int|string $key): ?Type
+    {
+        $keyString = (string) $key;
+
+        if (isset($objectType->properties[$keyString])) {
+            return $objectType->properties[$keyString]->unwrapType($this->scope->config);
+        }
+
+        if ($objectType->className !== null) {
+            return $this->scope->getPhpClass($objectType->className)->getProperty($keyString)?->unwrapType($this->scope->config);
+        }
+
+        return null;
     }
 
     /**
@@ -227,53 +308,6 @@ class UnresolvedVariableType extends UnresolvedType
         }
 
         return null;
-    }
-
-
-    /**
-     * Apply a narrowing type to the resolved type.
-     */
-    private function applyNarrowing(Type $resolvedType, Type $narrowedType): Type
-    {
-        // NonNullNarrowedType means "remove null"
-        if ($narrowedType instanceof NonNullNarrowedType) {
-            return $resolvedType->removeNull($this->scope->config);
-        }
-
-        // For positive narrowing (instanceof, is_array, etc.), intersect with the narrowed type
-        if ($resolvedType instanceof UnionType) {
-            $matchingTypes = [];
-
-            foreach ($resolvedType->types as $type) {
-                if ($this->typeMatchesNarrowing($type, $narrowedType)) {
-                    $matchingTypes[] = $type;
-                }
-            }
-
-            if (! empty($matchingTypes)) {
-                return new UnionType($matchingTypes)->unwrapType($this->scope->config);
-            }
-        }
-
-        // If the current type is compatible with the narrowing, return the narrowed type
-        if ($this->typeMatchesNarrowing($resolvedType, $narrowedType)) {
-            return $resolvedType;
-        }
-
-        // Default: replace with the narrowed type (the condition guarantees it)
-        return $narrowedType;
-    }
-
-
-    private function typeMatchesNarrowing(Type $type, Type $narrowedType): bool
-    {
-        if ($narrowedType instanceof ObjectType && $narrowedType->className) {
-            return $type instanceof ObjectType
-                && $type->className !== null
-                && is_a($type->className, $narrowedType->className, true);
-        }
-
-        return $type::class === $narrowedType::class;
     }
 
 

@@ -20,7 +20,6 @@ class GenericTypesController
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Class from class-string',
-        'description' => '',
         'responses' => [
             '200' => [
                 'content' => [
@@ -58,7 +57,6 @@ class GenericTypesController
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Generic class with null param',
-        'description' => '',
         'responses' => [
             '200' => [
                 'content' => [
@@ -93,7 +91,6 @@ class GenericTypesController
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Array of generic subclasses',
-        'description' => '',
         'responses' => [
             '200' => [
                 'content' => [
@@ -137,8 +134,6 @@ class GenericTypesController
      * @phpstan-ignore missingType.return
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -189,8 +184,6 @@ class GenericTypesController
      * @response TVal
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -230,8 +223,6 @@ class GenericTypesController
      * @param SimpleClass $value
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -263,8 +254,6 @@ class GenericTypesController
      * @param $value Property description that is not going to be visible in response schema.
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -294,8 +283,6 @@ class GenericTypesController
 
     /** @phpstan-ignore missingType.generics */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [

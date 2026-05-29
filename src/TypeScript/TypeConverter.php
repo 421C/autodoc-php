@@ -17,7 +17,6 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
-use AutoDoc\ExtensionHandler;
 
 /**
  * @phpstan-import-type TypeScriptConfig from Config
@@ -41,7 +40,7 @@ class TypeConverter
         if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
             $phpClass = new PhpClass($type->className, $scope);
 
-            $type = new ExtensionHandler($scope)->handleTypeScriptExportExtensions($phpClass, $type);
+            $type = $scope->handleTypeScriptExportExtensions($phpClass, $type);
         }
 
         if ($type instanceof IntegerType || $type instanceof NumberType) {

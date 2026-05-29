@@ -12,4 +12,9 @@ enum ScopeEventType
 
     /** Type narrowing from a condition (instanceof, !== null, etc.) */
     case Narrow;
+
+    /**
+     * Type narrowing of a literal attribute path on a variable's type from a condition.
+     */
+    case NarrowAttribute;
 }

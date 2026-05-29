@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc;
+namespace AutoDoc\Analyzer\Traits;
 
 use AutoDoc\Analyzer\FuncCallContext;
 use AutoDoc\Analyzer\MethodCallContext;
@@ -9,7 +9,6 @@ use AutoDoc\Analyzer\Scope;
 use AutoDoc\Analyzer\StaticCallContext;
 use AutoDoc\Analyzer\ThrowContext;
 use AutoDoc\DataTypes\Type;
-use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
 use AutoDoc\Extensions\ClassExtension;
 use AutoDoc\Extensions\FuncCallExtension;
 use AutoDoc\Extensions\MethodCallExtension;
@@ -18,118 +17,102 @@ use AutoDoc\Extensions\StaticCallExtension;
 use AutoDoc\Extensions\ThrowExtension;
 use AutoDoc\Extensions\TypeScriptExportExtension;
 use AutoDoc\OpenApi\Operation;
+use AutoDoc\Route;
+use PhpParser\Node;
 
-class ExtensionHandler
+/**
+ * Dispatches the configured extensions for the current scope. The grouped
+ * extension list lives on `Config` (resolved once); this only runs them.
+ *
+ * @phpstan-require-extends Scope
+ */
+trait HandlesExtensions
 {
-    public function __construct(
-        private readonly Scope $scope,
-    ) {}
-
-    /**
-     * @var array<class-string, array<class-string>>
-     */
-    private static array $extensions;
-
-    /**
-     * @template T of object
-     * @param class-string<T> $extensionTypeClass
-     * @return array<class-string<T>>
-     */
-    private function getExtensions(string $extensionTypeClass): array
-    {
-        if (! isset(self::$extensions)) {
-            self::$extensions = [
-                FuncCallExtension::class => [
-                    ArrayFuncCall::class,
-                ],
-            ];
-
-            foreach ($this->scope->config->data['extensions'] ?? [] as $extensionClass) {
-                if (is_subclass_of($extensionClass, MethodCallExtension::class)) {
-                    self::$extensions[MethodCallExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, FuncCallExtension::class)) {
-                    self::$extensions[FuncCallExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, StaticCallExtension::class)) {
-                    self::$extensions[StaticCallExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, ClassExtension::class)) {
-                    self::$extensions[ClassExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, OperationExtension::class)) {
-                    self::$extensions[OperationExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, ThrowExtension::class)) {
-                    self::$extensions[ThrowExtension::class][] = $extensionClass;
-
-                } else if (is_subclass_of($extensionClass, TypeScriptExportExtension::class)) {
-                    self::$extensions[TypeScriptExportExtension::class][] = $extensionClass;
-                }
-            }
-        }
-
-        /** @var array<class-string<T>> */
-        $extensions = self::$extensions[$extensionTypeClass] ?? [];
-
-        return $extensions;
-    }
-
-    /**
-     * @return ($getReturnType is true ? Type|null : null)
-     */
-    public function handleMethodCallExtensions(MethodCallContext $context, bool $getReturnType = true): ?Type
+    public function getReturnTypeFromMethodCallExtensions(MethodCallContext $context): ?Type
     {
         return $this->runExtensions(
             extensionTypeClass: MethodCallExtension::class,
             node: $context->node,
             getRequestType: fn ($ext) => $ext->getRequestType($context),
             getReturnType: fn ($ext) => $ext->getReturnType($context),
-            returnType: $getReturnType,
         );
     }
 
-    /**
-     * @return ($getReturnType is true ? Type|null : null)
-     */
-    public function handleFuncCallExtensions(FuncCallContext $context, bool $getReturnType = true): ?Type
+    public function getReturnTypeFromFuncCallExtensions(FuncCallContext $context): ?Type
     {
         return $this->runExtensions(
             extensionTypeClass: FuncCallExtension::class,
             node: $context->node,
             getRequestType: fn ($ext) => $ext->getRequestType($context),
             getReturnType: fn ($ext) => $ext->getReturnType($context),
-            returnType: $getReturnType,
         );
     }
 
-    /**
-     * @return ($getReturnType is true ? Type|null : null)
-     */
-    public function handleStaticCallExtensions(StaticCallContext $context, bool $getReturnType = true): ?Type
+    public function getReturnTypeFromStaticCallExtensions(StaticCallContext $context): ?Type
     {
         return $this->runExtensions(
             extensionTypeClass: StaticCallExtension::class,
             node: $context->node,
             getRequestType: fn ($ext) => $ext->getRequestType($context),
             getReturnType: fn ($ext) => $ext->getReturnType($context),
-            returnType: $getReturnType,
         );
     }
 
     /**
      * @param PhpClass<object> $phpClass
-     *
-     * @return ($getReturnType is true ? Type|null : null)
      */
-    public function handleClassExtensions(PhpClass $phpClass, bool $getReturnType = true): ?Type
+    public function getReturnTypeFromClassExtensions(PhpClass $phpClass): ?Type
     {
         return $this->runExtensions(
             extensionTypeClass: ClassExtension::class,
             node: $phpClass,
             getRequestType: fn ($ext) => $ext->getRequestType($phpClass),
             getReturnType: fn ($ext) => $ext->getReturnType($phpClass),
-            returnType: $getReturnType,
+        );
+    }
+
+    public function handleExpectedRequestTypeFromExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
+    {
+        if ($context instanceof MethodCallContext) {
+            $this->runExtensions(
+                extensionTypeClass: MethodCallExtension::class,
+                node: $context->node,
+                getRequestType: fn ($ext) => $ext->getRequestType($context),
+                getReturnType: fn ($ext) => $ext->getReturnType($context),
+                returnType: false,
+            );
+
+        } else if ($context instanceof FuncCallContext) {
+            $this->runExtensions(
+                extensionTypeClass: FuncCallExtension::class,
+                node: $context->node,
+                getRequestType: fn ($ext) => $ext->getRequestType($context),
+                getReturnType: fn ($ext) => $ext->getReturnType($context),
+                returnType: false,
+            );
+
+        } else {
+            $this->runExtensions(
+                extensionTypeClass: StaticCallExtension::class,
+                node: $context->node,
+                getRequestType: fn ($ext) => $ext->getRequestType($context),
+                getReturnType: fn ($ext) => $ext->getReturnType($context),
+                returnType: false,
+            );
+        }
+    }
+
+    /**
+     * @param PhpClass<object> $phpClass
+     */
+    public function handleExpectedRequestTypeFromClassExtensions(PhpClass $phpClass): void
+    {
+        $this->runExtensions(
+            extensionTypeClass: ClassExtension::class,
+            node: $phpClass,
+            getRequestType: fn ($ext) => $ext->getRequestType($phpClass),
+            getReturnType: fn ($ext) => $ext->getReturnType($phpClass),
+            returnType: false,
         );
     }
 
@@ -143,11 +126,11 @@ class ExtensionHandler
      */
     private function runExtensions(string $extensionTypeClass, object $node, \Closure $getRequestType, \Closure $getReturnType, bool $returnType = true): ?Type
     {
-        $requestTypeHandled = isset($this->scope->objectsHandlingRequestBody[$node]);
+        $requestTypeHandled = isset($this->objectsHandlingRequestBody[$node]);
         $returnTypeHandled = ! $returnType;
         $result = null;
 
-        foreach ($this->getExtensions($extensionTypeClass) as $extensionClass) {
+        foreach ($this->getExtensionsOfType($extensionTypeClass) as $extensionClass) {
             $extension = new $extensionClass;
 
             if (! $requestTypeHandled) {
@@ -156,8 +139,8 @@ class ExtensionHandler
                 if ($requestResult instanceof Type) {
                     $requestTypeHandled = true;
 
-                    $this->scope->objectsHandlingRequestBody[$node] = true;
-                    $this->scope->route?->addRequestBodyType($requestResult);
+                    $this->objectsHandlingRequestBody[$node] = true;
+                    $this->route?->addRequestBodyType($requestResult);
                 }
             }
 
@@ -177,12 +160,12 @@ class ExtensionHandler
         return $result;
     }
 
-    public function handleOperationExtensions(Operation $operation, Route $route, Scope $scope): Operation
+    public function handleOperationExtensions(Operation $operation, Route $route): Operation
     {
-        foreach ($this->getExtensions(OperationExtension::class) as $extensionClass) {
+        foreach ($this->getExtensionsOfType(OperationExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
-            $extensionResult = $extension->handle($operation, $route, $scope);
+            $extensionResult = $extension->handle($operation, $route, $this);
 
             if ($extensionResult !== null) {
                 $operation = $extensionResult;
@@ -195,9 +178,9 @@ class ExtensionHandler
     /**
      * @param PhpClass<object> $phpClass
      */
-    public function handlePropertyTypeExtensions(PhpClass $phpClass, string $propertyName): ?Type
+    public function getPropertyTypeFromExtensions(PhpClass $phpClass, string $propertyName): ?Type
     {
-        foreach ($this->getExtensions(ClassExtension::class) as $extensionClass) {
+        foreach ($this->getExtensionsOfType(ClassExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
             $propertyType = $extension->getPropertyType($phpClass, $propertyName);
@@ -210,9 +193,11 @@ class ExtensionHandler
         return null;
     }
 
-    public function handleThrowExtensions(ThrowContext $throw): ?Type
+    public function handleThrowExtensions(Node\Expr $expr): ?Type
     {
-        foreach ($this->getExtensions(ThrowExtension::class) as $extensionClass) {
+        $throw = new ThrowContext($expr, $this);
+
+        foreach ($this->getExtensionsOfType(ThrowExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
             $returnedType = $extension->getReturnType($throw);
@@ -230,7 +215,7 @@ class ExtensionHandler
      */
     public function handleTypeScriptExportExtensions(PhpClass $phpClass, Type $type): Type
     {
-        foreach ($this->getExtensions(TypeScriptExportExtension::class) as $extensionClass) {
+        foreach ($this->getExtensionsOfType(TypeScriptExportExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
             $returnedType = $extension->handle($phpClass, $type);
@@ -241,5 +226,18 @@ class ExtensionHandler
         }
 
         return $type;
+    }
+
+    /**
+     * @template T of object
+     * @param class-string<T> $extensionTypeClass
+     * @return array<class-string<T>>
+     */
+    private function getExtensionsOfType(string $extensionTypeClass): array
+    {
+        /** @var array<class-string<T>> */
+        $extensions = $this->config->getExtensions()[$extensionTypeClass] ?? [];
+
+        return $extensions;
     }
 }

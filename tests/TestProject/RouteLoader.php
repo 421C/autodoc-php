@@ -39,7 +39,7 @@ class RouteLoader extends AbstractRouteLoader
         DynamicKeysController::class,
         DynamicMethodController::class,
         XmlRequestController::class,
-        PipeOperationController::class, // @phpstan-ignore class.notFound
+        PipeOperationController::class,
     ];
 
     public function getRoutes(): iterable
@@ -154,8 +154,6 @@ class RouteLoader extends AbstractRouteLoader
                  * @return int|float|null
                  */
                 #[ExpectedOperationSchema('showValuesForScalarTypes', [
-                    'summary' => '',
-                    'description' => '',
                     'responses' => [
                         200 => [
                             'content' => [
@@ -185,8 +183,6 @@ class RouteLoader extends AbstractRouteLoader
                  * }
                  */
                 #[ExpectedOperationSchema('showValuesForScalarTypes', [
-                    'summary' => '',
-                    'description' => '',
                     'responses' => [
                         200 => [
                             'content' => [

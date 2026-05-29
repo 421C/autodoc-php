@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\DataTypes\Type;
 
 /**
@@ -9,6 +10,8 @@ use AutoDoc\DataTypes\Type;
  *     type?: Type,
  *     attributes?: array<int|string, Type>,
  *     removedAttributes?: array<int|string>,
+ *     narrowing?: Narrowing,
+ *     narrowingPath?: non-empty-list<int|string>,
  * }
  */
 class PhpVariableMutation

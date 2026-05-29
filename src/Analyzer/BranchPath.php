@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Analyzer;
 
-
 class BranchPath
 {
     /**

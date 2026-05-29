@@ -7,7 +7,6 @@ use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
-use AutoDoc\ExtensionHandler;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Response;
 use AutoDoc\Route;
@@ -305,7 +304,7 @@ class TypeScriptGenerator
             if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
                 $phpClass = new PhpClass($type->className, $tag->scope);
 
-                $type = new ExtensionHandler($tag->scope)->handleTypeScriptExportExtensions($phpClass, $type);
+                $type = $tag->scope->handleTypeScriptExportExtensions($phpClass, $type);
             }
 
             if ($type instanceof ObjectType && $type->typeToDisplay) {
