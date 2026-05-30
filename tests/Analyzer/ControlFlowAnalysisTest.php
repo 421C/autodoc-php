@@ -640,6 +640,347 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function looseEqualityToNonNumericStringExcludesNumbersUnderPhp8(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => 0,
+                1 => 'foo',
+                default => 'bar',
+            };
+
+            if ($value == 'foo') {
+                return $value;
+            }
+
+            return 'fallback';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'foo',
+                'fallback',
+            ],
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function looseNullEqualityGuardNarrowsVariableAfterTheGuard(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? new SimpleClass : null;
+
+            if ($value == null) {
+                return 'missing';
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function looseNullEqualityGuardRemovesValuesThatLooselyEqualNull(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 5)) {
+                0 => null,
+                1 => 0,
+                2 => '',
+                3 => 1,
+                4 => '0',
+                default => 'ready',
+            };
+
+            if ($value == null) {
+                return 'loosely-null';
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'enum' => [
+                        'loosely-null',
+                        '0',
+                        'ready',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function looseNullEqualityBranchKeepsValuesThatLooselyEqualNull(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 5)) {
+                0 => null,
+                1 => 0,
+                2 => '',
+                3 => 1,
+                4 => '0',
+                default => 'ready',
+            };
+
+            if ($value == null) {
+                return $value;
+            }
+
+            return 'not-loosely-null';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 0,
+                    'type' => 'integer',
+                ],
+                [
+                    'enum' => [
+                        '',
+                        'not-loosely-null',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'null',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function falseyBranchKeepsOnlyFalseyLiteralValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 5)) {
+                0 => null,
+                1 => 0,
+                2 => '',
+                3 => 1,
+                4 => '0',
+                default => 'ready',
+            };
+
+            if (! $value) {
+                return $value;
+            }
+
+            return 'truthy';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 0,
+                    'type' => 'integer',
+                ],
+                [
+                    'enum' => [
+                        '',
+                        '0',
+                        'truthy',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'null',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function truthyBranchKeepsOnlyTruthyLiteralValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 5)) {
+                0 => null,
+                1 => 0,
+                2 => '',
+                3 => 1,
+                4 => '0',
+                default => 'ready',
+            };
+
+            if ($value) {
+                return $value;
+            }
+
+            return 'falsey';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+                [
+                    'enum' => [
+                        'ready',
+                        'falsey',
+                    ],
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nestedTruthinessAndLooseComparisonsNarrowEachBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 5)) {
+                0 => null,
+                1 => 0,
+                2 => '',
+                3 => 1,
+                4 => '0',
+                default => 'ready',
+            };
+
+            if ($value) {
+                if ($value == 'ready') {
+                    return 'truthy-ready';
+
+                } else {
+                    return $value;
+                }
+            }
+
+            if ($value == null) {
+                if ($value === null) {
+                    return 'null-value';
+
+                } else if ($value === '') {
+                    return 'empty-string';
+
+                } else {
+                    return $value;
+                }
+
+            } else {
+                return $value;
+            }
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'enum' => [
+                        'truthy-ready',
+                        'null-value',
+                        'empty-string',
+                        '0',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'enum' => [
+                        1,
+                        0,
+                    ],
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nestedInstanceofTypeChecksAndThrowsNarrowEachBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 6)) {
+                0 => new SimpleClass(rand(0, 1) ? 5 : null),
+                1 => new Rocket,
+                2 => 0,
+                3 => 7,
+                4 => '',
+                5 => 'alpha',
+                default => null,
+            };
+
+            if ($value instanceof SimpleClass) {
+                if ($value->n === null) {
+                    throw new \RuntimeException('missing number');
+                }
+
+                return $value->n;
+            }
+
+            if ($value instanceof Rocket) {
+                throw new \RuntimeException('no rockets');
+            }
+
+            if (is_string($value)) {
+                if (! $value) {
+                    return 'empty-string';
+                }
+
+                return $value;
+            }
+
+            if (is_int($value)) {
+                if (! $value) {
+                    throw new \RuntimeException('zero');
+                }
+
+                return $value;
+            }
+
+            return 'null-value';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'enum' => [
+                        'empty-string',
+                        'alpha',
+                        'null-value',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function impossibleConditionNarrowsVariableToNever(): void
     {
         $schema = $this->getClosureReturnSchema(function (): mixed {
@@ -1345,6 +1686,148 @@ final class ControlFlowAnalysisTest extends TestCase
                     'required' => [
                         'n',
                     ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function falseyGuardNarrowsArrayElementWhenReturningTheArray(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = [
+                'code' => match (rand(0, 5)) {
+                    0 => null,
+                    1 => 0,
+                    2 => '',
+                    3 => 1,
+                    4 => '0',
+                    default => 'ready',
+                },
+                'tag' => 'payload',
+            ];
+
+            if (! $data['code']) {
+                return $data;
+            }
+
+            return [
+                'code' => 'truthy',
+                'tag' => 'payload',
+            ];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'code' => [
+                    'anyOf' => [
+                        [
+                            'const' => 0,
+                            'type' => 'integer',
+                        ],
+                        [
+                            'enum' => [
+                                '',
+                                '0',
+                                'truthy',
+                            ],
+                            'type' => 'string',
+                        ],
+                        [
+                            'type' => 'null',
+                        ],
+                    ],
+                ],
+                'tag' => [
+                    'const' => 'payload',
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function mutatingSiblingArrayElementPreservesElementNarrowing(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = [
+                'item' => rand(0, 1) ? new SimpleClass : null,
+                'meta' => 'a',
+            ];
+
+            if ($data['item'] === null) {
+                return 'missing';
+            }
+
+            $data['meta'] = 'b';
+
+            return $data['item'];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function mutatingNarrowedArrayElementDiscardsElementNarrowing(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = [
+                'item' => rand(0, 1) ? new SimpleClass : null,
+            ];
+
+            if ($data['item'] === null) {
+                return 'missing';
+            }
+
+            $data['item'] = rand(0, 1) ? new SimpleClass : null;
+
+            return $data['item'];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+                [
+                    'type' => 'null',
                 ],
             ],
         ], $schema, 'closure', 'return');

@@ -1,10 +1,11 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer\Narrowing;
+namespace AutoDoc\Analyzer\Narrowing\Traits;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\NeverType;
+use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ScalarType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -20,7 +21,7 @@ trait FiltersLooseScalarValues
      * no comparable values (an open or non-scalar type, which can't be narrowed
      * by value).
      *
-     * @return list<bool|float|int|string>|null
+     * @return list<bool|float|int|string|null>|null
      */
     private function looseComparableValues(Type $type): ?array
     {
@@ -30,6 +31,10 @@ trait FiltersLooseScalarValues
 
         if ($type instanceof BoolType) {
             return $type->value === null ? null : [$type->value];
+        }
+
+        if ($type instanceof NullType) {
+            return [null];
         }
 
         return null;
@@ -42,7 +47,7 @@ trait FiltersLooseScalarValues
      * collapses to `never`; an open scalar or non-scalar type is returned
      * unchanged, since it can't be narrowed by value.
      *
-     * @param list<bool|float|int|string> $candidateValues
+     * @param list<bool|float|int|string|null> $candidateValues
      */
     private function filterLooseScalarValues(Type $base, array $candidateValues, bool $keepMatching, Scope $scope): Type
     {
@@ -88,6 +93,12 @@ trait FiltersLooseScalarValues
             }
 
             return count($remaining) === 1 ? new BoolType($remaining[0]) : new BoolType;
+        }
+
+        if ($base instanceof NullType) {
+            return in_array(null, $candidateValues, false) === $keepMatching
+                ? $base
+                : new NeverType;
         }
 
         return $base;

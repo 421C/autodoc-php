@@ -4,8 +4,10 @@ namespace AutoDoc\Analyzer;
 
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
+use AutoDoc\Analyzer\Narrowing\IsFalsey;
 use AutoDoc\Analyzer\Narrowing\IsInstanceOf;
 use AutoDoc\Analyzer\Narrowing\IsType;
+use AutoDoc\Analyzer\Narrowing\IsTruthy;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotInstanceOf;
 use AutoDoc\Analyzer\Narrowing\NotNull;
@@ -455,6 +457,33 @@ class TypeNarrower
                 $isNotEqual = ! $isNotEqual;
             }
 
+            // Loose null comparison: narrow finite scalar/bool unions by the same
+            // loose rules as any other value comparison. This removes `null`, `0`,
+            // `''`, and `false` from the `$x != null` side when those exact values
+            // are known, while leaving open scalar types unchanged.
+            $varSide = null;
+
+            if (self::isNull($node->left)) {
+                $varSide = $node->right;
+
+            } else if (self::isNull($node->right)) {
+                $varSide = $node->left;
+            }
+
+            if ($varSide !== null) {
+                $target = NarrowingTarget::fromNode($varSide);
+
+                if ($target !== null) {
+                    $narrowing = $isNotEqual
+                        ? new NotType(new NullType, strict: false)
+                        : new IsType(new NullType, strict: false);
+
+                    return [[$target, $narrowing]];
+                }
+
+                return [];
+            }
+
             $leftTarget = NarrowingTarget::fromNode($node->left);
             $rightTarget = NarrowingTarget::fromNode($node->right);
 
@@ -502,12 +531,12 @@ class TypeNarrower
             }
         }
 
-        // Truthy condition: if ($x) or if ($obj->prop). The truthy side is
-        // guaranteed non-null; the falsey side may be null, false, 0, '', etc.
+        // Truthy condition: if ($x) or if ($obj->prop). Finite scalar/bool unions
+        // can be filtered by PHP's boolean-cast rules; open types stay broad.
         $truthyTarget = NarrowingTarget::fromNode($node);
 
         if ($truthyTarget !== null) {
-            return $negated ? [] : [[$truthyTarget, new NotNull]];
+            return [[$truthyTarget, $negated ? new IsFalsey : new IsTruthy]];
         }
 
         // is_array, is_string, is_int, etc.

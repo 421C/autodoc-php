@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer\Narrowing;
 
+use AutoDoc\Analyzer\Narrowing\Traits\FiltersLooseScalarValues;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\ScalarType;
