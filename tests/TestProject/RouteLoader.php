@@ -325,6 +325,9 @@ class RouteLoader extends AbstractRouteLoader
                                                 'type' => 'string',
                                             ],
                                         ],
+                                        'required' => [
+                                            'result',
+                                        ],
                                     ],
                                 ],
                             ],

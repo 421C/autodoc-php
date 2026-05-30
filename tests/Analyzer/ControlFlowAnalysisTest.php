@@ -1744,6 +1744,9 @@ final class ControlFlowAnalysisTest extends TestCase
                     'type' => 'string',
                 ],
             ],
+            'required' => [
+                'tag',
+            ],
         ], $schema, 'closure', 'return');
     }
 
@@ -1884,6 +1887,36 @@ final class ControlFlowAnalysisTest extends TestCase
                 [
                     'type' => 'null',
                 ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function mergingTwoIdenticalShapesKeepsRequiredKeys(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (bool $flag): mixed {
+            if ($flag) {
+                return ['id' => 1, 'name' => 'first'];
+            }
+
+            return ['id' => 2, 'name' => 'second'];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'enum' => [1, 2],
+                    'type' => 'integer',
+                ],
+                'name' => [
+                    'enum' => ['first', 'second'],
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'id',
+                'name',
             ],
         ], $schema, 'closure', 'return');
     }

@@ -209,6 +209,10 @@ class ControlFlowController
                                             'type' => 'integer',
                                         ],
                                     ],
+                                    'required' => [
+                                        'a',
+                                        'c',
+                                    ],
                                 ],
                                 [
                                     'type' => 'object',
@@ -221,6 +225,10 @@ class ControlFlowController
                                             'const' => 100,
                                             'type' => 'integer',
                                         ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'd',
                                     ],
                                 ],
                                 [
@@ -235,6 +243,10 @@ class ControlFlowController
                                             'type' => 'integer',
                                         ],
                                     ],
+                                    'required' => [
+                                        'b',
+                                        'c',
+                                    ],
                                 ],
                                 [
                                     'type' => 'object',
@@ -247,6 +259,10 @@ class ControlFlowController
                                             'const' => 100,
                                             'type' => 'integer',
                                         ],
+                                    ],
+                                    'required' => [
+                                        'b',
+                                        'd',
                                     ],
                                 ],
                             ],
