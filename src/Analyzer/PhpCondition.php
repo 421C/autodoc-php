@@ -3,15 +3,11 @@
 namespace AutoDoc\Analyzer;
 
 use PhpParser\Node;
-use PhpParser\Node\Expr\Exit_;
 use PhpParser\Node\Expr\Match_;
 use PhpParser\Node\Expr\Ternary;
-use PhpParser\Node\Expr\Throw_;
-use PhpParser\Node\Stmt\Expression;
 use PhpParser\Node\Stmt\For_;
 use PhpParser\Node\Stmt\Foreach_;
 use PhpParser\Node\Stmt\If_;
-use PhpParser\Node\Stmt\Return_;
 use PhpParser\Node\Stmt\Switch_;
 use PhpParser\Node\Stmt\TryCatch;
 use PhpParser\Node\Stmt\While_;
@@ -29,10 +25,14 @@ class PhpCondition
 
     public readonly int $id;
 
+    private readonly BranchBreakout $branchBreakout;
+
     public function __construct(
         public readonly If_|While_|For_|Foreach_|Switch_|TryCatch|Match_|Ternary $node,
+        Scope $scope,
     ) {
         $this->id = self::$nextId++;
+        $this->branchBreakout = new BranchBreakout($scope);
     }
 
     public static function resetIdCounter(): void
@@ -213,46 +213,6 @@ class PhpCondition
         return $value;
     }
 
-    private function getBreakOutNode(Node $node): ?Node
-    {
-        if ($node instanceof Return_) {
-            return $node;
-        }
-
-        if ($node instanceof Expression
-            && ($node->expr instanceof Exit_ || $node->expr instanceof Throw_)
-        ) {
-            return $node->expr;
-        }
-
-        if ($node instanceof If_) {
-            return $this->getIfBreakOutNode($node);
-        }
-
-        return null;
-    }
-
-    private function getIfBreakOutNode(If_ $node): ?Node
-    {
-        $breakOutNode = $this->getBreakOutNodeFromStatements($node->stmts);
-
-        if ($breakOutNode === null) {
-            return null;
-        }
-
-        foreach ($node->elseifs as $elseif) {
-            if ($this->getBreakOutNodeFromStatements($elseif->stmts) === null) {
-                return null;
-            }
-        }
-
-        if ($node->else === null || $this->getBreakOutNodeFromStatements($node->else->stmts) === null) {
-            return null;
-        }
-
-        return $breakOutNode;
-    }
-
     /**
      * @param Node[] $statements
      * @return ConditionBranch
@@ -274,23 +234,7 @@ class PhpCondition
         return [
             'startFilePos' => $startFilePos,
             'endFilePos' => $endFilePos,
-            'breakOutNode' => $this->getBreakOutNodeFromStatements($statements),
+            'breakOutNode' => $this->branchBreakout->getBreakOutNodeFromStatements($statements),
         ];
-    }
-
-    /**
-     * @param Node[] $statements
-     */
-    private function getBreakOutNodeFromStatements(array $statements): ?Node
-    {
-        foreach ($statements as $statement) {
-            $breakOutNode = $this->getBreakOutNode($statement);
-
-            if ($breakOutNode !== null) {
-                return $breakOutNode;
-            }
-        }
-
-        return null;
     }
 }

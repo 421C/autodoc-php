@@ -127,6 +127,51 @@ class TypeNarrower
     }
 
     /**
+     * Emit negations of earlier switch case values when entering a later case.
+     * A previous case value can only be removed if that case cannot fall through
+     * into the current case.
+     */
+    public static function emitPreviousCaseNarrowingEvents(
+        Node\Stmt\Switch_ $switchNode,
+        Node\Stmt\Case_ $currentCase,
+        Scope $scope,
+        PhpCondition $condition,
+    ): void {
+
+        $subjectTarget = NarrowingTarget::fromNode($switchNode->cond);
+
+        if ($subjectTarget === null) {
+            return;
+        }
+
+        /** @var list<array{NarrowingTarget, Narrowing}> $narrowings */
+        $narrowings = [];
+
+        foreach ($switchNode->cases as $case) {
+            if ($case === $currentCase) {
+                break;
+            }
+
+            if ($case->cond === null || ! self::isLiteralScalarNode($case->cond)) {
+                continue;
+            }
+
+            if (self::caseCanFallThroughToCase($switchNode, $case, $currentCase, $scope)) {
+                continue;
+            }
+
+            $narrowings[] = [$subjectTarget, new NotType($scope->resolveType($case->cond))];
+        }
+
+        /** @var int */
+        $filePos = $currentCase->getAttribute('startFilePos');
+
+        foreach ($narrowings as [$target, $narrowing]) {
+            self::emitTarget($scope, $target, $narrowing, $condition, $filePos);
+        }
+    }
+
+    /**
      * Narrow a `match` subject variable to a match arm's condition value(s) within
      * that arm body (e.g. `match ($x) { 'a', 'b' => ... }` narrows $x to 'a'|'b').
      * Skipped for the `default` arm and arms with non-literal conditions.
@@ -190,6 +235,55 @@ class TypeNarrower
         $narrowing = count($narrowings) === 1 ? $narrowings[0] : new AnyOf($narrowings);
 
         $scope->eventLog->narrow($varName, $narrowing, $condition, $filePos);
+    }
+
+    /**
+     * Emit negations of earlier match arm conditions when entering a later arm.
+     * Reaching the later arm means every previous arm condition was false; for
+     * comma-separated arm conditions, every condition in that previous arm was
+     * false.
+     */
+    public static function emitPreviousMatchArmNarrowingEvents(
+        Node\Expr\Match_ $matchNode,
+        Node\MatchArm $currentArm,
+        Scope $scope,
+        PhpCondition $condition,
+    ): void {
+
+        /** @var list<array{NarrowingTarget, Narrowing}> $narrowings */
+        $narrowings = [];
+        $subjectTarget = NarrowingTarget::fromNode($matchNode->cond);
+        $isTrueMatch = self::isTrueConst($matchNode->cond);
+
+        if (! $isTrueMatch && $subjectTarget === null) {
+            return;
+        }
+
+        foreach ($matchNode->arms as $arm) {
+            if ($arm === $currentArm) {
+                break;
+            }
+
+            if ($arm->conds === null) {
+                return;
+            }
+
+            foreach ($arm->conds as $cond) {
+                if ($isTrueMatch) {
+                    $narrowings = array_merge($narrowings, self::extractNarrowings($cond, $scope, negated: true));
+
+                } else if (self::isLiteralScalarNode($cond)) {
+                    $narrowings[] = [$subjectTarget, new NotType($scope->resolveType($cond))];
+                }
+            }
+        }
+
+        /** @var int */
+        $filePos = $currentArm->getAttribute('startFilePos');
+
+        foreach ($narrowings as [$target, $narrowing]) {
+            self::emitTarget($scope, $target, $narrowing, $condition, $filePos);
+        }
     }
 
     /**
@@ -279,7 +373,7 @@ class TypeNarrower
     {
         // instanceof check: if ($x instanceof Foo)
         if ($node instanceof Node\Expr\Instanceof_) {
-            $target = self::getNarrowingTarget($node->expr);
+            $target = NarrowingTarget::fromNode($node->expr);
 
             if ($target !== null && $node->class instanceof Node\Name) {
                 $className = $scope->getResolvedClassName($node->class);
@@ -319,7 +413,7 @@ class TypeNarrower
             }
 
             if ($nullSide !== null && $varSide !== null) {
-                $target = self::getNarrowingTarget($varSide);
+                $target = NarrowingTarget::fromNode($varSide);
 
                 if ($target !== null) {
                     if ($isNotIdentical) {
@@ -333,8 +427,8 @@ class TypeNarrower
 
             // Identity comparison to a literal: `$x === 'json'` narrows to the
             // literal, while `$x !== 'json'` removes it from finite unions.
-            $leftTarget = self::getNarrowingTarget($node->left);
-            $rightTarget = self::getNarrowingTarget($node->right);
+            $leftTarget = NarrowingTarget::fromNode($node->left);
+            $rightTarget = NarrowingTarget::fromNode($node->right);
 
             if ($leftTarget !== null && self::isLiteralScalarNode($node->right)) {
                 $literalType = $scope->resolveType($node->right);
@@ -351,9 +445,69 @@ class TypeNarrower
             return [];
         }
 
+        // Loose comparison: if ($x == 'json') or if ($x != 'json'). Narrows by
+        // PHP's loose comparison rules (`IsType`/`NotType` in loose mode) rather
+        // than the strict identity handling above.
+        if ($node instanceof Node\Expr\BinaryOp\Equal || $node instanceof Node\Expr\BinaryOp\NotEqual) {
+            $isNotEqual = $node instanceof Node\Expr\BinaryOp\NotEqual;
+
+            if ($negated) {
+                $isNotEqual = ! $isNotEqual;
+            }
+
+            $leftTarget = NarrowingTarget::fromNode($node->left);
+            $rightTarget = NarrowingTarget::fromNode($node->right);
+
+            if ($leftTarget !== null && self::isLiteralScalarNode($node->right)) {
+                $literalType = $scope->resolveType($node->right);
+
+                return [[$leftTarget, $isNotEqual ? new NotType($literalType, strict: false) : new IsType($literalType, strict: false)]];
+            }
+
+            if ($rightTarget !== null && self::isLiteralScalarNode($node->left)) {
+                $literalType = $scope->resolveType($node->left);
+
+                return [[$rightTarget, $isNotEqual ? new NotType($literalType, strict: false) : new IsType($literalType, strict: false)]];
+            }
+
+            return [];
+        }
+
         // Boolean not: if (!$x) — negates the inner expression
         if ($node instanceof Node\Expr\BooleanNot) {
             return self::extractNarrowings($node->expr, $scope, ! $negated);
+        }
+
+        if ($node instanceof Node\Expr\FuncCall) {
+            $narrowings = $scope->getNarrowingsFromFuncCallExtensions(new FuncCallContext($node, $scope), $negated);
+
+            if ($narrowings !== []) {
+                return $narrowings;
+            }
+        }
+
+        if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
+            $narrowings = $scope->getNarrowingsFromMethodCallExtensions(new MethodCallContext($node, $scope), $negated);
+
+            if ($narrowings !== []) {
+                return $narrowings;
+            }
+        }
+
+        if ($node instanceof Node\Expr\StaticCall) {
+            $narrowings = $scope->getNarrowingsFromStaticCallExtensions(new StaticCallContext($node, $scope), $negated);
+
+            if ($narrowings !== []) {
+                return $narrowings;
+            }
+        }
+
+        // Truthy condition: if ($x) or if ($obj->prop). The truthy side is
+        // guaranteed non-null; the falsey side may be null, false, 0, '', etc.
+        $truthyTarget = NarrowingTarget::fromNode($node);
+
+        if ($truthyTarget !== null) {
+            return $negated ? [] : [[$truthyTarget, new NotNull]];
         }
 
         // is_array, is_string, is_int, etc.
@@ -363,7 +517,7 @@ class TypeNarrower
             && $node->args[0] instanceof Node\Arg
         ) {
             $funcName = $node->name->name;
-            $target = self::getNarrowingTarget($node->args[0]->value);
+            $target = NarrowingTarget::fromNode($node->args[0]->value);
 
             if ($target !== null) {
                 $type = match ($funcName) {
@@ -404,7 +558,7 @@ class TypeNarrower
         // covers every falsy value (null|false|0|''|'0'|[]), which can't be reduced
         // to a single removable type, so it isn't narrowed.
         if ($node instanceof Node\Expr\Empty_) {
-            $target = self::getNarrowingTarget($node->expr);
+            $target = NarrowingTarget::fromNode($node->expr);
 
             if ($target !== null && $negated) {
                 return [[$target, new NotNull]];
@@ -418,7 +572,7 @@ class TypeNarrower
             $narrowings = [];
 
             foreach ($node->vars as $var) {
-                $target = self::getNarrowingTarget($var);
+                $target = NarrowingTarget::fromNode($var);
 
                 if ($target !== null) {
                     if (! $negated) {
@@ -511,65 +665,53 @@ class TypeNarrower
         return null;
     }
 
-    /**
-     * Resolve the narrowing target of an expression: a plain variable (`$x`) or
-     * a literal property/array-key path from one (`$x->a['b']`). Anything else
-     * (dynamic names/keys, method calls) yields null.
-     */
-    private static function getNarrowingTarget(Node $node): ?NarrowingTarget
-    {
-        if ($node instanceof Node\Expr\Variable && is_string($node->name)) {
-            return new NarrowingTarget($node->name);
-        }
+    private static function caseCanFallThroughToCase(
+        Node\Stmt\Switch_ $switchNode,
+        Node\Stmt\Case_ $fromCase,
+        Node\Stmt\Case_ $toCase,
+        Scope $scope,
+    ): bool {
 
-        $path = [];
-        $currentNode = $node;
+        $started = false;
 
-        while ($currentNode instanceof Node\Expr\PropertyFetch
-            || $currentNode instanceof Node\Expr\NullsafePropertyFetch
-            || $currentNode instanceof Node\Expr\ArrayDimFetch
-        ) {
-            if ($currentNode instanceof Node\Expr\PropertyFetch || $currentNode instanceof Node\Expr\NullsafePropertyFetch) {
-                if (! $currentNode->name instanceof Node\Identifier) {
-                    return null;
-                }
+        foreach ($switchNode->cases as $case) {
+            if ($case === $fromCase) {
+                $started = true;
+            }
 
-                $path[] = $currentNode->name->toString();
-                $currentNode = $currentNode->var;
-
+            if (! $started) {
                 continue;
             }
 
-            if ($currentNode->dim === null) {
-                return null;
+            if ($case === $toCase) {
+                return true;
             }
 
-            $key = self::literalArrayKey($currentNode->dim);
-
-            if ($key !== null) {
-                $path[] = $key;
-                $currentNode = $currentNode->var;
-
-                continue;
+            if (self::casePreventsFallthrough($case, $scope)) {
+                return false;
             }
-
-            return null;
         }
 
-        if ($currentNode instanceof Node\Expr\Variable && is_string($currentNode->name) && $path !== []) {
-            return new NarrowingTarget($currentNode->name, array_reverse($path));
-        }
-
-        return null;
+        return true;
     }
 
-    private static function literalArrayKey(Node $node): int|string|null
+    private static function casePreventsFallthrough(Node\Stmt\Case_ $case, Scope $scope): bool
     {
-        if ($node instanceof Node\Scalar\String_ || $node instanceof Node\Scalar\Int_) {
-            return $node->value;
+        $lastStatementKey = array_key_last($case->stmts);
+
+        if ($lastStatementKey === null) {
+            return false;
         }
 
-        return null;
+        $lastStatement = $case->stmts[$lastStatementKey];
+
+        return $lastStatement instanceof Node\Stmt\Return_
+            || $lastStatement instanceof Node\Stmt\Break_
+            || $lastStatement instanceof Node\Stmt\Continue_
+            || ($lastStatement instanceof Node\Stmt\Expression
+                && ($lastStatement->expr instanceof Node\Expr\Exit_
+                    || $lastStatement->expr instanceof Node\Expr\Throw_))
+            || new BranchBreakout($scope)->statementBreaksOut($lastStatement);
     }
 
     private static function isNull(Node $node): bool

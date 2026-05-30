@@ -11,6 +11,7 @@ use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
@@ -134,6 +135,7 @@ class Scope
                     'callable' => new CallableType,
                     'null' => new NullType,
                     'void' => new VoidType,
+                    'never' => new NeverType,
                     default => new UnknownType,
                 };
             }

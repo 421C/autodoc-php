@@ -10,6 +10,7 @@ use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
@@ -94,6 +95,10 @@ class TypeConverter
 
         if ($type instanceof NullType) {
             return 'null';
+        }
+
+        if ($type instanceof NeverType) {
+            return 'never';
         }
 
         if ($type instanceof ArrayType) {

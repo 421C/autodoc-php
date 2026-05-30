@@ -217,6 +217,10 @@ abstract class Type
 
     public function isSubTypeOf(Type $superType): bool
     {
+        if ($this instanceof NeverType) {
+            return true;
+        }
+
         if ($superType instanceof UnknownType) {
             return true;
         }
@@ -399,6 +403,24 @@ abstract class Type
     public function unwrapType(?Config $config = null): Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
+            // A `never` value can't occur, so a union drops it (`T | never = T`)
+            // while an intersection collapses to it (`T & never = never`).
+            if (is_a($this, IntersectionType::class)) {
+                if (array_any($this->types, fn (Type $type) => $type instanceof NeverType)) {
+                    return new NeverType;
+                }
+
+            } else if (array_any($this->types, fn (Type $type) => $type instanceof NeverType)) {
+                $this->types = array_values(array_filter(
+                    $this->types,
+                    fn (Type $type) => ! $type instanceof NeverType,
+                ));
+
+                if ($this->types === []) {
+                    return new NeverType;
+                }
+            }
+
             if (count($this->types) === 1) {
                 $type = reset($this->types);
 
@@ -461,6 +483,7 @@ abstract class Type
                 'array' => new ArrayType,
                 'object' => new ObjectType,
                 'null' => new NullType,
+                'never' => new NeverType,
                 default => new UnknownType,
             };
 

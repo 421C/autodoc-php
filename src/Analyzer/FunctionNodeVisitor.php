@@ -30,6 +30,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     /** @var Type[] */
     public array $returnTypes = [];
 
+    public bool $bodyBreaksOut = false;
+
     public bool $targetMethodExists = false;
 
     private bool $inTargetMethod = false;
@@ -79,6 +81,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope, $usedVarNames);
             }
 
+            $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts) !== null;
+
             return $node->stmts;
         }
 
@@ -87,6 +91,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope);
 
             $this->scope->className = ($this->parentScope ?? $this->scope)->className;
+            $this->bodyBreaksOut = new BranchBreakout($this->scope)->statementBreaksOut(new Node\Stmt\Expression($node->expr));
 
             $this->returnTypes = [
                 new UnresolvedParserNodeType(
@@ -100,6 +105,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Stmt\Function_) {
             $this->handleParameters($node->params, $node->getDocComment());
+            $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts) !== null;
 
             return $node->stmts;
         }
@@ -125,6 +131,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $this->targetMethodExists = true;
 
                 $this->handleParameters($node->params, $node->getDocComment());
+                $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts ?? []) !== null;
             }
 
             if (! $this->inTargetMethod) {
@@ -502,7 +509,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         $this->handleTernaryBranchEnter($node);
 
         if ($node instanceof Node\Stmt\If_) {
-            $condition = new PhpCondition($node);
+            $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = 0;
             $this->scope->eventLog->enterBranch(
@@ -557,7 +564,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             || $node instanceof Node\Stmt\Foreach_
             || $node instanceof Node\Stmt\TryCatch
         ) {
-            $condition = new PhpCondition($node);
+            $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = 0;
 
@@ -574,7 +581,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->scope->eventLog->enterBranch($condition->id, 0, $branchStartPos, $condition);
 
         } else if ($node instanceof Node\Stmt\Switch_) {
-            $condition = new PhpCondition($node);
+            $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = -1;
 
@@ -625,12 +632,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 );
 
                 if ($condition->node instanceof Node\Stmt\Switch_) {
+                    TypeNarrower::emitPreviousCaseNarrowingEvents($condition->node, $node, $this->scope, $condition);
                     TypeNarrower::emitCaseNarrowingEvents($condition->node, $node, $this->scope, $condition);
                 }
             }
 
         } else if ($node instanceof Node\Expr\Match_) {
-            $condition = new PhpCondition($node);
+            $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = -1;
 
@@ -653,6 +661,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 );
 
                 if ($condition->node instanceof Node\Expr\Match_) {
+                    TypeNarrower::emitPreviousMatchArmNarrowingEvents($condition->node, $node, $this->scope, $condition);
                     TypeNarrower::emitMatchArmNarrowingEvents($condition->node->cond, $node, $this->scope, $condition);
                 }
             }
@@ -661,7 +670,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             // Only full ternaries (`a ? b : c`) introduce a true/false branch pair.
             // Short ternaries (`a ?: c`) reuse the condition as the true value and
             // are left untracked.
-            $condition = new PhpCondition($node);
+            $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = 0;
         }

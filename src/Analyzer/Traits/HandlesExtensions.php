@@ -4,6 +4,8 @@ namespace AutoDoc\Analyzer\Traits;
 
 use AutoDoc\Analyzer\FuncCallContext;
 use AutoDoc\Analyzer\MethodCallContext;
+use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\Analyzer\NarrowingTarget;
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Analyzer\StaticCallContext;
@@ -56,6 +58,42 @@ trait HandlesExtensions
             getRequestType: fn ($ext) => $ext->getRequestType($context),
             getReturnType: fn ($ext) => $ext->getReturnType($context),
         );
+    }
+
+    /**
+     * @return list<array{NarrowingTarget, Narrowing}>
+     */
+    public function getNarrowingsFromFuncCallExtensions(FuncCallContext $context, bool $negated): array
+    {
+        foreach ($this->getExtensionsOfType(FuncCallExtension::class) as $extensionClass) {
+            (new $extensionClass)->narrowTypeFromCondition($context, $negated);
+        }
+
+        return $context->getTypeNarrowings();
+    }
+
+    /**
+     * @return list<array{NarrowingTarget, Narrowing}>
+     */
+    public function getNarrowingsFromMethodCallExtensions(MethodCallContext $context, bool $negated): array
+    {
+        foreach ($this->getExtensionsOfType(MethodCallExtension::class) as $extensionClass) {
+            (new $extensionClass)->narrowTypeFromCondition($context, $negated);
+        }
+
+        return $context->getTypeNarrowings();
+    }
+
+    /**
+     * @return list<array{NarrowingTarget, Narrowing}>
+     */
+    public function getNarrowingsFromStaticCallExtensions(StaticCallContext $context, bool $negated): array
+    {
+        foreach ($this->getExtensionsOfType(StaticCallExtension::class) as $extensionClass) {
+            (new $extensionClass)->narrowTypeFromCondition($context, $negated);
+        }
+
+        return $context->getTypeNarrowings();
     }
 
     /**

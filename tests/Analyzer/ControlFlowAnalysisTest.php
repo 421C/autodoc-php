@@ -577,6 +577,255 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function looseEqualityNarrowsFiniteUnionToLooselyMatchingLiteral(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => 1,
+                1 => '1',
+                default => 'two',
+            };
+
+            // Loose `==` narrows by PHP's loose comparison rules, so `1` and `'1'`
+            // both match `'1'` while `'two'` does not.
+            if ($value == '1') {
+                return $value;
+            }
+
+            return 'fallback';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+                [
+                    'enum' => [
+                        '1',
+                        'fallback',
+                    ],
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function looseInequalityRemovesLooselyMatchingLiteralsFromFiniteUnion(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => 1,
+                1 => '1',
+                default => 'two',
+            };
+
+            // `!= '1'` keeps only values that do not loosely match `'1'`, i.e. `'two'`.
+            if ($value != '1') {
+                return $value;
+            }
+
+            return 'matched';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'two',
+                'matched',
+            ],
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function impossibleConditionNarrowsVariableToNever(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? 5 : null;
+
+            // $value is 5|null, so the is_string branch is unreachable:
+            // $value narrows to `never`, and `return $value` contributes nothing
+            // to the result type.
+            if (is_string($value)) { // @phpstan-ignore function.impossibleType
+                return $value;
+            }
+
+            return 'fallback';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'fallback',
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nativeNeverReturnTypeResolvesToNever(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): never {
+            throw new \RuntimeException('abort');
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function phpDocNeverReturnTypeResolvesToNever(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            /**
+             * @return never
+             */
+            function (): mixed {
+                throw new \RuntimeException('abort');
+            },
+            usePhpDocIfAvailable: true,
+        );
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function analyzedNeverReturnTypeResolvesToNever(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            throw new \RuntimeException('abort');
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function neverReturnTypeIsAbsorbedByOtherReturnTypes(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            if (rand(0, 1)) {
+                return 'ok';
+            }
+
+            return \AutoDoc\Tests\Analyzer\controlFlowAnalysisAbort();
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'ok',
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function neverExpressionIsAbsorbedFromTernaryReturn(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            return rand(0, 1)
+                ? 'ok'
+                : \AutoDoc\Tests\Analyzer\controlFlowAnalysisAbort();
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'ok',
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function neverReturningCallNarrowsVariableAfterTheGuard(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? new SimpleClass : null;
+
+            if ($value === null) {
+                \AutoDoc\Tests\Analyzer\controlFlowAnalysisAbort();
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function strictInArrayNarrowsVariableToLiteralValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $type = match (rand(0, 2)) {
+                0 => 'json',
+                1 => 'xml',
+                default => 'yaml',
+            };
+
+            if (in_array($type, ['json', 'xml'], true)) {
+                return $type;
+            }
+
+            return 'fallback';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'json',
+                'xml',
+                'fallback',
+            ],
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nonStrictInArrayNarrowsVariableToLooselyMatchingLiteralValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => 1,
+                1 => '1',
+                default => 'two',
+            };
+
+            if (in_array($value, ['1'])) {
+                return $value;
+            }
+
+            return 'fallback';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+                [
+                    'enum' => [
+                        '1',
+                        'fallback',
+                    ],
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function switchCaseNarrowsTheSubjectToTheCaseValue(): void
     {
         $schema = $this->getClosureReturnSchema(function (string $type): mixed {
@@ -642,6 +891,53 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function switchDefaultCaseRemovesPreviousLiteralCaseValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $type = rand(0, 1) ? 'json' : 'xml';
+
+            switch ($type) {
+                case 'json':
+                    return 'matched';
+
+                default:
+                    return $type;
+            }
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'matched',
+                'xml',
+            ],
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function neverCallPreventsSwitchCaseFallthroughNarrowing(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $type = rand(0, 1) ? 'json' : 'xml';
+
+            switch ($type) {
+                case 'json':
+                    \AutoDoc\Tests\Analyzer\controlFlowAnalysisAbort();
+
+                default:
+                    // The `json` case cannot fall through because the call never
+                    // returns, so the default branch can only see `xml`.
+                    return $type;
+            }
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'xml',
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function matchArmNarrowsTheSubjectToTheArmValue(): void
     {
         $schema = $this->getClosureReturnSchema(function (string $type): mixed {
@@ -666,6 +962,29 @@ final class ControlFlowAnalysisTest extends TestCase
                     'type' => 'integer',
                 ],
             ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function matchDefaultArmRemovesPreviousLiteralArmValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $type = rand(0, 1) ? 'json' : 'xml';
+
+            // The default arm can only run when `$type` did not match 'json', so
+            // it should keep the surviving finite value, not the whole union.
+            return match ($type) {
+                'json' => 'matched',
+                default => $type,
+            };
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'matched',
+                'xml',
+            ],
+            'type' => 'string',
         ], $schema, 'closure', 'return');
     }
 
@@ -850,6 +1169,44 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function matchTrueDefaultArmUsesNegatedPreviousConditions(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? new SimpleClass : new Rocket;
+
+            // The default arm runs only when the Rocket arm did not match, so
+            // `$value` there must be narrowed to SimpleClass.
+            return match (true) {
+                $value instanceof Rocket => 'rocket',
+                default => $value,
+            };
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'rocket',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function notEmptyGuardNarrowsVariableAfterTheGuard(): void
     {
         $schema = $this->getClosureReturnSchema(function (): mixed {
@@ -859,6 +1216,45 @@ final class ControlFlowAnalysisTest extends TestCase
             // that case and after it $value must be the non-null SimpleClass —
             // `null` must not leak into the response.
             if (empty($value)) {
+                return 'missing';
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function truthyGuardNarrowsVariableAfterTheGuard(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? new SimpleClass : null;
+
+            // A falsey guard returns before the final read, so after it the value
+            // is known to be non-null for the same reason as !empty($value).
+            if (! $value) {
                 return 'missing';
             }
 
@@ -1012,7 +1408,7 @@ final class ControlFlowAnalysisTest extends TestCase
     /**
      * @return array<string, mixed>
      */
-    private function getClosureReturnSchema(\Closure $closure): array
+    private function getClosureReturnSchema(\Closure $closure, bool $usePhpDocIfAvailable = false): array
     {
         $config = self::loadConfig();
         $config->data['openapi']['show_values_for_scalar_types'] = true;
@@ -1021,8 +1417,13 @@ final class ControlFlowAnalysisTest extends TestCase
         $type = (new PhpCallable(
             scope: $scope,
             reflection: new ReflectionFunction($closure),
-        ))->getReturnType(usePhpDocIfAvailable: false);
+        ))->getReturnType(usePhpDocIfAvailable: $usePhpDocIfAvailable);
 
         return $type->toSchema($config);
     }
+}
+
+function controlFlowAnalysisAbort(): never
+{
+    throw new \RuntimeException('abort');
 }

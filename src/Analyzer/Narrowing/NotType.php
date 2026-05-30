@@ -10,13 +10,26 @@ use AutoDoc\DataTypes\UnionType;
 
 final class NotType extends Narrowing
 {
+    use FiltersLooseScalarValues;
+
     public function __construct(
         private readonly Type $type,
+        private readonly bool $strict = true,
     ) {}
 
     public function apply(Type $base, Scope $scope): Type
     {
         $excludedType = $this->type->unwrapType($scope->config);
+
+        if (! $this->strict) {
+            $excludedValues = $this->looseComparableValues($excludedType);
+
+            if ($excludedValues === null) {
+                return $base;
+            }
+
+            return $this->filterLooseScalarValues($base, $excludedValues, keepMatching: false, scope: $scope);
+        }
 
         if ($this->hasSpecificValues($excludedType)) {
             return $this->removeSpecificTypeOrNull($base, $excludedType, $scope) ?? $base;

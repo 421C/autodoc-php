@@ -4,6 +4,11 @@ namespace AutoDoc\Extensions\BuiltIn;
 
 use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\FuncCallContext;
+use AutoDoc\Analyzer\Narrowing\AllOf;
+use AutoDoc\Analyzer\Narrowing\AnyOf;
+use AutoDoc\Analyzer\Narrowing\IsType;
+use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\Analyzer\Narrowing\NotType;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
@@ -48,6 +53,15 @@ class ArrayFuncCall extends FuncCallExtension
         };
     }
 
+    public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void
+    {
+        if ($context->functionName !== 'in_array') {
+            return;
+        }
+
+        $this->handleInArrayNarrowing($context, $negated);
+    }
+
 
     private function handleCompact(FuncCallContext $call): Type
     {
@@ -80,6 +94,105 @@ class ArrayFuncCall extends FuncCallExtension
         }
 
         return new ArrayType(shape: $varTypes);
+    }
+
+
+    private function handleInArrayNarrowing(FuncCallContext $call, bool $negated): void
+    {
+        $needle = $call->node->args[0] ?? null;
+        $haystack = $call->node->args[1] ?? null;
+
+        if (! $needle instanceof Node\Arg || ! $haystack instanceof Node\Arg) {
+            return;
+        }
+
+        $strict = false;
+        $strictArg = $call->node->args[2] ?? null;
+
+        if ($strictArg instanceof Node\Arg) {
+            if (! $strictArg->value instanceof Node\Expr\ConstFetch) {
+                return;
+            }
+
+            $strictValue = strtolower($strictArg->value->name->toString());
+
+            if (! in_array($strictValue, ['true', 'false'], true)) {
+                return;
+            }
+
+            $strict = $strictValue === 'true';
+        }
+
+        $literalTypes = $this->getLiteralArrayTypes($haystack->value, $call->scope);
+
+        if ($literalTypes === []) {
+            return;
+        }
+
+        $narrowing = $this->buildInArrayNarrowing($literalTypes, $strict, $negated);
+
+        if ($needle->value instanceof Node\Expr\Variable && is_string($needle->value->name)) {
+            $call->narrowVarType($needle->value->name, $narrowing);
+
+            return;
+        }
+
+        $call->narrowExpressionType($needle->value, $narrowing);
+    }
+
+    /**
+     * Build the narrowing for `in_array($needle, [literals], $strict)`: the value
+     * is one of the candidates, i.e. an OR over them (`AnyOf`). For `!in_array(...)`
+     * it's the negation — none of them — i.e. an AND of the per-candidate
+     * negations (`AllOf`). Each candidate narrows by strict identity or loose
+     * comparison depending on `$strict`.
+     *
+     * @param non-empty-list<Type> $literalTypes
+     */
+    private function buildInArrayNarrowing(array $literalTypes, bool $strict, bool $negated): Narrowing
+    {
+        $narrowings = array_map(
+            fn (Type $type): Narrowing => $negated ? new NotType($type, $strict) : new IsType($type, $strict),
+            $literalTypes,
+        );
+
+        if (count($narrowings) === 1) {
+            return $narrowings[0];
+        }
+
+        return $negated ? new AllOf($narrowings) : new AnyOf($narrowings);
+    }
+
+
+    /**
+     * @return list<Type>
+     */
+    private function getLiteralArrayTypes(Node $node, Scope $scope): array
+    {
+        if (! $node instanceof Node\Expr\Array_) {
+            return [];
+        }
+
+        $types = [];
+
+        foreach ($node->items as $item) {
+            if (! $this->isLiteralScalarNode($item->value)) {
+                return [];
+            }
+
+            $types[] = $scope->resolveType($item->value);
+        }
+
+        return $types;
+    }
+
+
+    private function isLiteralScalarNode(Node $node): bool
+    {
+        return $node instanceof Node\Scalar\String_
+            || $node instanceof Node\Scalar\Int_
+            || $node instanceof Node\Scalar\Float_
+            || ($node instanceof Node\Expr\ConstFetch && in_array($node->name->toString(), ['true', 'false'], true));
     }
 
 

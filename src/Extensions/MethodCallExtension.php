@@ -17,4 +17,6 @@ abstract class MethodCallExtension
     {
         return null;
     }
+
+    public function narrowTypeFromCondition(MethodCallContext $context, bool $negated): void {}
 }

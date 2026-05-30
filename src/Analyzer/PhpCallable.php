@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -269,6 +270,9 @@ class PhpCallable
         if ($analyzeReturnValue && $methodNodeVisitor->returnTypes) {
             $analyzedReturnType = new UnionType($methodNodeVisitor->returnTypes)->unwrapType($this->scope->config);
 
+        } else if ($analyzeReturnValue && $methodNodeVisitor->bodyBreaksOut) {
+            $analyzedReturnType = new NeverType;
+
         } else if ($analyzeReturnValue && ! $methodNodeVisitor->targetMethodExists) {
             $methodFoundInTrait = false;
 
@@ -337,6 +341,9 @@ class PhpCallable
 
         if ($analyzeReturnValue && $nodeVisitor->returnTypes) {
             $analyzedReturnType = new UnionType($nodeVisitor->returnTypes)->unwrapType($this->scope->config);
+
+        } else if ($analyzeReturnValue && $nodeVisitor->bodyBreaksOut) {
+            $analyzedReturnType = new NeverType;
         }
 
         return [
@@ -724,7 +731,7 @@ class PhpCallable
         }
 
         // Create responses from analyzed return type
-        if (! ($responseBodyType instanceof UnknownType)) {
+        if (! ($responseBodyType instanceof UnknownType) && ! ($responseBodyType instanceof NeverType)) {
             $responseTypes = $responseBodyType instanceof UnionType
                 ? $responseBodyType->types
                 : [$responseBodyType];

@@ -17,4 +17,6 @@ abstract class StaticCallExtension
     {
         return null;
     }
+
+    public function narrowTypeFromCondition(StaticCallContext $context, bool $negated): void {}
 }
