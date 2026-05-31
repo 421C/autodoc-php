@@ -6,6 +6,7 @@ use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
 use AutoDoc\Analyzer\Narrowing\IsFalsey;
 use AutoDoc\Analyzer\Narrowing\IsInstanceOf;
+use AutoDoc\Analyzer\Narrowing\IsPresent;
 use AutoDoc\Analyzer\Narrowing\IsTruthy;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
@@ -64,7 +65,7 @@ class TypeNarrower
     }
 
     /**
-     * Narrow a `switch` subject variable within a case body (e.g.
+     * Narrow a `switch` subject target within a case body (e.g.
      * `switch ($x) { case 'a': ... }` narrows $x to 'a'). For fall-through cases
      * (`case 'a': case 'b': ...`) the subject is narrowed to the union of the case
      * values that reach the body. Narrowing is skipped if the group contains a
@@ -78,11 +79,11 @@ class TypeNarrower
         PhpCondition $condition,
     ): void {
 
-        $varName = self::getVariableName($switchNode->cond);
+        $subjectTarget = NarrowingTarget::fromNode($switchNode->cond);
 
         // Only the case carrying the body narrows; empty fall-through cases are
         // folded into it below.
-        if ($varName === null || $caseNode->stmts === []) {
+        if ($subjectTarget === null || $caseNode->stmts === []) {
             return;
         }
 
@@ -125,7 +126,7 @@ class TypeNarrower
 
         $narrowing = count($narrowings) === 1 ? $narrowings[0] : new AnyOf($narrowings);
 
-        $scope->eventLog->narrow($varName, $narrowing, $condition, $filePos);
+        self::emitTarget($scope, $subjectTarget, $narrowing, $condition, $filePos);
     }
 
     /**
@@ -174,7 +175,7 @@ class TypeNarrower
     }
 
     /**
-     * Narrow a `match` subject variable to a match arm's condition value(s) within
+     * Narrow a `match` subject target to a match arm's condition value(s) within
      * that arm body (e.g. `match ($x) { 'a', 'b' => ... }` narrows $x to 'a'|'b').
      * Skipped for the `default` arm and arms with non-literal conditions.
      *
@@ -211,9 +212,9 @@ class TypeNarrower
             return;
         }
 
-        $varName = self::getVariableName($subjectNode);
+        $subjectTarget = NarrowingTarget::fromNode($subjectNode);
 
-        if ($varName === null) {
+        if ($subjectTarget === null) {
             return;
         }
 
@@ -236,7 +237,7 @@ class TypeNarrower
 
         $narrowing = count($narrowings) === 1 ? $narrowings[0] : new AnyOf($narrowings);
 
-        $scope->eventLog->narrow($varName, $narrowing, $condition, $filePos);
+        self::emitTarget($scope, $subjectTarget, $narrowing, $condition, $filePos);
     }
 
     /**
@@ -583,20 +584,26 @@ class TypeNarrower
         }
 
         // empty($x) — the false branch (`!empty($x)`, or the code after an
-        // `if (empty($x)) { return; }` guard) guarantees non-null. The true branch
-        // covers every falsy value (null|false|0|''|'0'|[]), which can't be reduced
-        // to a single removable type, so it isn't narrowed.
+        // `if (empty($x)) { return; }` guard) guarantees truthy values. Literal
+        // attribute paths also become present, since empty() returns true for
+        // missing attributes. The true branch covers every falsy value and isn't
+        // narrowed.
         if ($node instanceof Node\Expr\Empty_) {
             $target = NarrowingTarget::fromNode($node->expr);
 
             if ($target !== null && $negated) {
-                return [[$target, new NotNull]];
+                $narrowing = $target->isAttribute()
+                    ? new AllOf([new IsTruthy, new IsPresent])
+                    : new IsTruthy;
+
+                return [[$target, $narrowing]];
             }
 
             return [];
         }
 
-        // isset($x) — narrows to non-null
+        // isset($x) — the true side guarantees the target is present and non-null,
+        // so an attribute path it targets becomes required (presence narrowing).
         if ($node instanceof Node\Expr\Isset_) {
             $narrowings = [];
 
@@ -605,7 +612,7 @@ class TypeNarrower
 
                 if ($target !== null) {
                     if (! $negated) {
-                        $narrowings[] = [$target, new NotNull];
+                        $narrowings[] = [$target, new AllOf([new NotNull, new IsPresent])];
 
                     } else {
                         $narrowings[] = [$target, new IsType(new NullType)];
@@ -683,15 +690,6 @@ class TypeNarrower
         }
 
         return $combined;
-    }
-
-    private static function getVariableName(Node $node): ?string
-    {
-        if ($node instanceof Node\Expr\Variable && is_string($node->name)) {
-            return $node->name;
-        }
-
-        return null;
     }
 
     private static function caseCanFallThroughToCase(

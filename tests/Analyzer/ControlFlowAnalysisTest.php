@@ -4,6 +4,7 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\Rocket;
@@ -1200,6 +1201,30 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function switchCaseNarrowsObjectPropertySubjectToTheCaseValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $box = new GenericClass(rand(0, 1) ? 'json' : 'xml');
+
+            switch ($box->data) {
+                case 'json':
+                    return $box->data;
+
+                default:
+                    return 'fallback';
+            }
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'json',
+                'fallback',
+            ],
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function fallThroughSwitchCasesNarrowSubjectToTheUnionOfValues(): void
     {
         $schema = $this->getClosureReturnSchema(function (string $type): mixed {
@@ -1303,6 +1328,27 @@ final class ControlFlowAnalysisTest extends TestCase
                     'type' => 'integer',
                 ],
             ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function matchArmNarrowsObjectPropertySubjectToTheArmValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $box = new GenericClass(rand(0, 1) ? 'json' : 'xml');
+
+            return match ($box->data) {
+                'json' => $box->data,
+                default => 'fallback',
+            };
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'json',
+                'fallback',
+            ],
+            'type' => 'string',
         ], $schema, 'closure', 'return');
     }
 
@@ -1588,6 +1634,50 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function notEmptyGuardNarrowsOptionalArrayElementToPresentTruthyValues(): void
+    {
+        $closure =
+            /**
+             * @param array{code?: null|0|''|'0'|1|'ready', tag: 'payload'} $data
+             */
+            function (array $data): mixed {
+                if (empty($data['code'])) {
+                    exit;
+                }
+
+                return $data;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'code' => [
+                    'anyOf' => [
+                        [
+                            'const' => 1,
+                            'type' => 'integer',
+                        ],
+                        [
+                            'const' => 'ready',
+                            'type' => 'string',
+                        ],
+                    ],
+                ],
+                'tag' => [
+                    'const' => 'payload',
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'code',
+                'tag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function truthyGuardNarrowsVariableAfterTheGuard(): void
     {
         $schema = $this->getClosureReturnSchema(function (): mixed {
@@ -1647,6 +1737,43 @@ final class ControlFlowAnalysisTest extends TestCase
                 ],
                 [
                     'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function instanceofGuardNarrowsGenericObjectPropertyAfterTheGuard(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $box = new GenericClass(rand(0, 1) ? new SimpleClass : null);
+
+            if (! ($box->data instanceof SimpleClass)) {
+                return 'missing';
+            }
+
+            return $box->data;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
                 ],
             ],
         ], $schema, 'closure', 'return');
@@ -1751,6 +1878,81 @@ final class ControlFlowAnalysisTest extends TestCase
             ],
             'required' => [
                 'b',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function presenceCheckNarrowsOptionalKeyToRequired(): void
+    {
+        $closure =
+            /**
+             * @param array{id: int, email?: string} $data
+             */
+            function (array $data): mixed {
+                // `email` is optional, but the guard guarantees it is present after
+                // it, so returning the array must mark `email` required.
+                if (! isset($data['email'])) {
+                    exit;
+                }
+
+                return $data;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'type' => 'integer',
+                ],
+                'email' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'id',
+                'email',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayKeyExistsNarrowsOptionalKeyToRequiredWithoutRemovingNull(): void
+    {
+        $closure =
+            /**
+             * @param array{id: int, email?: string|null} $data
+             */
+            function (array $data): mixed {
+                // `array_key_exists` proves the key is present, but unlike
+                // `isset`, it does not prove the value is non-null.
+                if (! array_key_exists('email', $data)) {
+                    exit;
+                }
+
+                return $data;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'type' => 'integer',
+                ],
+                'email' => [
+                    'type' => [
+                        'string',
+                        'null',
+                    ],
+                ],
+            ],
+            'required' => [
+                'id',
+                'email',
             ],
         ], $schema, 'closure', 'return');
     }
@@ -1920,6 +2122,36 @@ final class ControlFlowAnalysisTest extends TestCase
                 ],
                 [
                     'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function mutatingNarrowedNestedObjectPropertyDiscardsPropertyNarrowing(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (NestedPropertyRoot $a): mixed {
+            if ($a->b->c === null) {
+                return 'missing';
+            }
+
+            $a->b->c = rand(0, 1) ? 5 : null;
+
+            return $a->b->c;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'missing',
+                    'type' => 'string',
+                ],
+                [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+                [
+                    'type' => 'null',
                 ],
             ],
         ], $schema, 'closure', 'return');

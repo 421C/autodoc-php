@@ -6,6 +6,7 @@ use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
+use AutoDoc\Analyzer\Narrowing\IsPresent;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotType;
@@ -55,11 +56,12 @@ class ArrayFuncCall extends FuncCallExtension
 
     public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void
     {
-        if ($context->functionName !== 'in_array') {
-            return;
-        }
+        if ($context->functionName === 'in_array') {
+            $this->handleInArrayNarrowing($context, $negated);
 
-        $this->handleInArrayNarrowing($context, $negated);
+        } else if ($context->functionName === 'array_key_exists') {
+            $this->handleArrayKeyExistsNarrowing($context, $negated);
+        }
     }
 
 
@@ -139,6 +141,45 @@ class ArrayFuncCall extends FuncCallExtension
 
         $call->narrowExpressionType($needle->value, $narrowing);
     }
+
+
+    private function handleArrayKeyExistsNarrowing(FuncCallContext $call, bool $negated): void
+    {
+        if ($negated) {
+            return;
+        }
+
+        $key = $call->node->args[0] ?? null;
+        $array = $call->node->args[1] ?? null;
+
+        if (! $key instanceof Node\Arg || ! $array instanceof Node\Arg) {
+            return;
+        }
+
+        $keyNode = $this->getLiteralArrayKeyNode($key->value, $call->scope);
+
+        if ($keyNode === null) {
+            return;
+        }
+
+        $call->narrowExpressionType(
+            new Node\Expr\ArrayDimFetch($array->value, $keyNode),
+            new IsPresent,
+        );
+    }
+
+
+    private function getLiteralArrayKeyNode(Node $node, Scope $scope): ?Node\Expr
+    {
+        $key = $scope->getRawValueFromNode($node);
+
+        return match (true) {
+            is_int($key) => new Node\Scalar\Int_($key),
+            is_string($key) => new Node\Scalar\String_($key),
+            default => null,
+        };
+    }
+
 
     /**
      * Build the narrowing for `in_array($needle, [literals], $strict)`: the value

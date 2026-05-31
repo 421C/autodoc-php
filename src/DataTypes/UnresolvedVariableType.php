@@ -168,13 +168,7 @@ class UnresolvedVariableType extends UnresolvedType
             }
 
             $base = clone $base;
-            // Keep the original `required` flag so the key stays required in the shape.
-            $wasRequired = $propertyType->required;
-            $narrowed = $path === []
-                ? $narrowing->apply($propertyType, $this->scope)
-                : $this->applyAttributeNarrowing($propertyType, $path, $narrowing);
-            $narrowed->required = $wasRequired;
-            $base->properties[(string) $key] = $narrowed;
+            $base->properties[(string) $key] = $this->narrowAttributeValue($propertyType, $path, $narrowing);
 
             return $base;
         }
@@ -187,18 +181,37 @@ class UnresolvedVariableType extends UnresolvedType
             }
 
             $base = clone $base;
-            $wasRequired = $elementType->required;
-            $elementType = $elementType->unwrapType($this->scope->config);
-            $narrowed = $path === []
-                ? $narrowing->apply($elementType, $this->scope)
-                : $this->applyAttributeNarrowing($elementType, $path, $narrowing);
-            $narrowed->required = $wasRequired;
-            $base->shape[$key] = $narrowed;
+            $base->shape[$key] = $this->narrowAttributeValue($elementType->unwrapType($this->scope->config), $path, $narrowing);
 
             return $base;
         }
 
         return $base;
+    }
+
+
+    /**
+     * Narrow a single attribute value (property or shape element), recursing into
+     * the remaining path. Narrowing only refines the value's type, so the original
+     * `required` flag is kept — unless the narrowing asserts presence at the leaf
+     * (e.g. `isset($arr['key'])`), which makes the key required.
+     *
+     * @param list<int|string> $path
+     */
+    private function narrowAttributeValue(Type $current, array $path, Narrowing $narrowing): Type
+    {
+        $wasRequired = $current->required;
+
+        if ($path === []) {
+            $narrowed = $narrowing->apply($current, $this->scope);
+            $narrowed->required = $narrowing->assertsPresence() ? true : $wasRequired;
+
+        } else {
+            $narrowed = $this->applyAttributeNarrowing($current, $path, $narrowing);
+            $narrowed->required = $wasRequired;
+        }
+
+        return $narrowed;
     }
 
 
@@ -334,8 +347,11 @@ class UnresolvedVariableType extends UnresolvedType
                 $keyString = (string) $key;
 
                 if (isset($potentialTypes[$i]->properties[$keyString])) {
-                    if ($isCertain && (!$attributeType instanceof ArrayType && !$attributeType instanceof ObjectType)) {
-                        $potentialTypes[$i]->properties[$keyString] = $attributeType;
+                    if ($isCertain) {
+                        $potentialTypes[$i]->properties[$keyString] = $this->applyCertainAttributeMutation(
+                            $potentialTypes[$i]->properties[$keyString],
+                            $attributeType,
+                        );
 
                     } else {
                         $potentialTypes[$i]->properties[$keyString] = new UnionType([
@@ -354,8 +370,11 @@ class UnresolvedVariableType extends UnresolvedType
                 $potentialTypes[$i] = clone $potentialTypes[$i];
 
                 if (isset($potentialTypes[$i]->shape[$key])) {
-                    if ($isCertain && (!$attributeType instanceof ArrayType && !$attributeType instanceof ObjectType)) {
-                        $potentialTypes[$i]->shape[$key] = $attributeType;
+                    if ($isCertain) {
+                        $potentialTypes[$i]->shape[$key] = $this->applyCertainAttributeMutation(
+                            $potentialTypes[$i]->shape[$key],
+                            $attributeType,
+                        );
 
                     } else {
                         $potentialTypes[$i]->shape[$key] = new UnionType([
@@ -397,11 +416,103 @@ class UnresolvedVariableType extends UnresolvedType
     }
 
 
+    private function applyCertainAttributeMutation(Type $currentType, Type $attributeType): Type
+    {
+        if (! $attributeType instanceof ArrayType && ! $attributeType instanceof ObjectType) {
+            return $attributeType;
+        }
+
+        $currentType = $currentType->unwrapType($this->scope->config);
+
+        if ($currentType instanceof UnionType) {
+            $types = [];
+
+            foreach ($currentType->types as $type) {
+                $type = $type->unwrapType($this->scope->config);
+
+                if ($type instanceof ArrayType || $type instanceof ObjectType || $type instanceof UnionType) {
+                    $types[] = $this->applyCertainAttributeMutation($type, $attributeType);
+                }
+            }
+
+            if ($types !== []) {
+                return new UnionType($types)->unwrapType($this->scope->config);
+            }
+        }
+
+        $patch = $this->getPatchAttributes($attributeType);
+
+        if ($patch === []) {
+            return new UnionType([$currentType, $attributeType])->unwrapType($this->scope->config);
+        }
+
+        if ($currentType instanceof ObjectType) {
+            $currentType = clone $currentType;
+
+            foreach ($patch as $key => $patchType) {
+                $keyString = (string) $key;
+
+                if (isset($currentType->properties[$keyString])) {
+                    $currentType->properties[$keyString] = $this->applyCertainAttributeMutation(
+                        $currentType->properties[$keyString],
+                        $patchType,
+                    );
+
+                } else {
+                    $currentType->properties[$keyString] = $patchType;
+                }
+            }
+
+            $currentType->required = $currentType->required || $attributeType->required;
+
+            return $currentType;
+        }
+
+        if ($currentType instanceof ArrayType) {
+            $currentType = clone $currentType;
+
+            foreach ($patch as $key => $patchType) {
+                if (isset($currentType->shape[$key])) {
+                    $currentType->shape[$key] = $this->applyCertainAttributeMutation(
+                        $currentType->shape[$key],
+                        $patchType,
+                    );
+
+                } else {
+                    $currentType->shape[$key] = $patchType;
+                }
+            }
+
+            $currentType->required = $currentType->required || $attributeType->required;
+
+            return $currentType;
+        }
+
+        return $attributeType;
+    }
+
+
+    /**
+     * @return array<int|string, Type>
+     */
+    private function getPatchAttributes(ArrayType|ObjectType $type): array
+    {
+        if ($type instanceof ObjectType) {
+            return $type->properties;
+        }
+
+        return $type->shape;
+    }
+
+
     private function setNestedAttributeAsRequired(Type $type): Type
     {
         if ($type instanceof ArrayType) {
             $type->shape = array_map($this->setNestedAttributeAsRequired(...), $type->shape);
             $type->itemType?->setRequired(true);
+
+        } else if ($type instanceof ObjectType) {
+            $type->properties = array_map($this->setNestedAttributeAsRequired(...), $type->properties);
         }
 
         return $type->setRequired(true);
