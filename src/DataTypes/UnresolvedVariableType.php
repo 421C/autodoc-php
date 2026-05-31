@@ -161,32 +161,39 @@ class UnresolvedVariableType extends UnresolvedType
         $key = array_shift($path);
 
         if ($base instanceof ObjectType) {
-            $current = $this->resolveObjectPropertyType($base, $key);
+            $propertyType = $this->resolveObjectPropertyType($base, $key);
 
-            if ($current === null) {
+            if ($propertyType === null) {
                 return $base;
             }
 
             $base = clone $base;
-            $base->properties[(string) $key] = $path === []
-                ? $narrowing->apply($current, $this->scope)
-                : $this->applyAttributeNarrowing($current, $path, $narrowing);
+            // Keep the original `required` flag so the key stays required in the shape.
+            $wasRequired = $propertyType->required;
+            $narrowed = $path === []
+                ? $narrowing->apply($propertyType, $this->scope)
+                : $this->applyAttributeNarrowing($propertyType, $path, $narrowing);
+            $narrowed->required = $wasRequired;
+            $base->properties[(string) $key] = $narrowed;
 
             return $base;
         }
 
         if ($base instanceof ArrayType) {
-            $current = $base->shape[$key] ?? $base->itemType;
+            $elementType = $base->shape[$key] ?? $base->itemType;
 
-            if ($current === null) {
+            if ($elementType === null) {
                 return $base;
             }
 
             $base = clone $base;
-            $current = $current->unwrapType($this->scope->config);
-            $base->shape[$key] = $path === []
-                ? $narrowing->apply($current, $this->scope)
-                : $this->applyAttributeNarrowing($current, $path, $narrowing);
+            $wasRequired = $elementType->required;
+            $elementType = $elementType->unwrapType($this->scope->config);
+            $narrowed = $path === []
+                ? $narrowing->apply($elementType, $this->scope)
+                : $this->applyAttributeNarrowing($elementType, $path, $narrowing);
+            $narrowed->required = $wasRequired;
+            $base->shape[$key] = $narrowed;
 
             return $base;
         }

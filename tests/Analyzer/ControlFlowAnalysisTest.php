@@ -1692,6 +1692,70 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function narrowingArrayElementKeepsTheKeyRequired(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (SimpleClass $obj): mixed {
+            $data = ['value' => $obj->n]; // value: int|null, present and required
+
+            // The guard breaks out when `$data['value']` is null, narrowing the
+            // element to the non-null int. The key was present in the original
+            // shape, so returning the whole array must keep `value` required.
+            if ($data['value'] === null) {
+                exit;
+            }
+
+            return $data;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'value' => [
+                    'type' => 'integer',
+                ],
+            ],
+            'required' => [
+                'value',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function narrowingNestedPropertyKeepsTheKeysRequiredWhenReturningTheRoot(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (NestedPropertyRoot $a): mixed {
+            // The guard breaks out when `$a->b->c` is falsey, narrowing the nested
+            // property to a non-null int. Returning the whole root must keep both
+            // the intermediate `b` and the leaf `c` required.
+            if (! $a->b->c) {
+                exit;
+            }
+
+            return $a;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'b' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'c' => [
+                            'type' => 'integer',
+                        ],
+                    ],
+                    'required' => [
+                        'c',
+                    ],
+                ],
+            ],
+            'required' => [
+                'b',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function falseyGuardNarrowsArrayElementWhenReturningTheArray(): void
     {
         $schema = $this->getClosureReturnSchema(function (): mixed {
@@ -1745,6 +1809,7 @@ final class ControlFlowAnalysisTest extends TestCase
                 ],
             ],
             'required' => [
+                'code',
                 'tag',
             ],
         ], $schema, 'closure', 'return');
