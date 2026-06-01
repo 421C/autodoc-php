@@ -96,6 +96,62 @@ class PhpCallable
         return $returnType->unwrapType($this->scope->config);
     }
 
+    public function narrowArgumentTypeFromTruthyReturn(int $argumentIndex, Type $argumentType, ?Node $callerNode = null): ?Type
+    {
+        if (! $this->node) {
+            return null;
+        }
+
+        $returnExpression = $this->getPredicateReturnExpression();
+
+        if ($returnExpression === null) {
+            return null;
+        }
+
+        $param = $this->node->params[$argumentIndex] ?? null;
+
+        if (! $param instanceof Node\Param
+            || ! ($param->var instanceof Node\Expr\Variable)
+            || ! is_string($param->var->name)
+        ) {
+            return null;
+        }
+
+        $paramName = $param->var->name;
+        $functionScope = $this->scope->createChildScope();
+        $functionScope->callerNode = $callerNode;
+        $functionScope->assignVariable($param->var, $argumentType);
+
+        return TypeNarrower::narrowTypeForTarget(
+            conditionNode: $returnExpression,
+            scope: $functionScope,
+            target: new NarrowingTarget($paramName),
+            baseType: $argumentType,
+        );
+    }
+
+    private function getPredicateReturnExpression(): ?Node\Expr
+    {
+        if ($this->node instanceof Node\Expr\ArrowFunction) {
+            return $this->node->expr;
+        }
+
+        if (! $this->node instanceof Node\Expr\Closure) {
+            return null;
+        }
+
+        $statement = $this->node->stmts[0] ?? null;
+
+        if (count($this->node->stmts) === 1
+            && $statement instanceof Node\Stmt\Return_
+            && $statement->expr instanceof Node\Expr
+        ) {
+            return $statement->expr;
+        }
+
+        return null;
+    }
+
 
     public function getReturnType(bool $usePhpDocIfAvailable = true, bool $doNotAnalyzeBody = false): Type
     {

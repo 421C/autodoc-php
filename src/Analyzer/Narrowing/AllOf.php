@@ -23,6 +23,7 @@ final class AllOf extends Narrowing
         return $base;
     }
 
+    #[\Override]
     public function assertsPresence(): bool
     {
         return array_any($this->narrowings, fn (Narrowing $narrowing) => $narrowing->assertsPresence());

@@ -5,6 +5,7 @@ namespace AutoDoc\Analyzer\Narrowing;
 use AutoDoc\Analyzer\Narrowing\Traits\FiltersLooseScalarValues;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\BoolType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\ScalarType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -33,7 +34,7 @@ final class NotType extends Narrowing
         }
 
         if ($this->hasSpecificValues($excludedType)) {
-            return $this->removeSpecificTypeOrNull($base, $excludedType, $scope) ?? $base;
+            return $this->removeSpecificTypeOrNull($base, $excludedType, $scope) ?? new NeverType;
         }
 
         if ($base instanceof UnionType) {

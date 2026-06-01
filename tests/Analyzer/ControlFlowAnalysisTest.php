@@ -578,6 +578,143 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function discriminatorLiteralCheckNarrowsArrayShapeUnion(): void
+    {
+        $closure =
+            /**
+             * @param array{type: 'user', userId: int, name?: string}|array{type: 'org', orgId: int, plan?: string} $payload
+             */
+            function (array $payload): mixed {
+                if ($payload['type'] !== 'user') {
+                    exit;
+                }
+
+                return $payload;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'type' => [
+                    'const' => 'user',
+                    'type' => 'string',
+                ],
+                'userId' => [
+                    'type' => 'integer',
+                ],
+                'name' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'type',
+                'userId',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function negatedDiscriminatorLiteralCheckNarrowsArrayShapeUnion(): void
+    {
+        $closure =
+            /**
+             * @param array{type: 'user', userId: int, name?: string}|array{type: 'org', orgId: int, plan?: string} $payload
+             */
+            function (array $payload): mixed {
+                if ($payload['type'] === 'user') {
+                    exit;
+                }
+
+                return $payload;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'type' => [
+                    'const' => 'org',
+                    'type' => 'string',
+                ],
+                'orgId' => [
+                    'type' => 'integer',
+                ],
+                'plan' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'type',
+                'orgId',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function inArrayDiscriminatorCheckNarrowsArrayShapeUnion(): void
+    {
+        $closure =
+            /**
+             * @param array{type: 'user', userId: int, name?: string}|array{type: 'org', orgId: int, plan?: string}|array{type: 'bot', token: string} $payload
+             */
+            function (array $payload): mixed {
+                if (! in_array($payload['type'], ['user', 'org'], true)) {
+                    exit;
+                }
+
+                return $payload;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'type' => [
+                            'const' => 'user',
+                            'type' => 'string',
+                        ],
+                        'userId' => [
+                            'type' => 'integer',
+                        ],
+                        'name' => [
+                            'type' => 'string',
+                        ],
+                    ],
+                    'required' => [
+                        'type',
+                        'userId',
+                    ],
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'type' => [
+                            'const' => 'org',
+                            'type' => 'string',
+                        ],
+                        'orgId' => [
+                            'type' => 'integer',
+                        ],
+                        'plan' => [
+                            'type' => 'string',
+                        ],
+                    ],
+                    'required' => [
+                        'type',
+                        'orgId',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function looseEqualityNarrowsFiniteUnionToLooselyMatchingLiteral(): void
     {
         $schema = $this->getClosureReturnSchema(function (): mixed {
@@ -1162,6 +1299,278 @@ final class ControlFlowAnalysisTest extends TestCase
                         'fallback',
                     ],
                     'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function strictInArrayNarrowsArrayElementPathToLiteralValues(): void
+    {
+        $closure =
+            /**
+             * @param array{id: int, status: 'draft'|'published'|'archived'} $data
+             */
+            function (array $data): mixed {
+                if (! in_array($data['status'], ['draft', 'published'], true)) {
+                    exit;
+                }
+
+                return $data;
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'type' => 'integer',
+                ],
+                'status' => [
+                    'enum' => [
+                        'draft',
+                        'published',
+                    ],
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'id',
+                'status',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterWithoutCallbackRemovesFalseyLiteralValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 6)) {
+                0 => null,
+                1 => false,
+                2 => 0,
+                3 => '',
+                4 => '0',
+                5 => 1,
+                default => 'ready',
+            };
+
+            return array_filter(['value' => $value]);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'value' => [
+                    'anyOf' => [
+                        [
+                            'const' => 1,
+                            'type' => 'integer',
+                        ],
+                        [
+                            'const' => 'ready',
+                            'type' => 'string',
+                        ],
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterCallbackInstanceofNarrowsItemType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => new SimpleClass,
+                1 => new Rocket,
+                default => null,
+            };
+
+            return array_filter(
+                [$value],
+                fn (mixed $item): bool => $item instanceof SimpleClass,
+            );
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'n' => [
+                        'type' => [
+                            'integer',
+                            'null',
+                        ],
+                    ],
+                ],
+                'required' => [
+                    'n',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterNamedIsStringCallbackNarrowsItemType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => 'ready',
+                1 => 5,
+                default => null,
+            };
+
+            return array_filter([$value], 'is_string');
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'const' => 'ready',
+                'type' => 'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterBackslashNamedIsBoolCallbackNarrowsItemType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => true,
+                1 => 5,
+                default => 'ready',
+            };
+
+            return array_filter([$value], '\\is_bool');
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'boolean',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterUseKeyModeAppliesCallbackToKeysWithoutNarrowingValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            return array_filter(
+                [
+                    'stringKey' => 5,
+                    10 => 'numeric-key',
+                ],
+                'is_string',
+                ARRAY_FILTER_USE_KEY,
+            );
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'stringKey' => [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterUseKeyModeWithClosureNarrowsKeysWithoutNarrowingValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            return array_filter(
+                [
+                    'name' => 5,
+                    7 => 9,
+                ],
+                fn (mixed $key): bool => is_string($key),
+                ARRAY_FILTER_USE_KEY,
+            );
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'name' => [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterUseBothModeNarrowsKeysAndValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 1)) {
+                0 => 5,
+                default => 'five',
+            };
+
+            return array_filter(
+                [
+                    'count' => $value,
+                    10 => $value,
+                ],
+                fn (mixed $v, mixed $k): bool => is_string($k) && is_int($v),
+                ARRAY_FILTER_USE_BOTH,
+            );
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'count' => [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayFilterCallbackDiscriminatorNarrowsItemShapeUnion(): void
+    {
+        $closure =
+            /**
+             * @param list<array{type: 'user', userId: int, name?: string}|array{type: 'org', orgId: int, plan?: string}> $items
+             */
+            function (array $items): mixed {
+                return array_values(array_filter(
+                    $items,
+                    fn (mixed $item): bool => is_array($item) && $item['type'] === 'user',
+                ));
+            };
+
+        $schema = $this->getClosureReturnSchema($closure);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'type' => [
+                        'const' => 'user',
+                        'type' => 'string',
+                    ],
+                    'userId' => [
+                        'type' => 'integer',
+                    ],
+                    'name' => [
+                        'type' => 'string',
+                    ],
+                ],
+                'required' => [
+                    'type',
+                    'userId',
                 ],
             ],
         ], $schema, 'closure', 'return');

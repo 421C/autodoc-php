@@ -19,6 +19,11 @@ class CallableType extends Type
         return $this->phpCallable?->resolveReturnType($args, $callerNode) ?? new UnknownType;
     }
 
+    public function narrowArgumentTypeFromTruthyReturn(int $argumentIndex, Type $argumentType, ?Node $callerNode = null): ?Type
+    {
+        return $this->phpCallable?->narrowArgumentTypeFromTruthyReturn($argumentIndex, $argumentType, $callerNode);
+    }
+
     public function toSchema(?Config $config = null): array
     {
         return array_filter([

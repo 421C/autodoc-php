@@ -13,18 +13,44 @@ use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotInstanceOf;
 use AutoDoc\Analyzer\Narrowing\NotNull;
 use AutoDoc\Analyzer\Narrowing\NotType;
-use AutoDoc\DataTypes\ArrayType;
-use AutoDoc\DataTypes\BoolType;
-use AutoDoc\DataTypes\FloatType;
-use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\NullType;
-use AutoDoc\DataTypes\NumberType;
-use AutoDoc\DataTypes\ObjectType;
-use AutoDoc\DataTypes\StringType;
+use AutoDoc\DataTypes\Type;
 use PhpParser\Node;
 
 class TypeNarrower
 {
+    /**
+     * Apply condition narrowings directly to a known type instead of emitting
+     * scope events. This is useful for callback predicates such as
+     * `array_filter($items, fn ($item) => $item instanceof Foo)`, where the
+     * callback's truthy return narrows one argument's item type.
+     */
+    public static function narrowTypeForTarget(
+        Node $conditionNode,
+        Scope $scope,
+        NarrowingTarget $target,
+        Type $baseType,
+        bool $negated = false,
+    ): ?Type {
+
+        $applier = new TypeNarrowingApplier($scope);
+        $narrowedType = $baseType;
+        $matched = false;
+
+        foreach (self::extractNarrowings($conditionNode, $scope, $negated) as [$narrowedTarget, $narrowing]) {
+            $relativePath = self::relativeNarrowingPath($target, $narrowedTarget);
+
+            if ($relativePath === null) {
+                continue;
+            }
+
+            $matched = true;
+            $narrowedType = $applier->applyPath($narrowedType, $relativePath, $narrowing);
+        }
+
+        return $matched ? $narrowedType : null;
+    }
+
     /**
      * Emit narrowing events when entering an if/elseif branch.
      */
@@ -368,6 +394,32 @@ class TypeNarrower
     }
 
     /**
+     * Return the attribute path within `$target` that an extracted narrowing
+     * applies to. For example, narrowing `$item['type']` while targeting `$item`
+     * yields `['type']`; narrowing `$item` while targeting `$item` yields `[]`.
+     *
+     * @return list<int|string>|null
+     */
+    private static function relativeNarrowingPath(NarrowingTarget $target, NarrowingTarget $narrowedTarget): ?array
+    {
+        if ($target->baseVar !== $narrowedTarget->baseVar) {
+            return null;
+        }
+
+        if (count($target->path) > count($narrowedTarget->path)) {
+            return null;
+        }
+
+        foreach ($target->path as $index => $pathPart) {
+            if ($narrowedTarget->path[$index] !== $pathPart) {
+                return null;
+            }
+        }
+
+        return array_slice($narrowedTarget->path, count($target->path));
+    }
+
+    /**
      * Extract narrowings from a condition expression.
      *
      * @return list<array{NarrowingTarget, Narrowing}>
@@ -538,49 +590,6 @@ class TypeNarrower
 
         if ($truthyTarget !== null) {
             return [[$truthyTarget, $negated ? new IsFalsey : new IsTruthy]];
-        }
-
-        // is_array, is_string, is_int, etc.
-        if ($node instanceof Node\Expr\FuncCall
-            && $node->name instanceof Node\Name
-            && count($node->args) === 1
-            && $node->args[0] instanceof Node\Arg
-        ) {
-            $funcName = $node->name->name;
-            $target = NarrowingTarget::fromNode($node->args[0]->value);
-
-            if ($target !== null) {
-                $type = match ($funcName) {
-                    'is_array' => new ArrayType,
-                    'is_string' => new StringType,
-                    'is_int', 'is_integer', 'is_long' => new IntegerType,
-                    'is_float', 'is_double' => new FloatType,
-                    'is_numeric' => new NumberType,
-                    'is_bool' => new BoolType,
-                    'is_null' => new NullType,
-                    'is_object' => new ObjectType,
-                    default => null,
-                };
-
-                if ($type !== null) {
-                    if (! $negated) {
-                        return [[$target, new IsType($type)]];
-                    }
-
-                    // Negated is_null is equivalent to !== null.
-                    if ($type instanceof NullType) {
-                        return [[$target, new NotNull]];
-                    }
-
-                    // is_numeric matches several types (int|float|numeric-string), so
-                    // its negation can't be expressed as removing a single type class.
-                    if (! ($type instanceof NumberType)) {
-                        return [[$target, new NotType($type)]];
-                    }
-                }
-            }
-
-            return [];
         }
 
         // empty($x) — the false branch (`!empty($x)`, or the code after an

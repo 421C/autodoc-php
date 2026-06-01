@@ -3,10 +3,10 @@
 namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\BranchPath;
-use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Analyzer\ScopeEvent;
 use AutoDoc\Analyzer\ScopeEventType;
+use AutoDoc\Analyzer\TypeNarrowingApplier;
 
 class UnresolvedVariableType extends UnresolvedType
 {
@@ -97,6 +97,7 @@ class UnresolvedVariableType extends UnresolvedType
 
         // Apply pending mutations to the base type
         $resolvedType = $baseType?->unwrapType($this->scope->config);
+        $narrowingApplier = new TypeNarrowingApplier($this->scope);
 
         foreach ($pendingMutations as [$event, $isCertain]) {
             if ($event->type === ScopeEventType::Assign && isset($event->changes['type'])) {
@@ -127,7 +128,7 @@ class UnresolvedVariableType extends UnresolvedType
                 && isset($event->changes['narrowingPath'])
             ) {
                 if ($resolvedType !== null) {
-                    $resolvedType = $this->applyAttributeNarrowing(
+                    $resolvedType = $narrowingApplier->applyAttributePath(
                         $resolvedType,
                         $event->changes['narrowingPath'],
                         $event->changes['narrowing'],
@@ -137,97 +138,6 @@ class UnresolvedVariableType extends UnresolvedType
         }
 
         return $resolvedType;
-    }
-
-
-    /**
-     * Apply a narrowing to a literal attribute path, leaving the rest untouched.
-     * Distributes over unions.
-     *
-     * @param non-empty-list<int|string> $path
-     */
-    private function applyAttributeNarrowing(Type $base, array $path, Narrowing $narrowing): Type
-    {
-        if ($base instanceof UnionType) {
-            $base = clone $base;
-            $base->types = array_map(
-                fn (Type $type): Type => $this->applyAttributeNarrowing($type, $path, $narrowing),
-                $base->types,
-            );
-
-            return $base->unwrapType($this->scope->config);
-        }
-
-        $key = array_shift($path);
-
-        if ($base instanceof ObjectType) {
-            $propertyType = $this->resolveObjectPropertyType($base, $key);
-
-            if ($propertyType === null) {
-                return $base;
-            }
-
-            $base = clone $base;
-            $base->properties[(string) $key] = $this->narrowAttributeValue($propertyType, $path, $narrowing);
-
-            return $base;
-        }
-
-        if ($base instanceof ArrayType) {
-            $elementType = $base->shape[$key] ?? $base->itemType;
-
-            if ($elementType === null) {
-                return $base;
-            }
-
-            $base = clone $base;
-            $base->shape[$key] = $this->narrowAttributeValue($elementType->unwrapType($this->scope->config), $path, $narrowing);
-
-            return $base;
-        }
-
-        return $base;
-    }
-
-
-    /**
-     * Narrow a single attribute value (property or shape element), recursing into
-     * the remaining path. Narrowing only refines the value's type, so the original
-     * `required` flag is kept — unless the narrowing asserts presence at the leaf
-     * (e.g. `isset($arr['key'])`), which makes the key required.
-     *
-     * @param list<int|string> $path
-     */
-    private function narrowAttributeValue(Type $current, array $path, Narrowing $narrowing): Type
-    {
-        $wasRequired = $current->required;
-
-        if ($path === []) {
-            $narrowed = $narrowing->apply($current, $this->scope);
-            $narrowed->required = $narrowing->assertsPresence() ? true : $wasRequired;
-
-        } else {
-            $narrowed = $this->applyAttributeNarrowing($current, $path, $narrowing);
-            $narrowed->required = $wasRequired;
-        }
-
-        return $narrowed;
-    }
-
-
-    private function resolveObjectPropertyType(ObjectType $objectType, int|string $key): ?Type
-    {
-        $keyString = (string) $key;
-
-        if (isset($objectType->properties[$keyString])) {
-            return $objectType->properties[$keyString]->unwrapType($this->scope->config);
-        }
-
-        if ($objectType->className !== null) {
-            return $this->scope->getPhpClass($objectType->className)->getProperty($keyString)?->unwrapType($this->scope->config);
-        }
-
-        return null;
     }
 
     /**

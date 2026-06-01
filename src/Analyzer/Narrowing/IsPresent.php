@@ -19,6 +19,7 @@ final class IsPresent extends Narrowing
         return $base;
     }
 
+    #[\Override]
     public function assertsPresence(): bool
     {
         return true;

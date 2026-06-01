@@ -6,7 +6,9 @@ use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
+use AutoDoc\Analyzer\Narrowing\IsFalsey;
 use AutoDoc\Analyzer\Narrowing\IsPresent;
+use AutoDoc\Analyzer\Narrowing\IsTruthy;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotType;
@@ -16,6 +18,7 @@ use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -44,7 +47,7 @@ class ArrayFuncCall extends FuncCallExtension
             'array_values' => $this->handleArrayValues($config, $argTypes),
             'array_keys' => $this->handleArrayKeys($config, $argTypes),
             'array_flip' => $this->handleArrayFlip($config, $argTypes),
-            'array_filter' => $this->handleArrayFilter($call->node, $config, $argTypes),
+            'array_filter' => $this->handleArrayFilter($call->node, $call->scope, $argTypes),
             'array_merge' => $this->handleArrayMerge($config, $argTypes),
             'array_search' => $this->addFalse($this->getKeyType($config, $argTypes, 1), $config),
             'array_first', 'array_last', 'array_find', 'array_pop', 'array_shift' => $this->addNull($this->getItemType($config, $argTypes), $config),
@@ -371,8 +374,9 @@ class ArrayFuncCall extends FuncCallExtension
     }
 
 
-    private function handleArrayFilter(FuncCall $funcCall, Config $config, ArgumentList $argTypes): Type
+    private function handleArrayFilter(FuncCall $funcCall, Scope $scope, ArgumentList $argTypes): Type
     {
+        $config = $scope->config;
         $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
 
         if (! ($arrayType instanceof ArrayType)) {
@@ -380,55 +384,199 @@ class ArrayFuncCall extends FuncCallExtension
         }
 
         if (! isset($funcCall->args[1])) {
+            $truthy = new IsTruthy;
+            $falsey = new IsFalsey;
+
             if ($arrayType->shape) {
                 $shape = [];
 
                 foreach ($arrayType->shape as $key => $value) {
-                    if ($value instanceof UnionType) {
-                        $typesInUnion = [];
+                    $filteredValue = $truthy->apply($value, $scope);
 
-                        foreach ($value->types as $typeInUnion) {
-                            if ($typeInUnion instanceof NullType) {
-                                continue;
-                            }
-
-                            $typesInUnion[] = $typeInUnion;
-                        }
-
-                        $value = new UnionType($typesInUnion)->unwrapType($config);
+                    if ($filteredValue instanceof NeverType) {
+                        continue;
                     }
 
-                    $shape[$key] = $value;
+                    if (! ($falsey->apply($value, $scope) instanceof NeverType)) {
+                        $filteredValue = clone $filteredValue;
+                        $filteredValue->setRequired(false);
+                    }
+
+                    $shape[$key] = $filteredValue;
                 }
 
                 $arrayType->shape = $shape;
 
-            } else if ($arrayType->itemType instanceof UnionType) {
-                $typesInUnion = [];
-
-                foreach ($arrayType->itemType->types as $typeInUnion) {
-                    if ($typeInUnion instanceof NullType) {
-                        continue;
-                    }
-
-                    $typesInUnion[] = $typeInUnion;
-                }
-
-                $arrayType->itemType = new UnionType($typesInUnion)->unwrapType($config);
+            } else if ($arrayType->itemType !== null) {
+                $arrayType->itemType = $truthy->apply($arrayType->itemType, $scope);
             }
 
         } else {
+            $callbackType = $argTypes->get(1);
+            $mode = $this->getArrayFilterMode($funcCall, $scope);
+
             if ($arrayType->shape) {
                 foreach (array_keys($arrayType->shape) as $key) {
-                    $arrayType->shape[$key]->setRequired(false);
+                    $value = $arrayType->shape[$key];
+                    $filteredValue = $this->filterShapeValueByCallback(
+                        callbackType: $callbackType,
+                        value: $value,
+                        key: $key,
+                        mode: $mode,
+                        funcCall: $funcCall,
+                        scope: $scope,
+                    );
+
+                    if ($filteredValue instanceof NeverType) {
+                        unset($arrayType->shape[$key]);
+
+                        continue;
+                    }
+
+                    $arrayType->shape[$key] = (clone $filteredValue)->setRequired(false);
                 }
 
             } else {
-                $arrayType->convertShapeToTypePair($config, removePossibleItemValues: true);
+                $narrowedItemType = (($mode === 'value' || $mode === 'both') && $arrayType->itemType !== null)
+                    ? $this->narrowFilteredArgumentType(
+                        callbackType: $callbackType,
+                        argumentIndex: 0,
+                        argumentType: $arrayType->itemType,
+                        funcCall: $funcCall,
+                        scope: $scope,
+                        allowStringTypeCheckFunction: $mode === 'value',
+                    )
+                    : null;
+
+                if ($narrowedItemType !== null) {
+                    $arrayType->itemType = $narrowedItemType;
+
+                } else if ($mode === 'value' || $mode === null) {
+                    $arrayType->convertShapeToTypePair($config, removePossibleItemValues: true);
+                }
             }
         }
 
         return $arrayType;
+    }
+
+
+    /**
+     * @param 'value'|'key'|'both'|null $mode
+     */
+    private function filterShapeValueByCallback(
+        Type $callbackType,
+        Type $value,
+        int|string $key,
+        ?string $mode,
+        FuncCall $funcCall,
+        Scope $scope,
+    ): Type {
+
+        if ($mode === 'key' || $mode === 'both') {
+            $keyArgumentIndex = $mode === 'key' ? 0 : 1;
+            $narrowedKeyType = $this->narrowFilteredArgumentType(
+                callbackType: $callbackType,
+                argumentIndex: $keyArgumentIndex,
+                argumentType: $this->arrayFilterKeyType($key),
+                funcCall: $funcCall,
+                scope: $scope,
+                allowStringTypeCheckFunction: $mode === 'key',
+            );
+
+            if ($narrowedKeyType instanceof NeverType) {
+                return new NeverType;
+            }
+        }
+
+        if ($mode === 'value' || $mode === 'both') {
+            $narrowedValueType = $this->narrowFilteredArgumentType(
+                callbackType: $callbackType,
+                argumentIndex: 0,
+                argumentType: $value,
+                funcCall: $funcCall,
+                scope: $scope,
+                allowStringTypeCheckFunction: $mode === 'value',
+            );
+
+            if ($narrowedValueType !== null) {
+                return $narrowedValueType;
+            }
+        }
+
+        return $value;
+    }
+
+
+    /**
+     * Resolve the type an `array_filter` callback narrows one argument to.
+     * Supports inline callables (`fn ($x) => $x instanceof Foo`) and string
+     * type-check function names (`'is_string'`) when PHP passes only one
+     * argument to that string callback.
+     */
+    private function narrowFilteredArgumentType(
+        Type $callbackType,
+        int $argumentIndex,
+        Type $argumentType,
+        FuncCall $funcCall,
+        Scope $scope,
+        bool $allowStringTypeCheckFunction,
+    ): ?Type {
+        if ($callbackType instanceof CallableType) {
+            return $callbackType->narrowArgumentTypeFromTruthyReturn($argumentIndex, $argumentType, $funcCall);
+        }
+
+        if ($allowStringTypeCheckFunction && $callbackType instanceof StringType && is_string($callbackType->value)) {
+            return TypeCheckFuncCall::narrowingForFunction($callbackType->value)?->apply($argumentType, $scope);
+        }
+
+        return null;
+    }
+
+
+    private function arrayFilterKeyType(int|string $key): Type
+    {
+        return is_int($key) ? new IntegerType($key) : new StringType($key);
+    }
+
+
+    /**
+     * @return 'value'|'key'|'both'|null
+     */
+    private function getArrayFilterMode(FuncCall $funcCall, Scope $scope): ?string
+    {
+        $modeArg = $funcCall->args[2] ?? null;
+
+        if (! $modeArg instanceof Node\Arg) {
+            return 'value';
+        }
+
+        $mode = $this->getArrayFilterModeValue($modeArg->value, $scope);
+
+        return match ($mode) {
+            0 => 'value',
+            \ARRAY_FILTER_USE_KEY => 'key',
+            \ARRAY_FILTER_USE_BOTH => 'both',
+            default => null,
+        };
+    }
+
+
+    private function getArrayFilterModeValue(Node $node, Scope $scope): ?int
+    {
+        if ($node instanceof Node\Expr\ConstFetch) {
+            $constantName = strtolower(ltrim($node->name->toString(), '\\'));
+
+            return match ($constantName) {
+                'array_filter_use_key' => \ARRAY_FILTER_USE_KEY,
+                'array_filter_use_both' => \ARRAY_FILTER_USE_BOTH,
+                default => null,
+            };
+        }
+
+        $value = $scope->getRawValueFromNode($node);
+
+        return is_int($value) ? $value : null;
     }
 
 

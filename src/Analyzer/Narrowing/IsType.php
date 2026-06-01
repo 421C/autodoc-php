@@ -58,7 +58,7 @@ final class IsType extends Narrowing
             return $intersectedType;
         }
 
-        return $narrowedType;
+        return new NeverType;
     }
 
     private function intersectType(Type $base, Type $narrowedType, Scope $scope): ?Type

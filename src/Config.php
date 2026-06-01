@@ -3,6 +3,7 @@
 namespace AutoDoc;
 
 use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
+use AutoDoc\Extensions\BuiltIn\TypeCheckFuncCall;
 use AutoDoc\Extensions\ClassExtension;
 use AutoDoc\Extensions\FuncCallExtension;
 use AutoDoc\Extensions\MethodCallExtension;
@@ -255,6 +256,7 @@ class Config
         $this->extensionsByType = [
             FuncCallExtension::class => [
                 ArrayFuncCall::class,
+                TypeCheckFuncCall::class,
             ],
         ];
 
