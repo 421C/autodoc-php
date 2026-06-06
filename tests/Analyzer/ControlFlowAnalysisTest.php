@@ -2627,6 +2627,61 @@ final class ControlFlowAnalysisTest extends TestCase
         ], $schema, 'closure', 'return');
     }
 
+    #[Test]
+    public function namedArgumentDoesNotMisbindToASkippedTemplateParameter(): void
+    {
+        // `columns` is skipped, so it resolves to its default (`0`) rather than
+        // binding `TColumns` to the named `pageName` argument.
+        $schema = $this->getClosureReturnSchema(
+            fn (): mixed => ControlFlowAnalysisTest::paginateColumns(50, pageName: 'page_number'),
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+            'const' => 0,
+        ], $schema, 'closure', 'return');
+    }
+
+    /**
+     * Mirrors the shape of Laravel's `paginate()`: a template-typed `$columns`
+     * sitting between a positional and a named-only argument.
+     *
+     * @template TColumns
+     *
+     * @param TColumns $columns
+     *
+     * @return TColumns
+     */
+    private static function paginateColumns(int $perPage, mixed $columns = 0, string $pageName = 'page'): mixed
+    {
+        return $columns;
+    }
+
+    #[Test]
+    public function bodyAnalysisDoesNotMisbindNamedArgumentToASkippedParameter(): void
+    {
+        // `columns` is skipped; body analysis must bind it to its default (`0`),
+        // not the named `pageName` argument occupying the same positional slot.
+        $schema = $this->getClosureReturnSchema(
+            fn (): mixed => ControlFlowAnalysisTest::paginateColumnsViaBody(50, pageName: 'page_number'),
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+            'const' => 0,
+        ], $schema, 'closure', 'return');
+    }
+
+    /**
+     * Like {@see paginateColumns()} but with no `@return`, so the return type
+     * comes from analyzing the body (exercising `FunctionNodeVisitor` parameter
+     * binding rather than `PhpCallable::getArgumentType()`).
+     */
+    private static function paginateColumnsViaBody(int $perPage, mixed $columns = 0, string $pageName = 'page'): mixed
+    {
+        return $columns;
+    }
+
     /**
      * @return array<string, mixed>
      */

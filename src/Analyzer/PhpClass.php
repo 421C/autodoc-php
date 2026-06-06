@@ -71,6 +71,7 @@ class PhpClass
     public function resolveType(bool $useExtensions = true): ObjectType
     {
         $objectType = new ObjectType(className: $this->className);
+        $objectType->constructorArgs = $this->scope->constructorArgs;
 
         if ($useExtensions) {
             $returnType = $this->scope->getReturnTypeFromClassExtensions($this);

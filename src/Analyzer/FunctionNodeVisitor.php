@@ -213,11 +213,19 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($paramNode->var instanceof Variable) {
                 $paramNode->var->setAttribute('startLine', $paramNode->var->getStartLine() - 1);
 
-                if (is_string($paramNode->var->name) && isset($phpDocParameters[$paramNode->var->name])) {
-                    $this->scope->assignVariable($paramNode->var, $phpDocParameters[$paramNode->var->name], $docComment ? [$docComment] : []);
+                $paramName = is_string($paramNode->var->name) ? $paramNode->var->name : null;
+                $argIndex = $paramName !== null ? $this->args->indexForParameter($paramName, $paramIndex) : null;
 
-                } else if ($this->args->has($paramIndex)) {
-                    $this->scope->assignVariable($paramNode->var, $this->args->get($paramIndex, autoResolve: false), $docComment ? [$docComment] : []);
+                if ($paramName !== null && isset($phpDocParameters[$paramName])) {
+                    $this->scope->assignVariable($paramNode->var, $phpDocParameters[$paramName], $docComment ? [$docComment] : []);
+
+                } else if ($argIndex !== null) {
+                    $this->scope->assignVariable($paramNode->var, $this->args->get($argIndex, autoResolve: false), $docComment ? [$docComment] : []);
+
+                } else if (! $this->isOperationEntrypoint && $paramNode->default !== null) {
+                    // A skipped argument takes its default; an entrypoint's params
+                    // come from the framework, so they keep their declared type.
+                    $this->scope->assignVariable($paramNode->var, $paramNode->default, $docComment ? [$docComment] : []);
 
                 } else if (isset($paramNode->type)) {
                     $this->scope->assignVariable($paramNode->var, $paramNode->type, $docComment ? [$docComment] : []);

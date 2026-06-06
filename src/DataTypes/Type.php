@@ -512,4 +512,30 @@ abstract class Type
             return new UnknownType;
         }
     }
+
+
+    /**
+     * Build a Type from a literal PHP value, such as a parameter's default value.
+     */
+    public static function fromValue(mixed $value): Type
+    {
+        if (is_array($value)) {
+            $arrayType = new ArrayType;
+
+            foreach ($value as $key => $item) {
+                $arrayType->shape[$key] = self::fromValue($item)->setRequired(true);
+            }
+
+            return $arrayType;
+        }
+
+        return match (true) {
+            $value === null => new NullType,
+            is_bool($value) => new BoolType($value),
+            is_int($value) => new IntegerType($value),
+            is_float($value) => new FloatType($value),
+            is_string($value) => new StringType($value),
+            default => new UnknownType,
+        };
+    }
 }

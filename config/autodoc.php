@@ -28,9 +28,10 @@ return [
      */
     'ui' => [
         /**
-         * Documentation page theme - light / dark.
+         * Documentation page theme - 'system' (follow OS preference), 'light' or 'dark'.
+         * This is the initial default only; the user's toggle persists and wins on reload.
          */
-        'theme' => 'light',
+        'theme' => 'system',
 
         /**
          * Logo URL to show in documentation page.

@@ -29,6 +29,7 @@ use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use ReflectionException;
 use ReflectionFunctionAbstract;
+use ReflectionNamedType;
 
 class PhpCallable
 {
@@ -579,10 +580,48 @@ class PhpCallable
             ));
         }
 
-        $index = $this->args->findNamedIndex($name) ?? $this->parameterNames[$name] ?? null;
+        $index = $this->args->indexForParameter($name, $this->parameterNames[$name] ?? null);
 
         if ($index !== null) {
             return $this->args->get($index);
+        }
+
+        return $this->getUnpassedParameterType($name);
+    }
+
+
+    /**
+     * The effective type of a parameter the call did not pass: its default
+     * value if it has one, otherwise its declared (native) type, otherwise
+     * unknown.
+     */
+    private function getUnpassedParameterType(string $name): Type
+    {
+        foreach ($this->reflection?->getParameters() ?? [] as $parameter) {
+            if ($parameter->name !== $name) {
+                continue;
+            }
+
+            if ($parameter->isDefaultValueAvailable()) {
+                $defaultType = Type::fromValue($parameter->getDefaultValue());
+
+                if (! $defaultType instanceof UnknownType) {
+                    return $defaultType;
+                }
+            }
+
+            $parameterType = $parameter->getType();
+
+            // Treat native `mixed` as absent to preserve specific template bounds.
+            if ($parameterType instanceof ReflectionNamedType && $parameterType->getName() === 'mixed') {
+                break;
+            }
+
+            if ($parameterType !== null) {
+                return Type::resolveFromReflection($parameterType, $this->scope);
+            }
+
+            break;
         }
 
         return new UnknownType;

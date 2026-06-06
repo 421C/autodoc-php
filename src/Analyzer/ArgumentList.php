@@ -86,6 +86,51 @@ class ArgumentList implements Countable
         return isset($this->resolved[$index]) || isset($this->argNodes[$index]);
     }
 
+
+    /**
+     * Named args bind by name; a positional arg binds by declared index only
+     * within the leading run, since named args can't fill an earlier slot.
+     */
+    public function indexForParameter(string $name, ?int $declaredIndex): ?int
+    {
+        $namedIndex = $this->findNamedIndex($name);
+
+        if ($namedIndex !== null) {
+            return $namedIndex;
+        }
+
+        if ($declaredIndex !== null && $declaredIndex < $this->positionalCount()) {
+            return $declaredIndex;
+        }
+
+        return null;
+    }
+
+
+    /**
+     * Leading positional args only — named args (which must follow them) never
+     * occupy an earlier slot.
+     */
+    public function positionalCount(): int
+    {
+        if (! $this->argNodes) {
+            // `fromTypes()` lists carry only positional, pre-resolved entries.
+            return count($this->resolved);
+        }
+
+        $count = 0;
+
+        foreach ($this->argNodes as $argNode) {
+            if ($argNode instanceof Node\Arg && $argNode->name !== null) {
+                break;
+            }
+
+            $count++;
+        }
+
+        return $count;
+    }
+
     public function count(): int
     {
         return max(count($this->argNodes), count($this->resolved));

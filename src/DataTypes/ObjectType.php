@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Config;
 
 class ObjectType extends Type
@@ -18,6 +19,14 @@ class ObjectType extends Type
         public ?string $className = null,
         public ?string $description = null,
         public ?Type $typeToDisplay = null,
+
+        /**
+         * Arguments passed to the constructor when this type was created from
+         * a `new X(...)` expression (or attached by an extension). Lazily
+         * resolved and scope-aware; null when unknown.
+         */
+        public ?ArgumentList $constructorArgs = null,
+
         /**
          * Properties that do not appear in the generated documentation
          * unless specifically accessed or referenced.
