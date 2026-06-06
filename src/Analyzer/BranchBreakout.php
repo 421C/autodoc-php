@@ -86,7 +86,14 @@ class BranchBreakout
         }
 
         try {
-            return $this->scope->resolveType($expr)->unwrapType($this->scope->config) instanceof NeverType;
+            // Peek at the call's return type only. This runs before the
+            // surrounding statements are analyzed, so it must not capture a
+            // request body from arguments that reference not-yet-assigned vars.
+            $returnType = $this->scope->withoutRequestBodyCapture(
+                fn () => $this->scope->resolveType($expr)->unwrapType($this->scope->config),
+            );
+
+            return $returnType instanceof NeverType;
 
         } catch (Throwable) {
             return false;

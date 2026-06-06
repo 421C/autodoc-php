@@ -68,6 +68,14 @@ class Scope
     public WeakMap $objectsHandlingRequestBody;
 
     /**
+     * Prevents request body capture during early call return-type checks.
+     *
+     * Only set through {@see withoutRequestBodyCapture()}.
+     * @internal
+     */
+    private bool $suppressRequestBodyCapture = false;
+
+    /**
      * Cache for resolved variable types, keyed by "varName:filePos".
      *
      * @internal
@@ -682,6 +690,29 @@ class Scope
         $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
 
         return $returnValue;
+    }
+
+
+    /**
+     * Run $callback with request body capture disabled, so incompletely-resolved
+     * arguments neither leak into the request body nor dedup-block the real capture
+     * during body traversal.
+     *
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withoutRequestBodyCapture(callable $callback): mixed
+    {
+        $initialValue = $this->suppressRequestBodyCapture;
+        $this->suppressRequestBodyCapture = true;
+
+        try {
+            return $callback();
+
+        } finally {
+            $this->suppressRequestBodyCapture = $initialValue;
+        }
     }
 
 

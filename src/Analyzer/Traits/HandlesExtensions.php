@@ -164,6 +164,7 @@ trait HandlesExtensions
      */
     private function runExtensions(string $extensionTypeClass, object $node, \Closure $getRequestType, \Closure $getReturnType, bool $returnType = true): ?Type
     {
+        $suppressRequestTypeHandling = $this->suppressRequestBodyCapture;
         $requestTypeHandled = isset($this->objectsHandlingRequestBody[$node]);
         $returnTypeHandled = ! $returnType;
         $result = null;
@@ -171,7 +172,7 @@ trait HandlesExtensions
         foreach ($this->getExtensionsOfType($extensionTypeClass) as $extensionClass) {
             $extension = new $extensionClass;
 
-            if (! $requestTypeHandled) {
+            if (! $requestTypeHandled && ! $suppressRequestTypeHandling) {
                 $requestResult = $getRequestType($extension);
 
                 if ($requestResult instanceof Type) {
@@ -190,7 +191,7 @@ trait HandlesExtensions
                 }
             }
 
-            if ($requestTypeHandled && $returnTypeHandled) {
+            if (($requestTypeHandled || $suppressRequestTypeHandling) && $returnTypeHandled) {
                 break;
             }
         }
