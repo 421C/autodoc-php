@@ -2,6 +2,7 @@
 
 namespace AutoDoc;
 
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use Closure;
@@ -67,15 +68,19 @@ class Route
         $this->requestBodyTypes[] = $type;
     }
 
-    public function getRequestBodyType(?Config $config = null): ?Type
+    public function getRequestBodyType(Scope $scope): ?Type
     {
-        $unwrappedType = new UnionType($this->requestBodyTypes)->unwrapType($config);
+        return $scope->withShapeMerging(function () use ($scope): Type {
+            $config = $scope->config;
 
-        if ($unwrappedType instanceof UnionType) {
-            return $unwrappedType->mergeObjectsAndArrayShapes($config)->unwrapType($config);
-        }
+            $unwrappedType = new UnionType($this->requestBodyTypes)->unwrapType($config);
 
-        return $unwrappedType;
+            if ($unwrappedType instanceof UnionType) {
+                $unwrappedType = $unwrappedType->mergeObjectsAndArrayShapes($config)->unwrapType($config);
+            }
+
+            return $unwrappedType->deepResolve($config);
+        });
     }
 
 

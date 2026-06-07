@@ -376,7 +376,7 @@ class PhpDoc
             $identifier = $varType->getIdentifier();
 
             if ($identifier && isset($this->scope->constructorTemplateTypes[$identifier])) {
-                return $this->scope->constructorTemplateTypes[$identifier]->unwrapType();
+                return $this->scope->constructorTemplateTypes[$identifier]->unwrapType($this->scope->config);
             }
 
             return $varType->resolve();

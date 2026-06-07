@@ -10,7 +10,7 @@ class BoolType extends Type
         public ?bool $value = null,
     ) {}
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         return array_filter([
             'type' => 'boolean',

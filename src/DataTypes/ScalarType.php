@@ -34,9 +34,9 @@ abstract class ScalarType extends Type
      *
      * @return TypeSchema
      */
-    protected function withScalarValues(array $schema, ?Config $config): array
+    protected function withScalarValues(array $schema, Config $config): array
     {
-        if (! $this->isEnum && ! ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+        if (! $this->isEnum && ! ($config->data['openapi']['show_values_for_scalar_types'] ?? false)) {
             return $schema;
         }
 

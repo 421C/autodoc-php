@@ -18,6 +18,7 @@ class Parameter implements JsonSerializable
          * @var 'path' | 'query' | 'header' | 'cookie'
          */
         public string $in,
+        public Config $config,
         public ?string $description = null,
         public ?bool $required = null,
         public ?bool $deprecated = null,
@@ -25,7 +26,6 @@ class Parameter implements JsonSerializable
         public ?bool $allowEmptyValue = null,
         public ?bool $allowReserved = null,
         public ?Type $type = null,
-        public ?Config $config = null,
 
         /**
          * @var ?array<string, MediaType>

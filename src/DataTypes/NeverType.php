@@ -12,7 +12,7 @@ use AutoDoc\Config;
  */
 class NeverType extends Type
 {
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         // An empty `enum` validates no instance, matching a value that never occurs.
         return [

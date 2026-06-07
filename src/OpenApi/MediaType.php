@@ -12,8 +12,8 @@ use JsonSerializable;
 class MediaType implements JsonSerializable
 {
     public function __construct(
-        public ?Type $type = null,
-        public ?Config $config = null,
+        public Type $type,
+        public Config $config,
 
         /**
          * @var ?array<string, EncodingObject>
@@ -30,7 +30,7 @@ class MediaType implements JsonSerializable
     public function jsonSerialize(): mixed
     {
         return array_filter([
-            'schema' => $this->type?->toSchema($this->config),
+            'schema' => $this->type->toSchema($this->config),
             'encoding' => $this->encoding,
             'examples' => $this->examples,
             'example' => $this->example,

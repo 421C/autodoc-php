@@ -63,11 +63,11 @@ final class IsType extends Narrowing
 
     private function intersectType(Type $base, Type $narrowedType, Scope $scope): ?Type
     {
-        if ($base->isSubTypeOf($narrowedType)) {
+        if ($base->isSubTypeOf($narrowedType, $scope->config)) {
             return $base;
         }
 
-        if ($narrowedType->isSubTypeOf($base)) {
+        if ($narrowedType->isSubTypeOf($base, $scope->config)) {
             return $narrowedType;
         }
 

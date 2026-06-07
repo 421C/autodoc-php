@@ -20,7 +20,7 @@ use AutoDoc\DataTypes\VoidType;
 
 trait WithMergeableTypes
 {
-    public function mergeObjectsAndArrayShapes(?Config $config = null): self
+    public function mergeObjectsAndArrayShapes(Config $config): self
     {
         $types = [];
 
@@ -49,7 +49,7 @@ trait WithMergeableTypes
                             $objectType->properties[$key] = $valueType;
 
                         } else {
-                            $mergedType = $this->mergeTypes($existingValueType, $valueType);
+                            $mergedType = $this->mergeTypes($existingValueType, $valueType, $config);
 
                             if ($mergedType) {
                                 $mergedType->required = $existingValueType->required || $valueType->required;
@@ -57,7 +57,7 @@ trait WithMergeableTypes
                                 $objectType->properties[$key] = $mergedType;
 
                             } else {
-                                $objectType->properties[$key] = new IntersectionType([$existingValueType, $valueType])
+                                $objectType->properties[$key] = new UnionType([$existingValueType, $valueType])
                                     ->setRequired($existingValueType->required || $valueType->required);
                             }
                         }
@@ -81,7 +81,7 @@ trait WithMergeableTypes
         return $this;
     }
 
-    public function mergeDuplicateTypes(bool $mergeAsIntersection = false, ?Config $config = null): void
+    public function mergeDuplicateTypes(Config $config, bool $mergeAsIntersection = false): void
     {
         $types = [];
 
@@ -105,7 +105,7 @@ trait WithMergeableTypes
         // values — so drop their const/enum values. This matches how unknown is
         // already absorbed into a sibling string type.
         if (! $mergeAsIntersection
-            && ($config?->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)
+            && ($config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)
             && array_any($types, fn (Type $type) => $type instanceof UnknownType)
         ) {
             foreach ($types as $type) {
@@ -127,7 +127,7 @@ trait WithMergeableTypes
             $merged = false;
 
             foreach ($mergedTypes as $i => $existingType) {
-                $mergedType = $this->mergeTypes($existingType, $type, $mergeAsIntersection, $config);
+                $mergedType = $this->mergeTypes($existingType, $type, $config, $mergeAsIntersection);
 
                 if ($mergedType) {
                     $mergedTypes[$i] = $mergedType;
@@ -164,7 +164,7 @@ trait WithMergeableTypes
     }
 
 
-    private function mergeTypes(Type $type1, Type $type2, bool $mergeAsIntersection = false, ?Config $config = null): ?Type
+    private function mergeTypes(Type $type1, Type $type2, Config $config, bool $mergeAsIntersection = false): ?Type
     {
         if ($type1->getHttpStatusCode() !== $type2->getHttpStatusCode()) {
             return null;
@@ -181,7 +181,7 @@ trait WithMergeableTypes
         }
 
         if ($this->isScalarType($type1) && $this->isScalarType($type2)) {
-            return $this->mergeScalarTypes($type1, $type2, $mergeAsIntersection, $config);
+            return $this->mergeScalarTypes($type1, $type2, $config, $mergeAsIntersection);
         }
 
         // If type classes do not match, they can not be merged and will be returned as a UnionType.
@@ -211,19 +211,19 @@ trait WithMergeableTypes
 
         if ($type1 instanceof ArrayType) {
             /** @var ArrayType $type2 */
-            return $this->mergeArrayTypes($type1, $type2, $mergeAsIntersection, $config);
+            return $this->mergeArrayTypes($type1, $type2, $config, $mergeAsIntersection);
         }
 
         if ($type1 instanceof ObjectType) {
             /** @var ObjectType $type2 */
-            return $this->mergeObjectTypes($type1, $type2, $mergeAsIntersection, $config);
+            return $this->mergeObjectTypes($type1, $type2, $config, $mergeAsIntersection);
         }
 
         return null;
     }
 
 
-    private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, bool $mergeAsIntersection = false, ?Config $config = null): ?ArrayType
+    private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, Config $config, bool $mergeAsIntersection = false): ?ArrayType
     {
         if (! $array1->shape && ! $array1->itemType && ! $array1->keyType) {
             if (! $mergeAsIntersection) {
@@ -246,7 +246,7 @@ trait WithMergeableTypes
         }
 
         if ($array1->shape && $array2->shape) {
-            $mergeShapesInTypeUnions = $config?->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+            $mergeShapesInTypeUnions = $config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
 
             if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {
                 $keys1 = array_keys($array1->shape);
@@ -267,7 +267,7 @@ trait WithMergeableTypes
 
                 $type2 = $array2->shape[$key];
 
-                $mergedType = $this->mergeTypes($type1, $type2, $mergeAsIntersection, $config);
+                $mergedType = $this->mergeTypes($type1, $type2, $config, $mergeAsIntersection);
 
                 if ($mergedType) {
                     if ($mergeAsIntersection) {
@@ -309,7 +309,7 @@ trait WithMergeableTypes
                     return null;
                 }
 
-                $itemType = $this->mergeTypes($array1->itemType, $array2->itemType, $mergeAsIntersection, $config);
+                $itemType = $this->mergeTypes($array1->itemType, $array2->itemType, $config, $mergeAsIntersection);
 
                 if ($itemType) {
                     return new ArrayType($itemType);
@@ -326,7 +326,7 @@ trait WithMergeableTypes
         return null;
     }
 
-    private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, bool $mergeAsIntersection = false, ?Config $config = null): ?ObjectType
+    private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, Config $config, bool $mergeAsIntersection = false): ?ObjectType
     {
         if ($mergeAsIntersection) {
             if ($object1->className === null) {
@@ -345,7 +345,7 @@ trait WithMergeableTypes
             }
         }
 
-        $mergeShapesInTypeUnions = $config?->data['objects']['merge_shapes_in_type_unions'] ?? false;
+        $mergeShapesInTypeUnions = $config->data['objects']['merge_shapes_in_type_unions'] ?? false;
 
         if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {
             $keys1 = array_keys($object1->properties);
@@ -366,7 +366,7 @@ trait WithMergeableTypes
 
             $type2 = $object2->properties[$key];
 
-            $mergedType = $this->mergeTypes($type1, $type2, $mergeAsIntersection, $config);
+            $mergedType = $this->mergeTypes($type1, $type2, $config, $mergeAsIntersection);
 
             if ($mergedType) {
                 if ($mergeAsIntersection) {
@@ -417,8 +417,8 @@ trait WithMergeableTypes
     private function mergeScalarTypes(
         IntegerType|FloatType|NumberType|StringType $type1,
         IntegerType|FloatType|NumberType|StringType $type2,
+        Config $config,
         bool $mergeAsIntersection = false,
-        ?Config $config = null,
     ): IntegerType|FloatType|NumberType|StringType|null {
         $t1IsNumber = $type1 instanceof IntegerType
             || $type1 instanceof FloatType
@@ -482,8 +482,8 @@ trait WithMergeableTypes
                 $resultType->isEnum = $this->isEnum || $type1->isEnum || $type2->isEnum;
             }
 
-        } else if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
-            if (($t1Values && $t2Values) || ! ($config?->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)) {
+        } else if ($this->isEnum || ($config->data['openapi']['show_values_for_scalar_types'] ?? false)) {
+            if (($t1Values && $t2Values) || ! ($config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)) {
                 $possibleValues = array_values(array_unique(array_merge($t1Values ?? [], $t2Values ?? [])));
 
                 $resultType->setEnumValues($possibleValues);

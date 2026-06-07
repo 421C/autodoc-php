@@ -188,7 +188,7 @@ class ProcessAutoDocDebugTags
                 return $result;
             }
 
-            return $result->deepResolve();
+            return $result->deepResolve($scope->config);
         }
 
         return $result;

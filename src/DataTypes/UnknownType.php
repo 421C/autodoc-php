@@ -10,7 +10,7 @@ class UnknownType extends Type
         public ?string $description = null,
     ) {}
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         return array_filter([
             'type' => 'string',

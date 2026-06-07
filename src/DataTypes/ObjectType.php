@@ -37,7 +37,7 @@ class ObjectType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         if ($this->typeToDisplay) {
             $this->typeToDisplay->required = $this->typeToDisplay->required || $this->required;

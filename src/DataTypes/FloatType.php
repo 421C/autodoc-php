@@ -37,7 +37,7 @@ class FloatType extends ScalarType
     }
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         $schema = array_filter([
             'type' => 'number',

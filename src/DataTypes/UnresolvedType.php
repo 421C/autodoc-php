@@ -8,7 +8,7 @@ abstract class UnresolvedType extends Type
 {
     abstract public function resolve(): Type;
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         return $this->resolve()->toSchema($config);
     }

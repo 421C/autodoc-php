@@ -26,7 +26,7 @@ class ArrayType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         if ($this->shape) {
             return [
@@ -85,13 +85,13 @@ class ArrayType extends Type
     }
 
 
-    public function convertShapeToTypePair(?Config $config = null, bool $removePossibleItemValues = false): self
+    public function convertShapeToTypePair(Config $config, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
             $keyTypes = [];
             $itemTypes = [];
 
-            $showValuesForScalarTypes = $config?->data['openapi']['show_values_for_scalar_types'] ?? false;
+            $showValuesForScalarTypes = $config->data['openapi']['show_values_for_scalar_types'] ?? false;
 
             foreach ($this->shape as $key => $value) {
                 if (is_int($key)) {
@@ -139,7 +139,7 @@ class ArrayType extends Type
     }
 
 
-    public function addItemToArray(int|string|null $key, Type $itemType, ?Config $config = null): self
+    public function addItemToArray(int|string|null $key, Type $itemType, Config $config): self
     {
         if ($key === null || is_int($key)) {
             $this->convertShapeToTypePair($config);

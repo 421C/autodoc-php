@@ -294,7 +294,7 @@ class UnresolvedVariableType extends UnresolvedType
                     }
 
                 } else {
-                    $potentialTypes[$i]->addItemToArray($key, $attributeType->setRequired($isCertain));
+                    $potentialTypes[$i]->addItemToArray($key, $attributeType->setRequired($isCertain), $this->scope->config);
                 }
 
                 $typesWithAddedAttribute[] = $potentialTypes[$i];
@@ -304,7 +304,7 @@ class UnresolvedVariableType extends UnresolvedType
         if ($isCertain) {
             if (empty($typesWithAddedAttribute)) {
                 $baseType = new ArrayType;
-                $baseType->addItemToArray($key, $attributeType->setRequired(true));
+                $baseType->addItemToArray($key, $attributeType->setRequired(true), $this->scope->config);
 
             } else {
                 $baseType = new UnionType($typesWithAddedAttribute)->unwrapType($this->scope->config);
@@ -313,7 +313,7 @@ class UnresolvedVariableType extends UnresolvedType
         } else {
             if (empty($typesWithAddedAttribute)) {
                 $arrayType = new ArrayType;
-                $arrayType->addItemToArray($key, $attributeType);
+                $arrayType->addItemToArray($key, $attributeType, $this->scope->config);
 
                 $baseType = new UnionType([...$potentialTypes, $arrayType])->unwrapType($this->scope->config);
 

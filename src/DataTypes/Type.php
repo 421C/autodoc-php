@@ -77,7 +77,7 @@ abstract class Type
     /**
      * @return TypeSchema
      */
-    abstract public function toSchema(?Config $config = null): array;
+    abstract public function toSchema(Config $config): array;
 
     public ?string $description = null;
 
@@ -185,7 +185,7 @@ abstract class Type
         if ($type instanceof UnionType || $type instanceof IntersectionType) {
             $filteredTypes = array_values(array_filter(
                 $type->types,
-                fn (Type $t) => $t->isSubTypeOf($this)
+                fn (Type $t) => $t->isSubTypeOf($this, $config)
             ));
 
             if (empty($filteredTypes)) {
@@ -207,7 +207,7 @@ abstract class Type
             return $type->unwrapType($config);
         }
 
-        if ($type->isSubTypeOf($this)) {
+        if ($type->isSubTypeOf($this, $config)) {
             return $type;
         }
 
@@ -215,7 +215,7 @@ abstract class Type
     }
 
 
-    public function isSubTypeOf(Type $superType): bool
+    public function isSubTypeOf(Type $superType, Config $config): bool
     {
         if ($this instanceof NeverType) {
             return true;
@@ -230,11 +230,11 @@ abstract class Type
         }
 
         if ($superType instanceof UnionType) {
-            return array_any($superType->types, fn ($type) => $this->isSubTypeOf($type));
+            return array_any($superType->types, fn ($type) => $this->isSubTypeOf($type, $config));
         }
 
         if ($superType instanceof IntersectionType) {
-            return array_all($superType->types, fn ($type) => $this->isSubTypeOf($type));
+            return array_all($superType->types, fn ($type) => $this->isSubTypeOf($type, $config));
         }
 
         if ($superType instanceof ClassStringType && $this instanceof ClassStringType) {
@@ -295,7 +295,7 @@ abstract class Type
                         return false;
                     }
 
-                    if (! $subItemType->isSubTypeOf($superItemType)) {
+                    if (! $subItemType->isSubTypeOf($superItemType, $config)) {
                         return false;
                     }
 
@@ -310,10 +310,10 @@ abstract class Type
                 return true;
             }
 
-            $thisAsTypePair = (clone $this)->convertShapeToTypePair();
+            $thisAsTypePair = (clone $this)->convertShapeToTypePair($config);
 
             if ($superType->keyType !== null) {
-                if (! ($thisAsTypePair->keyType ?? new IntegerType)->isSubTypeOf($superType->keyType)) {
+                if (! ($thisAsTypePair->keyType ?? new IntegerType)->isSubTypeOf($superType->keyType, $config)) {
                     return false;
                 }
             }
@@ -323,7 +323,7 @@ abstract class Type
                     return false;
                 }
 
-                if (! $thisAsTypePair->itemType->isSubTypeOf($superType->itemType)) {
+                if (! $thisAsTypePair->itemType->isSubTypeOf($superType->itemType, $config)) {
                     return false;
                 }
             }
@@ -357,7 +357,7 @@ abstract class Type
                     return false;
                 }
 
-                if (! $subPropType->isSubTypeOf($superPropType)) {
+                if (! $subPropType->isSubTypeOf($superPropType, $config)) {
                     return false;
                 }
 
@@ -385,7 +385,7 @@ abstract class Type
     }
 
 
-    public function removeNull(?Config $config = null): Type
+    public function removeNull(Config $config): Type
     {
         if ($this instanceof UnionType) {
             $types = array_filter($this->types, fn (Type $type) => ! $type instanceof NullType);
@@ -400,7 +400,7 @@ abstract class Type
     }
 
 
-    public function unwrapType(?Config $config = null): Type
+    public function unwrapType(Config $config): Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
             // A `never` value can't occur, so a union drops it (`T | never = T`)
@@ -448,7 +448,7 @@ abstract class Type
     }
 
 
-    public function deepResolve(?Config $config = null): Type
+    public function deepResolve(Config $config): Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
             $this->types = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->types);

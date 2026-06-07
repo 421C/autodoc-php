@@ -18,7 +18,7 @@ class IntersectionType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         $this->mergeDuplicateTypes(mergeAsIntersection: true, config: $config);
 

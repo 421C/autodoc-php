@@ -320,7 +320,7 @@ class PhpCallable
 
         $this->phpClass->traverse($methodNodeVisitor);
 
-        $requestBodyType = $this->scope->route?->getRequestBodyType($this->scope->config);
+        $requestBodyType = $this->scope->route?->getRequestBodyType($this->scope);
 
         $analyzedReturnType = null;
 
@@ -392,7 +392,7 @@ class PhpCallable
         $traverser->addVisitor($nodeVisitor);
         $traverser->traverse([$node]);
 
-        $requestBodyType = $this->scope->route?->getRequestBodyType($this->scope->config);
+        $requestBodyType = $this->scope->route?->getRequestBodyType($this->scope);
 
         $analyzedReturnType = null;
 

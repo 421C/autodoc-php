@@ -20,7 +20,7 @@ class UnionType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         $type = $this->unwrapType($config);
 
