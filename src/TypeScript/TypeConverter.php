@@ -98,7 +98,7 @@ class TypeConverter
         }
 
         if ($type instanceof NeverType) {
-            return 'never';
+            return ($scope->config->data['intersections']['render_empty_as_unknown'] ?? true) ? 'unknown' : 'never';
         }
 
         if ($type instanceof ArrayType) {

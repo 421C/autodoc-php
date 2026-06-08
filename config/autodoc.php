@@ -139,6 +139,14 @@ return [
         'merge_shapes_in_type_unions' => false,
     ],
 
+    'intersections' => [
+        /**
+         * Render `never` type as `unknown` (OpenAPI `{ type: string }`, TypeScript `unknown`)
+         * instead of its literal form (OpenAPI `{ enum: [] }`, TypeScript `never`).
+         */
+        'render_empty_as_unknown' => true,
+    ],
+
     /**
      * Class that will be used to load and analyze routes.
      * This class must extend `AutoDoc\AbstractRouteLoader`.

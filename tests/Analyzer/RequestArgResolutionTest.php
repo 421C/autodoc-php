@@ -142,13 +142,12 @@ final class RequestArgResolutionTest extends TestCase
     }
 
     #[Test]
-    public function requestBodyCrossKindSharedKeyMergesAsUnionNotIntersection(): void
+    public function requestBodyCrossKindSharedKeyIntersectsToOverlappingType(): void
     {
         // An object body (ObjectType {n: int|null}) and an array-shape body share
-        // the key `n`. The combined request body should accept what either body
-        // sends — a union — not an `allOf` intersection. (Two array-shape bodies
-        // that conflict at a key already merge to a union; the cross-kind path
-        // must match.)
+        // the key `n` (int). Merging them intersects the field — a value valid for
+        // both must satisfy `(int|null) & int`, i.e. `int`. The intersection must
+        // simplify rather than emit a bogus `allOf` of `int|null` and `int`.
         $schemas = $this->analyze(function (object $r, int $x, int $y): void {
             // @phpstan-ignore method.notFound
             $r->markRequest(new SimpleClass(1));
@@ -159,10 +158,80 @@ final class RequestArgResolutionTest extends TestCase
         $this->assertSchemaArraysMatch([
             'type' => 'object',
             'properties' => [
-                'n' => ['type' => ['integer', 'null']],
+                'n' => ['type' => 'integer'],
                 'extra' => ['type' => 'integer'],
             ],
             'required' => ['n', 'extra'],
+        ], $schemas['request'], '/test', 'request');
+    }
+
+    #[Test]
+    public function requestBodySharedScalarKeyCoercesStringAndIntegerToNumericString(): void
+    {
+        $schemas = $this->analyze(function (object $r, string $s, int $n): void {
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['p' => $s]);
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['p' => $n]);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'p' => [
+                    'type' => 'string',
+                    'format' => 'integer',
+                ],
+            ],
+            'required' => ['p'],
+        ], $schemas['request'], '/test', 'request');
+    }
+
+    #[Test]
+    public function requestBodyCoercesScalarOverlapAtNestedSharedKey(): void
+    {
+        $schemas = $this->analyze(function (object $r, string $s, int $n, bool $b): void {
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['user' => ['id' => $s], 'extra' => $b]);
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['user' => ['id' => $n]]);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'user' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'id' => [
+                            'type' => 'string',
+                            'format' => 'integer',
+                        ],
+                    ],
+                    'required' => ['id'],
+                ],
+                'extra' => ['type' => 'boolean'],
+            ],
+            'required' => ['user', 'extra'],
+        ], $schemas['request'], '/test', 'request');
+    }
+
+    #[Test]
+    public function requestBodyRendersNonCoercibleConflictAsUnknown(): void
+    {
+        $schemas = $this->analyze(function (object $r, int $s, array $a): void {
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['p' => $s]);
+            // @phpstan-ignore method.notFound
+            $r->markRequest(['p' => $a]);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'p' => ['type' => 'string'],
+            ],
+            'required' => ['p'],
         ], $schemas['request'], '/test', 'request');
     }
 

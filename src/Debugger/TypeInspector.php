@@ -154,8 +154,6 @@ class TypeInspector
         $properties = [];
 
         foreach ($reflection->getProperties() as $property) {
-            $property->setAccessible(true);
-
             if ($property->isInitialized($type)) {
                 $value = $property->getValue($type);
 

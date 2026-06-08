@@ -403,11 +403,18 @@ abstract class Type
     public function unwrapType(Config $config): Type
     {
         if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
-            // A `never` value can't occur, so a union drops it (`T | never = T`)
-            // while an intersection collapses to it (`T & never = never`).
             if (is_a($this, IntersectionType::class)) {
                 if (array_any($this->types, fn (Type $type) => $type instanceof NeverType)) {
-                    return new NeverType;
+                    return new NeverType(conflictingTypes: $this->types, required: $this->required);
+                }
+
+                // Distribute over any union member — `A & (B|C)` becomes
+                // `(A&B) | (A&C)` — so combinations with no overlap (e.g.
+                // `null & int`) collapse to never instead of a bogus allOf.
+                $distributed = $this->distributeIntersectionOverUnions($this->types, $config);
+
+                if ($distributed !== null) {
+                    return $distributed->unwrapType($config);
                 }
 
             } else if (array_any($this->types, fn (Type $type) => $type instanceof NeverType)) {
@@ -440,11 +447,113 @@ abstract class Type
 
             $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
 
+            if (is_a($this, IntersectionType::class)) {
+                if (count($this->types) >= 2 && $this->intersectionIsEmpty($this->types, $config)) {
+                    return new NeverType(conflictingTypes: $this->types, required: $this->required);
+                }
+
+                if (count($this->types) === 1) {
+                    $single = reset($this->types);
+                    $single->required = $single->required || $this->required;
+
+                    return $single->unwrapType($config);
+                }
+            }
+
         } else if (is_a($this, UnresolvedType::class)) {
             return $this->resolve()->unwrapType($config);
         }
 
         return $this;
+    }
+
+
+    /**
+     * Expand an intersection over a union member: `A & (B|C)` = `(A&B) | (A&C)`.
+     * Returns null when no member is a union (nothing to distribute), a
+     * `NeverType` when every branch is empty, otherwise the distributed union.
+     *
+     * @param Type[] $types
+     */
+    private function distributeIntersectionOverUnions(array $types, Config $config): ?Type
+    {
+        $members = array_map(fn (Type $type) => $type->unwrapType($config), $types);
+
+        foreach ($members as $index => $member) {
+            if (! $member instanceof UnionType) {
+                continue;
+            }
+
+            $otherMembers = $members;
+            unset($otherMembers[$index]);
+            $otherMembers = array_values($otherMembers);
+
+            $branches = [];
+
+            foreach ($member->types as $option) {
+                $branch = new IntersectionType([...$otherMembers, $option])->unwrapType($config);
+
+                if (! $branch instanceof NeverType) {
+                    $branches[] = $branch;
+                }
+            }
+
+            return $branches === [] ? new NeverType(conflictingTypes: $types, required: $this->required) : new UnionType($branches);
+        }
+
+        return null;
+    }
+
+
+    /**
+     * An intersection is empty (`never`) when two of its members can never be
+     * satisfied at once. Only flagged for "closed" types (scalars, null, void,
+     * array) that don't overlap — object/interface intersections are kept.
+     *
+     * @param Type[] $types
+     */
+    private function intersectionIsEmpty(array $types, Config $config): bool
+    {
+        $types = array_values($types);
+        $count = count($types);
+
+        for ($i = 0; $i < $count; $i++) {
+            for ($j = $i + 1; $j < $count; $j++) {
+                $a = $types[$i];
+                $b = $types[$j];
+
+                if ($a::class === $b::class
+                    || $a->isSubTypeOf($b, $config)
+                    || $b->isSubTypeOf($a, $config)
+                ) {
+                    continue;
+                }
+
+                if ($this->isClosedType($a) && $this->isClosedType($b)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+
+    /**
+     * A "closed" type admits no values outside its own kind, so intersecting it
+     * with a disjoint type yields `never`. `ClassStringType` is excluded — it
+     * overlaps with `string` and with more specific class-strings.
+     */
+    private function isClosedType(Type $type): bool
+    {
+        return $type instanceof IntegerType
+            || $type instanceof FloatType
+            || $type instanceof NumberType
+            || ($type instanceof StringType && ! $type instanceof ClassStringType)
+            || $type instanceof BoolType
+            || $type instanceof NullType
+            || $type instanceof VoidType
+            || $type instanceof ArrayType;
     }
 
 

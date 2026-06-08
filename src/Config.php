@@ -102,6 +102,10 @@ use Exception;
  *     objects?: array{
  *         merge_shapes_in_type_unions?: bool,
  *     },
+ *     intersections?: array{
+ *         coercive_scalar_overlap?: bool,
+ *         render_empty_as_unknown?: bool,
+ *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,
  *     extensions?: array<class-string>,

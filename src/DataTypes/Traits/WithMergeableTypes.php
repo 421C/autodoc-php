@@ -20,65 +20,66 @@ use AutoDoc\DataTypes\VoidType;
 
 trait WithMergeableTypes
 {
-    public function mergeObjectsAndArrayShapes(Config $config): self
+    /**
+     * Resolves coercible scalar intersections like `string&numeric`; returns null
+     * when normal merge/intersection rules should apply.
+     */
+    private function coerceScalarOverlap(Type $type1, Type $type2): ?Type
     {
-        $types = [];
+        $isNumber = fn (Type $type): bool => $type instanceof IntegerType
+            || $type instanceof FloatType
+            || $type instanceof NumberType;
 
-        $objectType = null;
+        // string ∩ numeric → a numeric string ("123", "-4.5")
+        if (($type1 instanceof StringType && $isNumber($type2))
+            || ($type2 instanceof StringType && $isNumber($type1))
+        ) {
+            $numeric = $type1 instanceof StringType ? $type2 : $type1;
 
-        foreach ($this->types as $type) {
-            $type = $type->unwrapType($config);
+            if ($numeric instanceof IntegerType) {
+                $result = new IntegerType;
+                $result->isString = true;
 
-            if ($type instanceof ObjectType || ($type instanceof ArrayType && $type->shape)) {
-                if ($type instanceof ArrayType) {
-                    $properties = [];
-
-                    foreach ($type->shape as $key => $valueType) {
-                        $properties[(string) $key] = $valueType;
-                    }
-
-                } else {
-                    $properties = $type->properties;
-                }
-
-                if ($objectType) {
-                    foreach ($properties as $key => $valueType) {
-                        $existingValueType = $objectType->properties[$key] ?? null;
-
-                        if (! $existingValueType) {
-                            $objectType->properties[$key] = $valueType;
-
-                        } else {
-                            $mergedType = $this->mergeTypes($existingValueType, $valueType, $config);
-
-                            if ($mergedType) {
-                                $mergedType->required = $existingValueType->required || $valueType->required;
-
-                                $objectType->properties[$key] = $mergedType;
-
-                            } else {
-                                $objectType->properties[$key] = new UnionType([$existingValueType, $valueType])
-                                    ->setRequired($existingValueType->required || $valueType->required);
-                            }
-                        }
-                    }
-
-                } else {
-                    $objectType = $type instanceof ArrayType ? new ObjectType($properties) : $type;
-                }
-
-            } else {
-                $types[] = $type;
+                return $result;
             }
+
+            return new NumberType(isString: true);
         }
 
-        if ($objectType) {
-            $types[] = $objectType;
+        // bool ∩ numeric → 0/1
+        if (($type1 instanceof BoolType && $isNumber($type2))
+            || ($type2 instanceof BoolType && $isNumber($type1))
+        ) {
+            $numeric = $type1 instanceof BoolType ? $type2 : $type1;
+
+            $result = $numeric instanceof IntegerType ? new IntegerType : new NumberType;
+            $result->setEnumValues([0, 1]);
+
+            return $result;
         }
 
-        $this->types = $types;
+        // bool ∩ string → "0"/"1"
+        if (($type1 instanceof BoolType && $type2 instanceof StringType)
+            || ($type2 instanceof BoolType && $type1 instanceof StringType)
+        ) {
+            $result = new StringType;
+            $result->setEnumValues(['0', '1']);
 
-        return $this;
+            return $result;
+        }
+
+        return null;
+    }
+
+    private function arrayShapeToObject(ArrayType $array): ObjectType
+    {
+        $properties = [];
+
+        foreach ($array->shape as $key => $valueType) {
+            $properties[(string) $key] = $valueType;
+        }
+
+        return new ObjectType($properties)->setRequired($array->required);
     }
 
     public function mergeDuplicateTypes(Config $config, bool $mergeAsIntersection = false): void
@@ -180,8 +181,31 @@ trait WithMergeableTypes
             $type2 = new StringType;
         }
 
+        // Validation semantics allow coercible scalar intersections like `string&number`.
+        if ($mergeAsIntersection && ($config->data['intersections']['coercive_scalar_overlap'] ?? false)) {
+            $overlap = $this->coerceScalarOverlap($type1, $type2);
+
+            if ($overlap !== null) {
+                $overlap->required = $this->required || $type1->required || $type2->required;
+
+                return $overlap;
+            }
+        }
+
         if ($this->isScalarType($type1) && $this->isScalarType($type2)) {
             return $this->mergeScalarTypes($type1, $type2, $config, $mergeAsIntersection);
+        }
+
+        // Intersected array-shapes and objects both emit `type: object`, so merge
+        // cross-kind pairs into one object shape instead of leaving an allOf.
+        if ($mergeAsIntersection) {
+            if ($type1 instanceof ArrayType && $type1->shape && $type2 instanceof ObjectType) {
+                $type1 = $this->arrayShapeToObject($type1);
+            }
+
+            if ($type2 instanceof ArrayType && $type2->shape && $type1 instanceof ObjectType) {
+                $type2 = $this->arrayShapeToObject($type2);
+            }
         }
 
         // If type classes do not match, they can not be merged and will be returned as a UnionType.

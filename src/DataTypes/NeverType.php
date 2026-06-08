@@ -12,8 +12,25 @@ use AutoDoc\Config;
  */
 class NeverType extends Type
 {
+    public function __construct(
+        /**
+         * Debug context for `never` produced by an impossible intersection.
+         * Empty for a plain `never` (e.g. a `never` return).
+         *
+         * @var Type[]
+         */
+        public array $conflictingTypes = [],
+        bool $required = false,
+    ) {
+        $this->required = $required;
+    }
+
     public function toSchema(Config $config): array
     {
+        if ($config->data['intersections']['render_empty_as_unknown'] ?? true) {
+            return new UnknownType($this->description)->toSchema($config);
+        }
+
         // An empty `enum` validates no instance, matching a value that never occurs.
         return [
             'enum' => [],

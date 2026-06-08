@@ -2689,6 +2689,7 @@ final class ControlFlowAnalysisTest extends TestCase
     {
         $config = self::loadConfig();
         $config->data['openapi']['show_values_for_scalar_types'] = true;
+        $config->data['intersections']['render_empty_as_unknown'] = false;
 
         $scope = new Scope($config);
         $type = (new PhpCallable(

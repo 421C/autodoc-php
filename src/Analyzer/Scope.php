@@ -694,6 +694,28 @@ class Scope
 
 
     /**
+     * Run $callback using validation semantics for scalar intersections, so
+     * `string&number` narrows to numeric-string instead of `never`.
+     *
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withCoerciveScalarOverlap(callable $callback): mixed
+    {
+        $initialValue = $this->config->data['intersections']['coercive_scalar_overlap'] ?? false;
+
+        $this->config->data['intersections']['coercive_scalar_overlap'] = true;
+
+        $returnValue = $callback();
+
+        $this->config->data['intersections']['coercive_scalar_overlap'] = $initialValue;
+
+        return $returnValue;
+    }
+
+
+    /**
      * Run $callback with request body capture disabled, so incompletely-resolved
      * arguments neither leak into the request body nor dedup-block the real capture
      * during body traversal.
