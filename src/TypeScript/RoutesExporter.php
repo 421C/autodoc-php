@@ -4,6 +4,7 @@ namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\OpenApi\Parameter;
@@ -34,6 +35,8 @@ class RoutesExporter
      */
     public function export(): array
     {
+        $includeRequestsWithoutBody = (bool) ($this->config->data['typescript']['export_http_requests_and_responses'][$this->targetFilePath]['include_requests_without_body'] ?? false);
+
         foreach ($this->getOpenApiPaths($this->targetFilePath) as $route => $path) {
             foreach ($path->operations as $method => $operation) {
                 $method = strtoupper($method);
@@ -46,6 +49,14 @@ class RoutesExporter
                 foreach ($operation->parameters ?? [] as $parameter) {
                     if ($parameter instanceof Parameter && $parameter->in === 'query' && $parameter->type) {
                         $this->addQueryParameter($route, $method, $parameter->name, $parameter->type);
+                    }
+                }
+
+                if ($includeRequestsWithoutBody) {
+                    $routeRequests = $this->requestsObjectShape->properties[$route] ?? null;
+
+                    if (! $routeRequests instanceof ObjectType || ! isset($routeRequests->properties[$method])) {
+                        $this->addRequestWithoutBody($route, $method);
                     }
                 }
 
@@ -107,6 +118,14 @@ class RoutesExporter
         assert($this->requestsObjectShape->properties[$route]->properties[$method] instanceof ObjectType);
 
         $this->requestsObjectShape->properties[$route]->properties[$method]->properties['body'] = $requestBodyType->setRequired(true);
+    }
+
+    private function addRequestWithoutBody(string $route, string $method): void
+    {
+        $this->requestsObjectShape->properties[$route] ??= (new ObjectType)->setRequired(true);
+        assert($this->requestsObjectShape->properties[$route] instanceof ObjectType);
+
+        $this->requestsObjectShape->properties[$route]->properties[$method] = (new NullType)->setRequired(true);
     }
 
     private function addQueryParameter(string $route, string $method, string $name, Type $parameterType): void

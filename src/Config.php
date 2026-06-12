@@ -48,6 +48,7 @@ use Exception;
  *         routes?: string[],
  *         exact_routes?: string[],
  *         request_methods?: string[],
+ *         include_requests_without_body?: bool,
  *     }>,
  * }
  *
@@ -66,6 +67,7 @@ use Exception;
  *         routes?: string[],
  *         exact_routes?: string[],
  *         request_methods?: string[],
+ *         include_requests_without_body?: bool,
  *     }>,
  * }
  *

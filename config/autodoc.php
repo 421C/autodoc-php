@@ -250,6 +250,7 @@ return [
          *     '@/exported-types/document-requests-and-responses.ts' => [
          *         'routes' => ['/api/document'],
          *         'request_methods' => ['get', 'post', 'put', 'patch', 'delete'],
+         *         'include_requests_without_body' => true,
          *     ],
          * ]
          */
