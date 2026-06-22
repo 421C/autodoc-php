@@ -28,7 +28,6 @@ final class OpenApiSchemaTest extends TestCase
     {
         $config = self::loadConfig();
 
-        $config->data['openapi']['show_routes_as_titles'] = false;
         $config->data['openapi']['show_values_for_scalar_types'] = true;
 
         $config->data['extensions'] = [
@@ -44,7 +43,6 @@ final class OpenApiSchemaTest extends TestCase
     {
         $config = self::loadConfig();
 
-        $config->data['openapi']['show_routes_as_titles'] = false;
         $config->data['openapi']['show_values_for_scalar_types'] = false;
         $config->data['arrays']['resolve_partial_shapes'] = true;
 

@@ -53,11 +53,6 @@ abstract class AbstractRouteLoader
             $operation = $this->routeToOperation($route);
 
             if ($operation) {
-                if ($this->config->data['openapi']['show_routes_as_titles'] ?? false) {
-                    $operation->description = trim($operation->summary . PHP_EOL . PHP_EOL . $operation->description);
-                    $operation->summary = trim($route->uri, '/');
-                }
-
                 $paths[$route->uri] ??= new Path;
 
                 $paths[$route->uri]->operations[$route->method] = $operation;
