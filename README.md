@@ -123,36 +123,28 @@ Make sure it exists and is writable.
 'openapi_export_dir' => '/path/to/openapi',
 ```
 
-6. Depending on your project setup, define a new route that will accept a GET request and return the OpenApi JSON schema. In this route, add the following code:
+6. Define a single catch-all GET route that serves the whole documentation UI — the HTML page, the OpenAPI JSON, and the viewer's JS/CSS assets. Forward the matched wildcard segment to `DocViewer::handle()`:
 
 ```php
+// e.g. mounted at /docs — match both `/docs` and `/docs/...`
 $autodocConfig = new \AutoDoc\Config(require '/path/to/your/config/autodoc.php');
-$workspace = \AutoDoc\Workspace::getDefault($autodocConfig);
 
-echo $workspace->getJson();
+new \AutoDoc\DocViewer($autodocConfig, baseUrl: '/docs')->handle($path);
 ```
+
+`$path` is the part of the request URI after the base URL (`''`, `openapi.json`, or `assets/...`). For example, in Laravel:
+
+```php
+Route::get('/docs/{path?}', function (string $path = '') {
+    $autodocConfig = new \AutoDoc\Config(require config_path('autodoc.php'));
+
+    new \AutoDoc\DocViewer($autodocConfig, baseUrl: '/docs')->handle($path);
+})->where('path', '.*');
+```
+
+The `DocViewer` constructor reads the title and `ui` options from your config and derives the OpenAPI-JSON and asset URLs from `baseUrl`, so there is nothing else to wire up. The viewer's JS/CSS are streamed straight from the package's `resources/viewer/` directory in `vendor/` — no files are copied into your `public/` directory.
 
 <p class="ml-5">You can read more about workspaces <a href="https://phpautodoc.com/docs/workspaces">here</a>.</p>
-
-
-7. Create another route that will be used to view your documentation. In this route, add the following code:
-
-```php
-$autodocConfig = require '/path/to/your/config/autodoc.php';
-
-// The route you created in previous step.
-$openApiUrl = '/docs/openapi-json';
-
-$docViewer = new \AutoDoc\DocViewer(
-    title: $autodocConfig['api']['title'],
-    openApiUrl: $openApiUrl,
-    theme: $autodocConfig['ui']['theme'],
-    logo: $autodocConfig['ui']['logo'],
-    hideTryIt: $autodocConfig['ui']['hide_try_it'],
-);
-
-$docViewer->renderPage();
-```
 
 Now you can visit this route and see the generated documentation.
 

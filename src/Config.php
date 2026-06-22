@@ -23,6 +23,27 @@ use Exception;
  *     generate_description_from_cases?: bool,
  * }
  *
+ * @phpstan-type WikiPageConfig array{id: string, title: string, url?: string, path?: string}
+ *
+ * @phpstan-type UiConfig array{
+ *     theme?: 'system'|'light'|'dark',
+ *     logo?: string,
+ *     wiki_pages?: list<WikiPageConfig>,
+ *     route_groups?: list<array{title: string, routes?: list<string>, exact_routes?: list<string>, collapsed?: bool}>,
+ *     sidebar?: array{
+ *         routes?: array{
+ *             show_path?: bool,
+ *             show_title?: bool,
+ *             show_method?: bool,
+ *             show_path_above_title?: bool,
+ *         },
+ *     },
+ *     try_it?: array{
+ *         enabled?: bool,
+ *         proxy_url?: string,
+ *     },
+ * }
+ *
  * @phpstan-type WorkspaceConfig array{
  *     routes?: string[],
  *     exact_routes?: string[],
@@ -31,6 +52,7 @@ use Exception;
  *     export_filename?: string,
  *     access_token?: string,
  *     request_methods?: string[],
+ *     ui?: UiConfig,
  * }
  *
  * @phpstan-type TypeScriptConfigRaw array{
@@ -79,11 +101,8 @@ use Exception;
  *         domain?: string,
  *     },
  *     workspaces: WorkspaceConfig[],
- *     ui: array{
- *         theme?: 'light'|'dark',
- *         logo?: string,
- *         hide_try_it?: bool,
- *     },
+ *     workspaces_json_dir?: string,
+ *     ui: UiConfig,
  *     openapi: array{
  *         show_routes_as_titles?: bool,
  *         show_values_for_scalar_types?: bool,
@@ -141,6 +160,70 @@ class Config
      * @var ?array<class-string, list<class-string>>
      */
     private ?array $extensionsByType = null;
+
+    /**
+     * Merged workspaces (JSON dir + inline), cached after first resolution.
+     *
+     * @var ?array<int|string, WorkspaceConfig>
+     */
+    private ?array $workspaces = null;
+
+
+    /**
+     * @return array<int|string, WorkspaceConfig>
+     */
+    public function getWorkspaces(): array
+    {
+        if ($this->workspaces !== null) {
+            return $this->workspaces;
+        }
+
+        $this->workspaces = array_merge($this->loadJsonWorkspaces(), $this->data['workspaces']);
+
+        return $this->workspaces;
+    }
+
+
+    /**
+     * @return ?WorkspaceConfig
+     */
+    public function getWorkspace(int|string $key): ?array
+    {
+        return $this->getWorkspaces()[$key] ?? null;
+    }
+
+
+    /**
+     * @return array<int|string, WorkspaceConfig>
+     */
+    private function loadJsonWorkspaces(): array
+    {
+        $dir = $this->data['workspaces_json_dir'] ?? null;
+
+        if (! $dir) {
+            return [];
+        }
+
+        if (! is_dir($dir)) {
+            throw new Exception("Autodoc `workspaces_json_dir` is not a directory: '$dir'.");
+        }
+
+        $workspaces = [];
+
+        foreach (glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*.json') ?: [] as $file) {
+            $contents = file_get_contents($file);
+            $decoded = $contents === false ? null : json_decode($contents, true);
+
+            if (! is_array($decoded)) {
+                throw new Exception("Autodoc workspace file is not valid JSON: '$file'.");
+            }
+
+            /** @var WorkspaceConfig $decoded */
+            $workspaces[basename($file, '.json')] = $decoded;
+        }
+
+        return $workspaces;
+    }
 
 
     /**
