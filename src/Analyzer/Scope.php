@@ -510,6 +510,10 @@ class Scope
                 return new BoolType;
             }
 
+            if ($node instanceof Node\Expr\BooleanNot) {
+                return new BoolType;
+            }
+
             if ($node instanceof Node\Expr\Cast\Array_) {
                 return new ArrayType;
             }
@@ -560,6 +564,36 @@ class Scope
                 || $node instanceof Node\Expr\BinaryOp\Pow
             ) {
                 return new NumberType;
+            }
+
+            if ($node instanceof Node\Expr\BinaryOp\Equal
+                || $node instanceof Node\Expr\BinaryOp\NotEqual
+                || $node instanceof Node\Expr\BinaryOp\Identical
+                || $node instanceof Node\Expr\BinaryOp\NotIdentical
+                || $node instanceof Node\Expr\BinaryOp\Greater
+                || $node instanceof Node\Expr\BinaryOp\GreaterOrEqual
+                || $node instanceof Node\Expr\BinaryOp\Smaller
+                || $node instanceof Node\Expr\BinaryOp\SmallerOrEqual
+                || $node instanceof Node\Expr\BinaryOp\BooleanAnd
+                || $node instanceof Node\Expr\BinaryOp\BooleanOr
+                || $node instanceof Node\Expr\BinaryOp\LogicalAnd
+                || $node instanceof Node\Expr\BinaryOp\LogicalOr
+                || $node instanceof Node\Expr\BinaryOp\LogicalXor
+                || $node instanceof Node\Expr\Instanceof_
+                || $node instanceof Node\Expr\Isset_
+                || $node instanceof Node\Expr\Empty_
+            ) {
+                return new BoolType;
+            }
+
+            if ($node instanceof Node\Expr\BinaryOp\Spaceship
+                || $node instanceof Node\Expr\BinaryOp\BitwiseAnd
+                || $node instanceof Node\Expr\BinaryOp\BitwiseOr
+                || $node instanceof Node\Expr\BinaryOp\BitwiseXor
+                || $node instanceof Node\Expr\BinaryOp\ShiftLeft
+                || $node instanceof Node\Expr\BinaryOp\ShiftRight
+            ) {
+                return new IntegerType;
             }
 
             if ($node instanceof Node\Expr\BinaryOp\Pipe) {

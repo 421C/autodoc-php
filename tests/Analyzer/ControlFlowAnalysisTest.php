@@ -75,6 +75,114 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function booleanNotOnAVariableResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (string $value): mixed {
+            return ! $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function comparisonOperatorResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a, int $b): mixed {
+            return $a === $b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function relationalOperatorResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a, int $b): mixed {
+            return $a < $b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function logicalOperatorResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (bool $a, bool $b): mixed {
+            return $a && $b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function instanceofResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (object $value): mixed {
+            return $value instanceof SimpleClass;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function issetResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (mixed $value): mixed {
+            return isset($value);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function emptyResolvesToBool(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (mixed $value): mixed {
+            return empty($value);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'boolean',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function spaceshipOperatorResolvesToInt(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a, int $b): mixed {
+            return $a <=> $b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function bitwiseOperatorResolvesToInt(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a, int $b): mixed {
+            return $a & $b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function orInsideIf(): void
     {
         $schema = $this->getClosureReturnSchema(function (object $value): int|string {
