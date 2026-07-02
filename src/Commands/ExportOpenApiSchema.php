@@ -38,7 +38,7 @@ class ExportOpenApiSchema
         } else {
             $workspaces = [];
 
-            foreach ($config->getWorkspaces() as $key => $workspaceConfig) {
+            foreach (array_keys($config->getWorkspaces()) as $key) {
                 $workspaces[] = new Workspace($config, $key);
             }
         }

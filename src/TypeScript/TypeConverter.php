@@ -160,7 +160,7 @@ class TypeConverter
         }
 
         if ($type instanceof IntersectionType) {
-            $type->mergeDuplicateTypes(mergeAsIntersection: true, config: $scope->config);
+            $type->mergeDuplicateTypes(config: $scope->config, mergeAsIntersection: true);
 
             $types = array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel), $type->types);
 

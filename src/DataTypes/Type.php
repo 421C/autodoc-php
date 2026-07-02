@@ -393,7 +393,7 @@ abstract class Type
             return new UnionType($types)->unwrapType($config);
 
         } else if ($this instanceof NullType) {
-            return new UnknownType;
+            return new NeverType;
         }
 
         return $this;

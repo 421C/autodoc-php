@@ -396,28 +396,65 @@ class Scope
                 return new FloatType($node->value);
             }
 
+            // The negated literal is recomputed onto a fresh type so the operand
+            // is never mutated in place, and any description/examples it carried
+            // (which describe the original value) are dropped.
             if ($node instanceof Node\Expr\UnaryMinus) {
+                $numberType = $this->resolveType($node->expr);
+
+                if ($numberType instanceof IntegerType && is_int($numberType->value)) {
+                    return new IntegerType(-$numberType->value);
+                }
+
+                if ($numberType instanceof FloatType && is_float($numberType->value)) {
+                    return new FloatType(-$numberType->value);
+                }
+
+                if ($numberType instanceof NumberType
+                    && (is_int($numberType->value) || is_float($numberType->value))
+                ) {
+                    return new NumberType(-$numberType->value);
+                }
+
+                return new NumberType;
+            }
+
+            if ($node instanceof Node\Expr\UnaryPlus) {
                 $numberType = $this->resolveType($node->expr);
 
                 if ($numberType instanceof IntegerType
                     || $numberType instanceof NumberType
                     || $numberType instanceof FloatType
                 ) {
-                    if (! is_array($numberType->value)
-                        && ! is_null($numberType->value)
-                    ) {
-                        $numberType->value = -$numberType->value;
+                    return $numberType;
+                }
 
-                        return $numberType;
-                    }
+                return new NumberType;
+            }
+
+            // Inc/dec change the operand, so the literal value is dropped, but the
+            // numeric kind (int stays int, float stays float) is preserved.
+            if ($node instanceof Node\Expr\PreInc
+                || $node instanceof Node\Expr\PostInc
+                || $node instanceof Node\Expr\PreDec
+                || $node instanceof Node\Expr\PostDec
+            ) {
+                $numberType = $this->resolveType($node->var);
+
+                if ($numberType instanceof IntegerType) {
+                    return new IntegerType;
+                }
+
+                if ($numberType instanceof FloatType) {
+                    return new FloatType;
                 }
 
                 return new NumberType;
             }
 
             if ($node instanceof Node\Expr\Ternary) {
-                // Short ternary (`$a ?: $b`) yields the left operand only when it is
-                // truthy, so null can't leak through it — like the `??` operator.
+                // Short ternary (`$a ?: $b`) yields the left operand only when it is truthy,
+                // so null can't leak through it.
                 if ($node->if === null) {
                     return new UnionType([
                         $this->resolveType($node->cond)->removeNull($this->config),
@@ -594,6 +631,44 @@ class Scope
                 || $node instanceof Node\Expr\BinaryOp\ShiftRight
             ) {
                 return new IntegerType;
+            }
+
+            if ($node instanceof Node\Expr\Assign
+                || $node instanceof Node\Expr\ErrorSuppress
+                || $node instanceof Node\Expr\Clone_
+            ) {
+                return $this->resolveType($node->expr);
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\Concat) {
+                return new StringType;
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\Plus
+                || $node instanceof Node\Expr\AssignOp\Minus
+                || $node instanceof Node\Expr\AssignOp\Mul
+                || $node instanceof Node\Expr\AssignOp\Div
+                || $node instanceof Node\Expr\AssignOp\Mod
+                || $node instanceof Node\Expr\AssignOp\Pow
+            ) {
+                return new NumberType;
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\BitwiseAnd
+                || $node instanceof Node\Expr\AssignOp\BitwiseOr
+                || $node instanceof Node\Expr\AssignOp\BitwiseXor
+                || $node instanceof Node\Expr\AssignOp\ShiftLeft
+                || $node instanceof Node\Expr\AssignOp\ShiftRight
+            ) {
+                return new IntegerType;
+            }
+
+            // `$x ??= y` keeps the existing non-null value of `$x`, else `y`.
+            if ($node instanceof Node\Expr\AssignOp\Coalesce) {
+                return new UnionType([
+                    $this->resolveType($node->var)->removeNull($this->config),
+                    $this->resolveType($node->expr),
+                ]);
             }
 
             if ($node instanceof Node\Expr\BinaryOp\Pipe) {

@@ -72,11 +72,11 @@ class Parameter implements JsonSerializable
         return new Parameter(
             name: $name,
             in: $in,
+            config: $config,
             description: $description,
             required: $type->required,
             deprecated: $deprecated,
             type: $type,
-            config: $config,
         );
     }
 }

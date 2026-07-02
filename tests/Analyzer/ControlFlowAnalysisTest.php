@@ -183,6 +183,370 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function unaryMinusKeepsTheNegatedLiteralValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            return -5;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => -5,
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function unaryPlusResolvesToTheNumericOperand(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a): mixed {
+            return +$a;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function preIncrementResolvesToTheNumericOperand(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a): mixed {
+            return ++$a;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function postDecrementResolvesToTheNumericOperand(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (float $a): mixed {
+            return $a--;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'number',
+            'format' => 'float',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function assignExpressionResolvesToTheAssignedValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            return $x = 'hello';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'hello',
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function concatAssignExpressionResolvesToString(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (string $a): mixed {
+            return $a .= 'x';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arithmeticAssignExpressionResolvesToNumber(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a): mixed {
+            return $a += 5;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'number',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function bitwiseAssignExpressionResolvesToInt(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $a): mixed {
+            return $a &= 3;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function coalesceAssignStatementRemovesNullAndAddsTheFallback(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): array {
+            $options = rand(0, 1) ? ['page' => 3] : null;
+
+            $options ??= ['page' => 1, 'perPage' => 20];
+
+            return $options;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'page' => [
+                            'const' => 3,
+                            'type' => 'integer',
+                        ],
+                    ],
+                    'required' => [
+                        'page',
+                    ],
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'page' => [
+                            'const' => 1,
+                            'type' => 'integer',
+                        ],
+                        'perPage' => [
+                            'const' => 20,
+                            'type' => 'integer',
+                        ],
+                    ],
+                    'required' => [
+                        'page',
+                        'perPage',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function concatAssignStatementUpdatesTheVariableToString(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): string {
+            $message = 'count: ';
+
+            $message .= 5;
+
+            return $message;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function postIncrementStatementPreservesIntegerKind(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $count = 5;
+
+            $count++;
+
+            return $count;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function preDecrementStatementPreservesFloatKind(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = 5.0;
+
+            --$value;
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'number',
+            'format' => 'float',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function errorSuppressResolvesToTheInnerType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = ['code' => 5];
+
+            return @$data['code'];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 5,
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function cloneResolvesToTheClonedObjectType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (SimpleClass $value): mixed {
+            return clone $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function negatedIsStringGuardNarrowsTheTrueBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? 5 : 'hello';
+
+            if (! is_string($value)) {
+                return $value;
+            }
+
+            return 'str';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+                [
+                    'const' => 'str',
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function negatedEmptyGuardNarrowsToTruthyValues(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? 'hello' : '';
+
+            if (! empty($value)) {
+                return $value;
+            }
+
+            return 0;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'hello',
+                    'type' => 'string',
+                ],
+                [
+                    'const' => 0,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function doubleNegationNarrowsTheSameAsATruthyCheck(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = rand(0, 1) ? new SimpleClass : null;
+
+            if (!! $value) {
+                return $value;
+            }
+
+            return 'empty';
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+                [
+                    'const' => 'empty',
+                    'type' => 'string',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function deMorganNegatedAndGuardNarrowsAfterTheGuard(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = match (rand(0, 2)) {
+                0 => new SimpleClass,
+                1 => new Rocket,
+                default => null,
+            };
+
+            if (! ($value !== null && $value instanceof SimpleClass)) {
+                return 'invalid';
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'const' => 'invalid',
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function orInsideIf(): void
     {
         $schema = $this->getClosureReturnSchema(function (object $value): int|string {

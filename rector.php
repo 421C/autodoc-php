@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Rector\CodeQuality\Rector\BooleanOr\RepeatedOrEqualToInArrayRector;
 use Rector\CodeQuality\Rector\Class_\CompleteDynamicPropertiesRector;
+use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRector;
 use Rector\CodeQuality\Rector\Empty_\SimplifyEmptyCheckOnEmptyArrayRector;
 use Rector\CodeQuality\Rector\FuncCall\SimplifyRegexPatternRector;
 use Rector\CodeQuality\Rector\Identical\FlipTypeControlToUseExclusiveTypeRector;
@@ -31,6 +32,7 @@ return RectorConfig::configure()
         DisallowedEmptyRuleFixerRector::class,
         ExplicitBoolCompareRector::class,
         FlipTypeControlToUseExclusiveTypeRector::class,
+        LocallyCalledStaticMethodToNonStaticRector::class,
         NullToStrictStringFuncCallArgRector::class,
         RemoveAlwaysElseRector::class,
         RemoveReflectionSetAccessibleCallsRector::class,

@@ -638,7 +638,7 @@ class ControlFlowController
                                     'type' => 'object',
                                     'properties' => [
                                         'index' => [
-                                            'type' => 'number',
+                                            'type' => 'integer',
                                         ],
                                     ],
                                     'required' => [
@@ -651,7 +651,7 @@ class ControlFlowController
                                         'type' => 'object',
                                         'properties' => [
                                             'index' => [
-                                                'type' => 'number',
+                                                'type' => 'integer',
                                             ],
                                         ],
                                         'required' => [

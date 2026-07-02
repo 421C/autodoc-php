@@ -3,7 +3,6 @@
 namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
-use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedArrayItemType;
 use AutoDoc\DataTypes\UnresolvedArrayKeyType;
@@ -289,12 +288,21 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->handleAssignment($node->var, $node->expr, $comments);
         }
 
+        // Compound assignments (`.=`, `+=`, `??=`, …) update the variable to the
+        // operation's result type. The whole node is stored so its endFilePos spans
+        // the expression: `??=` re-reads the operand `$x`, and that self-referential
+        // read (excluded by readFilePos <= endFilePos) then resolves to the
+        // pre-assignment type instead of looping on the event being created.
+        if ($node instanceof Node\Expr\AssignOp) {
+            $this->handleAssignment($node->var, $node, $comments);
+        }
+
         if ($node instanceof Node\Expr\PostInc
             || $node instanceof Node\Expr\PostDec
             || $node instanceof Node\Expr\PreInc
             || $node instanceof Node\Expr\PreDec
         ) {
-            $this->handleAssignment($node->var, new NumberType, $comments);
+            $this->handleAssignment($node->var, $node, $comments);
         }
 
         if ($this->isOperationEntrypoint && $node instanceof Node\Expr\Throw_) {
