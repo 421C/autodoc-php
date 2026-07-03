@@ -52,7 +52,7 @@ final class TypeScriptSchemaTest extends TestCase
         export type ExampleObject = {
             summary: string
             description: string
-            value: unknown|null
+            value: unknown
             externalValue: string|null
         }
 
@@ -373,7 +373,7 @@ final class TypeScriptSchemaTest extends TestCase
                     contentType?: string
                     body?: {
                         description: string|null
-                        examples: unknown|null
+                        examples: unknown
                         required: boolean
                         deprecated: boolean
                         deprecatedDescription: string|null
@@ -385,7 +385,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestQueryParams: Record<string, {
                     description: string|null
-                    examples: unknown|null
+                    examples: unknown
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -396,7 +396,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestUrlParams: Record<string, {
                     description: string|null
-                    examples: unknown|null
+                    examples: unknown
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -407,7 +407,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestHeaders: Record<string, {
                     description: string|null
-                    examples: unknown|null
+                    examples: unknown
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -418,7 +418,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestCookies: Record<string, {
                     description: string|null
-                    examples: unknown|null
+                    examples: unknown
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -674,6 +674,25 @@ final class TypeScriptSchemaTest extends TestCase
              *
              */
             type UnnamedType = string|null
+            ',
+        );
+    }
+
+    #[Test]
+    public function mixedOrNull(): void
+    {
+        // TS `unknown` already includes null, so the declared null is dropped.
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /**
+             * @autodoc mixed|null
+             */
+            ',
+            expected: '
+            /**
+             * @autodoc mixed|null
+             */
+            type UnnamedType = unknown
             ',
         );
     }

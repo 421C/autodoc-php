@@ -349,20 +349,9 @@ class BasicResponsesController
     }
 
 
-    #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'responses' => [
-            200 => [
-                'content' => [
-                    'text/plain' => [
-                        'schema' => [
-                            'type' => 'null',
-                        ],
-                    ],
-                ],
-                'description' => '',
-            ],
-        ],
-    ])]
+    // The recursion never resolves to a concrete type, and `mixed` must not
+    // fabricate one via its implied null — an unknown return documents no response.
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [])]
     public function recursiveMethodReturnsNull(): mixed
     {
         return $this->recursiveMethodReturnsNull();

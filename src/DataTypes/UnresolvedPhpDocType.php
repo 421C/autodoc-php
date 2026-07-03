@@ -35,10 +35,6 @@ class UnresolvedPhpDocType extends UnresolvedType
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
 
-        if ($resolvedType instanceof ObjectType && $resolvedType->typeToDisplay) {
-            $resolvedType->typeToDisplay->addDescription($this->description);
-        }
-
         return $resolvedType;
     }
 

@@ -11,6 +11,7 @@ use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
@@ -146,6 +147,25 @@ class Scope
                     'never' => new NeverType,
                     default => new UnknownType,
                 };
+            }
+
+            if ($node instanceof Node\NullableType) {
+                return new UnionType([
+                    $this->resolveType($node->type),
+                    new NullType,
+                ])->unwrapType($this->config);
+            }
+
+            if ($node instanceof Node\UnionType) {
+                return new UnionType(
+                    array_map($this->resolveType(...), $node->types),
+                )->unwrapType($this->config);
+            }
+
+            if ($node instanceof Node\IntersectionType) {
+                return new IntersectionType(
+                    array_map($this->resolveType(...), $node->types),
+                )->unwrapType($this->config);
             }
 
             if ($node instanceof Node\Expr\Variable) {

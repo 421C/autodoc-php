@@ -605,7 +605,7 @@ abstract class Type
                 }
             }
 
-            if ($reflectionType->allowsNull() && !($type instanceof NullType)) {
+            if ($reflectionType->allowsNull() && !($type instanceof NullType) && $typeName !== 'mixed') {
                 return new UnionType([$type, new NullType]);
             }
 

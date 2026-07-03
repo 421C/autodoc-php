@@ -15,6 +15,7 @@ use AutoDoc\Tests\TestProject\Entities\StateEnum;
 use AutoDoc\Tests\TestProject\Extensions\ArrayMapOverrideExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
+use DateTime;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
@@ -3254,6 +3255,104 @@ final class ControlFlowAnalysisTest extends TestCase
     }
 
     #[Test]
+    public function mixedReflectionTypeCarriesNoNullArtifact(): void
+    {
+        // json_decode() reflects `mixed`, which allowsNull() — that null adds nothing
+        // an unknown doesn't already cover, so it must not render a nullable schema.
+        $schema = $this->getClosureReturnSchema(function (string $json): mixed {
+            return json_decode($json, true);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayItemFromMixedReflectionCarriesNoNullArtifact(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (mixed $items): array {
+            // @phpstan-ignore argument.type
+            return array_map(fn (string $json) => json_decode($json, true), $items); // @phpstan-ignore argument.type
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function observedNullBranchKeepsUnionWithUnknownNullable(): void
+    {
+        // `max(...)` is unknown to the analyzer, but the null branch is proven —
+        // unlike the `mixed` reflection artifact, it must survive into the schema.
+        $schema = $this->getClosureReturnSchema(function (int $a, int $b): mixed {
+            if (rand(0, 1)) {
+                return null;
+            }
+
+            return max($a, $b);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => [
+                'string',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function declaredNullableUnresolvableClassStaysNullable(): void
+    {
+        // The class can't be resolved, but the author declared the null.
+        // @phpstan-ignore class.notFound
+        $schema = $this->getClosureReturnSchema(function (?UnresolvableClass $value): mixed {
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => [
+                'object',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nullableNativeParamHintSeedsNullableType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (?string $value): mixed {
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => [
+                'string',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function unionNativeParamHintSeedsDeclaredUnion(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int|string $value): mixed {
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => [
+                'integer',
+                'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
     public function propertiesOfAnEnumCaseConstantResolve(): void
     {
         $schema = $this->getClosureReturnSchema(function (): array {
@@ -3361,6 +3460,35 @@ final class ControlFlowAnalysisTest extends TestCase
             'items' => [
                 'enum' => ['a', 'b'],
                 'type' => 'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function varTagDescriptionOnAnArrayItemIsNotDuplicatedOnTheDisplayType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): array {
+            return [
+                /**
+                 * Updated at (UTC)
+                 *
+                 * @var \DateTimeInterface
+                 */
+                'updated_at' => new DateTime,
+            ];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'updated_at' => [
+                    'type' => 'string',
+                    'format' => 'date-time',
+                    'description' => 'Updated at (UTC)',
+                ],
+            ],
+            'required' => [
+                'updated_at',
             ],
         ], $schema, 'closure', 'return');
     }

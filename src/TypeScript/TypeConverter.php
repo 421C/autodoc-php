@@ -154,9 +154,14 @@ class TypeConverter
         if ($type instanceof UnionType) {
             $type->mergeDuplicateTypes(config: $scope->config);
 
-            $types = array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel), $type->types);
+            $types = array_unique(array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel), $type->types));
 
-            return implode('|', array_unique($types));
+            // TS `unknown` already includes null, so `unknown|null` is just noise.
+            if (count($types) > 1 && in_array('unknown', $types, true)) {
+                $types = array_filter($types, fn (string $tsType) => $tsType !== 'null');
+            }
+
+            return implode('|', $types);
         }
 
         if ($type instanceof IntersectionType) {
