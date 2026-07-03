@@ -6,4 +6,6 @@ enum StateEnum: int
 {
     case One = 1;
     case Two = 2;
+
+    public const int DEFAULT_VALUE = 1;
 }

@@ -6,6 +6,7 @@ use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedArrayItemType;
 use AutoDoc\DataTypes\UnresolvedArrayKeyType;
+use AutoDoc\DataTypes\UnresolvedParameterType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
 use Override;
@@ -219,7 +220,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     $this->scope->assignVariable($paramNode->var, $phpDocParameters[$paramName], $docComment ? [$docComment] : []);
 
                 } else if ($argIndex !== null) {
-                    $this->scope->assignVariable($paramNode->var, $this->args->get($argIndex, autoResolve: false), $docComment ? [$docComment] : []);
+                    $argType = $this->args->get($argIndex, autoResolve: false);
+
+                    if (isset($paramNode->type)) {
+                        $argType = new UnresolvedParameterType($argType, $paramNode->type, $this->scope);
+                    }
+
+                    $this->scope->assignVariable($paramNode->var, $argType, $docComment ? [$docComment] : []);
 
                 } else if (! $this->isOperationEntrypoint && $paramNode->default !== null) {
                     // A skipped argument takes its default; an entrypoint's params

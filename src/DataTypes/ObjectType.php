@@ -37,6 +37,25 @@ class ObjectType extends Type
     ) {}
 
 
+    /**
+     * Contextual descriptions (array item comments, PHPDoc param descriptions)
+     * must reach the displayed schema; the class docblock is assigned to
+     * `$description` directly and intentionally stays off the display type.
+     */
+    public function addDescription(?string $description, bool $prepend = false): self
+    {
+        if ($this->typeToDisplay) {
+            $this->typeToDisplay->addDescription($description, $prepend);
+
+            return $this;
+        }
+
+        parent::addDescription($description, $prepend);
+
+        return $this;
+    }
+
+
     public function toSchema(Config $config): array
     {
         if ($this->typeToDisplay) {

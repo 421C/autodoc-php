@@ -252,18 +252,23 @@ class ArrayFuncCall extends FuncCallExtension
                 $arrayType = $argTypes->get(1);
 
                 if ($arrayType instanceof ArrayType) {
-                    return new ArrayType(
-                        itemType: $callbackType->getReturnType(
-                            args: ArgumentList::fromTypes([
-                                $arrayType->convertShapeToTypePair($config)->itemType ?? new UnknownType,
-                            ], $scope),
-                            callerNode: $funcCall,
-                        ),
-                        keyType: $arrayType->keyType,
-                    );
+                    $itemType = $arrayType->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+                    $keyType = $arrayType->keyType;
+
+                } else {
+                    // Even an unresolvable array is worth mapping: the callback
+                    // return shape (and its param type hints) still applies.
+                    $itemType = new UnknownType;
+                    $keyType = null;
                 }
 
-                return new ArrayType;
+                return new ArrayType(
+                    itemType: $callbackType->getReturnType(
+                        args: ArgumentList::fromTypes([$itemType], $scope),
+                        callerNode: $funcCall,
+                    ),
+                    keyType: $keyType,
+                );
             }
 
             $closureArgTypes = [];

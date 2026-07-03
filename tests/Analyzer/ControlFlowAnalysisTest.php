@@ -4,12 +4,15 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\Rocket;
+use AutoDoc\Tests\TestProject\Entities\RocketCategory;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
+use AutoDoc\Tests\TestProject\Extensions\ArrayMapOverrideExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use PHPUnit\Framework\Attributes\Test;
@@ -3154,12 +3157,220 @@ final class ControlFlowAnalysisTest extends TestCase
         return $columns;
     }
 
+    #[Test]
+    public function backedEnumCasesResolveToAnArrayOfTheEnum(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            fn (): array => StateEnum::cases(),
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'description' => '[StateEnum](#/schemas/StateEnum)',
+                'enum' => [1, 2],
+                'type' => 'integer',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function unitEnumCasesResolveToAnArrayOfTheEnum(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            fn (): array => RocketCategory::cases(),
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'description' => '[RocketCategory](#/schemas/RocketCategory)',
+                'enum' => ['Big', 'Small'],
+                'type' => 'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function closureParamTypeHintIsUsedWhenTheArgumentTypeIsUnknown(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (array $items): array {
+            // @phpstan-ignore argument.type
+            return array_map(fn (StateEnum $state) => [
+                'name' => $state->name,
+                'value' => $state->value,
+            ], $items);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'name' => [
+                        'type' => 'string',
+                    ],
+                    'value' => [
+                        'type' => 'integer',
+                    ],
+                ],
+                'required' => [
+                    'name',
+                    'value',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function arrayMapCallbackIsAnalyzedEvenWhenTheArrayTypeIsUnknown(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (mixed $items): array {
+            // @phpstan-ignore argument.type
+            return array_map(fn (StateEnum $state) => [
+                'name' => $state->name,
+                'value' => $state->value,
+            ], $items); // @phpstan-ignore argument.type
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'name' => [
+                        'type' => 'string',
+                    ],
+                    'value' => [
+                        'type' => 'integer',
+                    ],
+                ],
+                'required' => [
+                    'name',
+                    'value',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function propertiesOfAnEnumCaseConstantResolve(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): array {
+            $state = StateEnum::One;
+
+            return ['name' => $state->name, 'value' => $state->value];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'name' => [
+                    'type' => 'string',
+                ],
+                'value' => [
+                    'type' => 'integer',
+                ],
+            ],
+            'required' => [
+                'name',
+                'value',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function foreachOverEnumCasesWithAMatchOnTheCaseResolves(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): array {
+            $result = [];
+
+            foreach (StateEnum::cases() as $state) {
+                $result[] = [
+                    'value' => $state->value,
+                    'label' => match ($state) {
+                        StateEnum::One => 'first',
+                        StateEnum::Two => 'second',
+                    },
+                ];
+            }
+
+            return $result;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'value' => [
+                        'type' => 'integer',
+                    ],
+                    'label' => [
+                        'enum' => ['first', 'second'],
+                        'type' => 'string',
+                    ],
+                ],
+                'required' => [
+                    'value',
+                    'label',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function aPlainConstantOnAnEnumResolvesToItsValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            fn (): mixed => StateEnum::DEFAULT_VALUE,
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'integer',
+            'const' => 1,
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function aConfiguredExtensionTakesPrecedenceOverBuiltInExtensions(): void
+    {
+        $config = self::loadConfig();
+        $config->data['extensions'] = [ArrayMapOverrideExtension::class];
+
+        $schema = $this->getClosureReturnSchema(
+            fn (): mixed => array_map(fn (int $n) => $n, [1, 2]),
+            config: $config,
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'const' => 'overridden by extension',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function aResolvableArgumentTakesPrecedenceOverTheParamTypeHint(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            fn (): array => array_map(fn (int|string $value) => $value, ['a', 'b']),
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'enum' => ['a', 'b'],
+                'type' => 'string',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
     /**
      * @return array<string, mixed>
      */
-    private function getClosureReturnSchema(\Closure $closure, bool $usePhpDocIfAvailable = false): array
+    private function getClosureReturnSchema(\Closure $closure, bool $usePhpDocIfAvailable = false, ?Config $config = null): array
     {
-        $config = self::loadConfig();
+        $config ??= self::loadConfig();
         $config->data['openapi']['show_values_for_scalar_types'] = true;
         $config->data['intersections']['render_empty_as_unknown'] = false;
 

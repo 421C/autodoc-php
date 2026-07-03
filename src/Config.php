@@ -3,6 +3,7 @@
 namespace AutoDoc;
 
 use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
+use AutoDoc\Extensions\BuiltIn\EnumStaticCall;
 use AutoDoc\Extensions\BuiltIn\TypeCheckFuncCall;
 use AutoDoc\Extensions\ClassExtension;
 use AutoDoc\Extensions\FuncCallExtension;
@@ -341,12 +342,7 @@ class Config
             return $this->extensionsByType;
         }
 
-        $this->extensionsByType = [
-            FuncCallExtension::class => [
-                ArrayFuncCall::class,
-                TypeCheckFuncCall::class,
-            ],
-        ];
+        $this->extensionsByType = [];
 
         foreach ($this->data['extensions'] ?? [] as $extensionClass) {
             if (is_subclass_of($extensionClass, MethodCallExtension::class)) {
@@ -371,6 +367,11 @@ class Config
                 $this->extensionsByType[TypeScriptExportExtension::class][] = $extensionClass;
             }
         }
+
+        // Built-ins run after configured extensions so consumers can override them.
+        $this->extensionsByType[FuncCallExtension::class][] = ArrayFuncCall::class;
+        $this->extensionsByType[FuncCallExtension::class][] = TypeCheckFuncCall::class;
+        $this->extensionsByType[StaticCallExtension::class][] = EnumStaticCall::class;
 
         return $this->extensionsByType;
     }

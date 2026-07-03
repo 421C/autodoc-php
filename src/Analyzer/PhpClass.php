@@ -312,7 +312,13 @@ class PhpClass
     public function resolveConstantType(string $name): Type
     {
         if ($this->getReflection()->isEnum()) {
-            return new PhpEnum($this)->resolveType();
+            $constant = $this->getReflection()->getReflectionConstant($name);
+
+            // The enum object type keeps `->name`/`->value` and method calls
+            // resolvable; a plain constant is handled like on any class.
+            if ($constant === false || $constant->isEnumCase()) {
+                return $this->resolveType();
+            }
         }
 
         $classConstants = $this->getReflection()->getConstants();
