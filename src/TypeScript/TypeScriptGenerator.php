@@ -7,233 +7,72 @@ use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
-use AutoDoc\OpenApi\Operation;
-use AutoDoc\OpenApi\Response;
-use AutoDoc\Route;
+use Closure;
 use Exception;
 use ReflectionEnum;
 use ReflectionEnumBackedCase;
+use UnitEnum;
 
 class TypeScriptGenerator
 {
-    public function __construct()
-    {
-        $this->typeConverter = new TypeConverter;
-    }
-
-    private readonly TypeConverter $typeConverter;
-
-    /**
-     * @var array<string, string[]>
-     */
-    private array $filesToGenerate = [];
+    public function __construct(
+        private readonly TypeConverter $typeConverter = new TypeConverter,
+        private readonly TypeScriptOutputPathResolver $outputPathResolver = new TypeScriptOutputPathResolver,
+        private readonly TypeScriptRouteTagResolver $routeTagResolver = new TypeScriptRouteTagResolver,
+    ) {}
 
     /**
-     * @return string[]
+     * @var array<string, TypeScriptExportFile>
      */
-    public function generateTypeScriptDeclaration(AutoDocTag $tag): array
+    private array $exportFiles = [];
+
+    public function generateTypeScriptDeclaration(AutoDocTag $tag): string
     {
         if (empty($tag->value)) {
             throw new Exception('Missing argument after @autodoc tag');
         }
 
-        if (! preg_match('/^(GET|HEAD|POST|PUT|DELETE|PATCH|CONNECT|OPTIONS|TRACE)\s+(.*)/i', $tag->value)) {
-            $phpDoc = new PhpDoc(
-                docComment: '/**  */',
-                scope: $tag->scope,
-            );
-
-            $type = $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tag->value))->unwrapType($tag->scope->config);
-
-            return $this->generateTypeScriptDeclarationFromType($tag, $type);
+        if ($this->routeTagResolver->supports($tag->value)) {
+            return $this->declarationFromRouteTag($tag);
         }
 
-        $indent = $tag->getConfig('indent');
-        $baseIndent = $tag->getDeclarationIndent();
-
-        $arguments = preg_split('/\s+/', $tag->value, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-
-        $httpMethod = strtoupper($arguments[0]);
-        $routeUri = trim($arguments[1], '/');
-        $responseStatusOrRequestKeyword = $arguments[2] ?? null;
-
-        $routeLoader = $tag->scope->config->getRouteLoader();
-        $route = null;
-        $operation = null;
-
-        $tsLines = [];
-
-        foreach ($routeLoader->getRoutes() as $routeToCheck) {
-            if (trim($routeToCheck->uri, '/') === $routeUri && strtoupper($routeToCheck->method) === $httpMethod) {
-                $route = $routeToCheck;
-                $operation = $routeLoader->routeToOperation($route);
-            }
-        }
-
-        if ($route && $operation) {
-            if ($responseStatusOrRequestKeyword === 'request') {
-                $tsLines = [
-                    $this->generateTypeScriptDeclarationFromRequestBody($tag, $operation, $route),
-                ];
-
-            } else {
-                if ($responseStatusOrRequestKeyword && ! str_contains($responseStatusOrRequestKeyword, '{')) {
-                    $httpStatus = $responseStatusOrRequestKeyword;
-
-                } else if (isset($operation->responses[200]) || isset($operation->responses['200'])) {
-                    $httpStatus = 200;
-
-                } else {
-                    $httpStatus = array_key_first($operation->responses ?? []);
-                }
-
-                if ($httpStatus === null) {
-                    $tag->reportError('Response not found for route "' . $httpMethod . ' /' . trim($route->uri, '/') . '"');
-
-                } else {
-                    $tsLines = [
-                        $this->generateTypeScriptDeclarationFromResponse($tag, $operation, $route, $httpStatus),
-                    ];
-                }
-            }
-
-        } else {
-            $tag->reportError('Route "' . $httpMethod . ' /' . $routeUri . '" not found');
-        }
-
-        return $tsLines;
+        return $this->declarationFromTypeExpression($tag);
     }
 
 
-    private function generateTypeScriptDeclarationFromRequestBody(AutoDocTag $tag, Operation $operation, Route $route): string
+    private function declarationFromRouteTag(AutoDocTag $tag): string
     {
-        $indent = $tag->getConfig('indent');
-        $baseIndent = $tag->getDeclarationIndent();
+        try {
+            $resolvedRoute = $this->routeTagResolver->resolve($tag->value, $tag->scope);
 
-        if (! $operation->requestBody) {
-            $tag->reportError('Request body not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
-
-            return '';
+        } catch (Exception $exception) {
+            $tag->throwError($exception->getMessage());
         }
 
-        $type = $operation->requestBody->content['application/json']->type
-            ?? $operation->requestBody->content[array_key_first($operation->requestBody->content) ?? '']->type
-            ?? null;
-
-        if (! $type) {
-            $tag->reportError('Request type not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
-
-            return '';
-        }
-
-        $type = $type->unwrapType($tag->scope->config);
+        $type = $resolvedRoute->type->unwrapType($tag->scope->config);
+        $exportedClassName = ($type instanceof ObjectType || $type instanceof ArrayType) ? $type->className : null;
 
         if ($type instanceof ObjectType && $type->typeToDisplay) {
             $type = $type->typeToDisplay->unwrapType($tag->scope->config);
         }
 
-        $structureType = $this->isObjectOrArrayShape($type) ? $tag->getExistingStructureType() ?? 'type' : 'type';
+        $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($resolvedRoute->route->uri));
+        $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . $resolvedRoute->declarationSuffix);
 
-        $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
-        $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Request');
-        $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
-
-        $typeDefinition = $this->typeConverter->convertToTypeScriptType(
-            type: $type,
-            scope: $tag->scope,
-            tsConfig: $tag->getConfig(),
-            baseIndent: $baseIndent,
-            tag: $tag,
-            isRootLevel: true,
-        );
-
-        $importStatement = null;
-        $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
-
-        if ($writeInSeparateTsFile) {
-            $this->prepareDeclarationToBeWrittenToFile(
-                $tag,
-                $tag->options['as'] ?? $name,
-                $writeInSeparateTsFile,
-                $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
-            );
-
-            $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
-        }
-
-        return $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
+        return $this->renderDeclarationLine($tag, $name, $type, $exportedClassName);
     }
 
 
-    private function generateTypeScriptDeclarationFromResponse(AutoDocTag $tag, Operation $operation, Route $route, int|string $httpStatus): string
+    private function declarationFromTypeExpression(AutoDocTag $tag): string
     {
-        $indent = $tag->getConfig('indent');
-        $baseIndent = $tag->getDeclarationIndent();
-
-        if (! isset($operation->responses[$httpStatus])
-            || ! ($operation->responses[$httpStatus] instanceof Response)
-        ) {
-            $tag->reportError('Response status "' . $httpStatus . '" not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
-
-            return '';
-        }
-
-        $type = $operation->responses[$httpStatus]->content['application/json']->type
-            ?? $operation->responses[$httpStatus]->content[array_key_first($operation->responses[$httpStatus]->content) ?? '']->type
-            ?? null;
-
-        if (! $type) {
-            $tag->reportError('Response type not found for route "' . strtoupper($route->method) . ' /' . trim($route->uri, '/') . '"');
-
-            return '';
-        }
-
-        $type = $type->unwrapType($tag->scope->config);
-
-        if ($type instanceof ObjectType && $type->typeToDisplay) {
-            $type = $type->typeToDisplay->unwrapType($tag->scope->config);
-        }
-
-        $structureType = $this->isObjectOrArrayShape($type) ? $tag->getExistingStructureType() ?? 'type' : 'type';
-
-        $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($route->uri));
-        $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . 'Response');
-        $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
-
-        $typeDefinition = $this->typeConverter->convertToTypeScriptType(
-            type: $type,
+        $phpDoc = new PhpDoc(
+            docComment: '/**  */',
             scope: $tag->scope,
-            tsConfig: $tag->getConfig(),
-            baseIndent: $baseIndent,
-            tag: $tag,
-            isRootLevel: true,
         );
 
-        $importStatement = null;
-        $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
+        $type = $phpDoc->createUnresolvedType($phpDoc->createTypeNode($tag->value))->unwrapType($tag->scope->config);
 
-        if ($writeInSeparateTsFile) {
-            $this->prepareDeclarationToBeWrittenToFile(
-                $tag,
-                $tag->options['as'] ?? $name,
-                $writeInSeparateTsFile,
-                $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
-            );
-
-            $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
-        }
-
-        return $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
-    }
-
-    /**
-     * @return string[]
-     */
-    private function generateTypeScriptDeclarationFromType(AutoDocTag $tag, Type $type): array
-    {
-        $baseIndent = $tag->getDeclarationIndent();
-        $indent = $tag->getConfig('indent');
-        $writeInSeparateTsFile = $tag->getConfig('save_types_in_single_file');
+        $exportedClassName = ($type instanceof ObjectType || $type instanceof ArrayType) ? $type->className : null;
 
         $name = $tag->getExistingStructureName();
 
@@ -246,114 +85,128 @@ class TypeScriptGenerator
             }
         }
 
-        $enumClassName = null;
+        if ($type instanceof ObjectType && $type->className && enum_exists($type->className)) {
+            return $this->renderEnumDeclarationLine($tag, $name, $type->className);
+        }
 
-        if ($type instanceof ObjectType && $type->className) {
-            if (enum_exists($type->className)) {
-                $enumClassName = $type->className;
+        if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
+            $phpClass = new PhpClass($type->className, $tag->scope);
+
+            $type = $tag->scope->handleTypeScriptExportExtensions($phpClass, $type);
+        }
+
+        if ($type instanceof ObjectType && $type->typeToDisplay) {
+            if ($type->typeToDisplay instanceof ObjectType
+                || $type->typeToDisplay instanceof ArrayType
+            ) {
+                $type = $type->typeToDisplay;
             }
         }
 
-        $tsLines = [];
+        if ($type instanceof ObjectType && $type->typeToDisplay) {
+            // The root declaration shows the real structure; clone so the shared cached type keeps its display type.
+            $type = clone $type;
+            $type->typeToDisplay = null;
+        }
 
-        if ($enumClassName) {
-            $reflectionEnum = new ReflectionEnum($enumClassName);
-            $enumCaseDefinitions = [];
+        return $this->renderDeclarationLine($tag, $name, $type, $exportedClassName);
+    }
 
-            foreach ($reflectionEnum->getCases() as $enumCase) {
-                if (isset($tag->options['only']) && ! in_array($enumCase->name, $tag->options['only'])) {
-                    continue;
-                }
 
-                if (isset($tag->options['omit']) && in_array($enumCase->name, $tag->options['omit'])) {
-                    continue;
-                }
+    /**
+     * Renders the inline declaration for a tag; in separate-file mode also
+     * registers the exported declaration and points the inline one at it.
+     */
+    private function renderDeclarationLine(AutoDocTag $tag, string $name, Type $type, ?string $exportedClassName): string
+    {
+        $baseIndent = $tag->getDeclarationIndent();
+        $outputFilePath = $tag->getConfig('save_types_in_single_file');
 
-                $value = $enumCase instanceof ReflectionEnumBackedCase ? $enumCase->getBackingValue() : $enumCase->name;
+        $structureType = ($this->isObjectOrArrayShape($type) && ! $outputFilePath)
+            ? $tag->getExistingStructureType() ?? 'type'
+            : 'type';
 
-                if (is_string($value)) {
-                    $value = $this->toTsString($value, $tag->getConfig('string_quote'));
-                }
+        $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
 
-                $enumCaseDefinitions[] = "{$baseIndent}{$indent}{$enumCase->name} = $value,";
-            }
+        if ($outputFilePath) {
+            $exportName = $tag->options['as'] ?? $name;
 
-            $typeDefinition = $enumCaseDefinitions
-                ? '{' . "\n" . implode("\n", $enumCaseDefinitions) . "\n" . $baseIndent . '}'
-                : '{}';
-
-            $importStatement = null;
-
-            if ($writeInSeparateTsFile) {
-                $this->prepareDeclarationToBeWrittenToFile(
-                    $tag,
-                    $tag->options['as'] ?? $name,
-                    $writeInSeparateTsFile,
-                    $baseIndent . 'export enum ' . ($tag->options['as'] ?? $name) . ' ' . $typeDefinition,
-                );
-
-                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
-
-                $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "type $name = " . $importStatement;
-
-            } else {
-                $tsLines[] = $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "enum $name " . $typeDefinition;
-            }
-
-        } else {
-            if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
-                $phpClass = new PhpClass($type->className, $tag->scope);
-
-                $type = $tag->scope->handleTypeScriptExportExtensions($phpClass, $type);
-            }
-
-            if ($type instanceof ObjectType && $type->typeToDisplay) {
-                if ($type->typeToDisplay instanceof ObjectType
-                    || $type->typeToDisplay instanceof ArrayType
-                ) {
-                    $type = $type->typeToDisplay;
-                }
-            }
-
-            if ($type instanceof ObjectType) {
-                $type->typeToDisplay = null;
-            }
-
-            if ($this->isObjectOrArrayShape($type) && !$writeInSeparateTsFile) {
-                $structureType = $tag->getExistingStructureType() ?? 'type';
-
-            } else {
-                $structureType = 'type';
-            }
-
-            $declarationHeader = $this->generateDeclarationHeader($tag->addExportKeyword, $name, $structureType);
-
-            $typeDefinition = $this->typeConverter->convertToTypeScriptType(
-                type: $type,
-                scope: $tag->scope,
-                tsConfig: $tag->getConfig(),
-                baseIndent: $baseIndent,
-                tag: $tag,
-                isRootLevel: true,
+            $this->addFileDeclaration(
+                $tag,
+                $exportName,
+                $outputFilePath,
+                fn (array $namedTypes): string => $baseIndent
+                    . $this->generateDeclarationHeader(true, $exportName, $structureType)
+                    . $this->renderType($type, $tag, $baseIndent, $namedTypes),
+                $exportedClassName,
             );
 
-            $importStatement = null;
-
-            if ($writeInSeparateTsFile) {
-                $this->prepareDeclarationToBeWrittenToFile(
-                    $tag,
-                    $tag->options['as'] ?? $name,
-                    $writeInSeparateTsFile,
-                    $baseIndent . $this->generateDeclarationHeader(true, $tag->options['as'] ?? $name, $structureType) . $typeDefinition,
-                );
-
-                $importStatement = $this->generateImportStatement($tag, $name, $writeInSeparateTsFile);
-            }
-
-            $tsLines[] = $baseIndent . $declarationHeader . ($importStatement ?? $typeDefinition);
+            return $baseIndent . $declarationHeader . $this->generateImportStatement($tag, $exportName, $outputFilePath);
         }
 
-        return $tsLines;
+        return $baseIndent . $declarationHeader . $this->renderType($type, $tag, $baseIndent);
+    }
+
+
+    /**
+     * @param class-string<UnitEnum> $enumClassName
+     */
+    private function renderEnumDeclarationLine(AutoDocTag $tag, string $name, string $enumClassName): string
+    {
+        $baseIndent = $tag->getDeclarationIndent();
+        $outputFilePath = $tag->getConfig('save_types_in_single_file');
+        $typeDefinition = $this->renderEnumCases($tag, $enumClassName, $baseIndent);
+
+        if ($outputFilePath) {
+            $exportName = $tag->options['as'] ?? $name;
+
+            $this->addFileDeclaration(
+                $tag,
+                $exportName,
+                $outputFilePath,
+                static fn (): string => $baseIndent . 'export enum ' . $exportName . ' ' . $typeDefinition,
+                $enumClassName,
+            );
+
+            return $baseIndent
+                . $this->generateDeclarationHeader($tag->addExportKeyword, $name, 'type')
+                . $this->generateImportStatement($tag, $exportName, $outputFilePath);
+        }
+
+        return $baseIndent . ($tag->addExportKeyword ? 'export ' : '') . "enum $name " . $typeDefinition;
+    }
+
+
+    /**
+     * @param class-string<UnitEnum> $enumClassName
+     */
+    private function renderEnumCases(AutoDocTag $tag, string $enumClassName, string $baseIndent): string
+    {
+        $indent = $tag->getConfig('indent');
+        $reflectionEnum = new ReflectionEnum($enumClassName);
+        $enumCaseDefinitions = [];
+
+        foreach ($reflectionEnum->getCases() as $enumCase) {
+            if (isset($tag->options['only']) && ! in_array($enumCase->name, $tag->options['only'])) {
+                continue;
+            }
+
+            if (isset($tag->options['omit']) && in_array($enumCase->name, $tag->options['omit'])) {
+                continue;
+            }
+
+            $value = $enumCase instanceof ReflectionEnumBackedCase ? $enumCase->getBackingValue() : $enumCase->name;
+
+            if (is_string($value)) {
+                $value = $this->typeConverter->toTsString($value, $tag->getConfig('string_quote'));
+            }
+
+            $enumCaseDefinitions[] = "{$baseIndent}{$indent}{$enumCase->name} = $value,";
+        }
+
+        return $enumCaseDefinitions
+            ? '{' . "\n" . implode("\n", $enumCaseDefinitions) . "\n" . $baseIndent . '}'
+            : '{}';
     }
 
 
@@ -370,20 +223,6 @@ class TypeScriptGenerator
         return $input;
     }
 
-    private function toTsString(string $input, string $quote): string
-    {
-        $escaped = str_replace('\\', '\\\\', $input);
-        $escaped = str_replace($quote, '\\' . $quote, $escaped);
-
-        $escaped = str_replace(
-            ["\r", "\n", "\t", "\v", "\f", "\0"],
-            ['\\r', '\\n', '\\t', '\\v', '\\f', '\\0'],
-            $escaped
-        );
-
-        return $quote . $escaped . $quote;
-    }
-
 
     private function generateDeclarationHeader(bool $export, string $name, string $structureType): string
     {
@@ -393,82 +232,53 @@ class TypeScriptGenerator
             . ($structureType === 'type' ? '= ' : '');
     }
 
-    private function prepareDeclarationToBeWrittenToFile(AutoDocTag $tag, string $name, string $filePath, string $typeDefinition): void
+    /**
+     * @param array<string, string> $namedTypes
+     */
+    private function renderType(Type $type, AutoDocTag $tag, string $baseIndent, array $namedTypes = []): string
     {
-        $fullPath = null;
-
-        foreach ($tag->getConfig('path_prefixes') as $prefix => $basePath) {
-            if (str_starts_with($filePath, $prefix)) {
-                $fullPath = $basePath . substr($filePath, strlen($prefix));
-                break;
-            }
-        }
-
-        if ($fullPath === null) {
-            $tag->reportError('No matching path prefix found for path "' . $filePath . '". Check your path_prefixes configuration.');
-
-            return;
-        }
-
-        if (isset($this->filesToGenerate[$fullPath][$name])) {
-            $tag->reportError('Type "' . $name . '" is already exported in file "' . $fullPath . '". Use `as` option to export type with a different name.');
-
-            return;
-        }
-
-        $this->filesToGenerate[$fullPath][$name] = $typeDefinition;
+        return $this->typeConverter->convertToTypeScriptType(
+            $type,
+            new TypeScriptRenderContext(
+                scope: $tag->scope,
+                config: $tag->getConfig(),
+                baseIndent: $baseIndent,
+                isRootLevel: true,
+                namedTypes: $namedTypes,
+                rootOptions: $tag->options,
+            ),
+        );
     }
 
-    private function generateImportStatement(AutoDocTag $tag, string $name, string $filePath): string
+    /**
+     * @param Closure(array<string, string>): string $generateDefinition
+     */
+    private function addFileDeclaration(
+        AutoDocTag $tag,
+        string $name,
+        string $filePath,
+        Closure $generateDefinition,
+        ?string $className,
+    ): void {
+        try {
+            $fullPath = $this->outputPathResolver->resolve($filePath, $tag->getConfig('path_prefixes'));
+            $this->exportFiles[$fullPath] ??= new TypeScriptExportFile($fullPath);
+            $this->exportFiles[$fullPath]->add(new TypeScriptDeclaration($name, $className, $generateDefinition));
+
+        } catch (Exception $exception) {
+            $tag->throwError($exception->getMessage());
+        }
+    }
+
+    private function generateImportStatement(AutoDocTag $tag, string $exportName, string $filePath): string
     {
-        return 'import(' . $this->toTsString($filePath, $tag->getConfig('string_quote')) . ').' . ($tag->options['as'] ?? $name);
+        return 'import(' . $this->typeConverter->toTsString($filePath, $tag->getConfig('string_quote')) . ').' . $exportName;
     }
 
     public function overwriteGeneratedFiles(): void
     {
-        $filePrefix = '/**' . "\n"
-            . ' * This file is auto-generated by PHP AutoDoc.' . "\n"
-            . ' * Documentation: https://phpautodoc.com/docs/typescript' . "\n"
-            . ' */' . "\n\n";
-
-        foreach ($this->filesToGenerate as $filePath => $typeDefinitions) {
-            file_put_contents($filePath, $filePrefix . implode("\n\n", array_map($this->normalizeIndent(...), $typeDefinitions)));
+        foreach ($this->exportFiles as $file) {
+            $file->write();
         }
-    }
-
-    private function normalizeIndent(string $text): string
-    {
-        $lines = explode("\n", $text);
-        $indents = [];
-
-        foreach ($lines as $i => $line) {
-            if (trim($line) === '') {
-                continue;
-            }
-
-            if (preg_match('/^([ \t]+)(?=\S)/', $line, $m)) {
-                $indents[] = $m[1];
-            } else {
-                return $text;
-            }
-        }
-
-        if (empty($indents)) {
-            return $text;
-        }
-
-        $common = $indents[0];
-
-        foreach ($indents as $indent) {
-            while (! str_starts_with($indent, $common)) {
-                $common = substr($common, 0, -1);
-            }
-
-            if ($common === '') {
-                return $text;
-            }
-        }
-
-        return preg_replace('/^' . preg_quote($common, '/') . '/m', '', $text) ?? $text;
     }
 }

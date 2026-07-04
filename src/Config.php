@@ -56,6 +56,13 @@ use Exception;
  *     ui?: UiConfig,
  * }
  *
+ * @phpstan-type TypeScriptRouteExportConfig array{
+ *     routes?: string[],
+ *     exact_routes?: string[],
+ *     request_methods?: string[],
+ *     include_requests_without_body?: bool,
+ * }
+ *
  * @phpstan-type TypeScriptConfigRaw array{
  *     working_directory?: string,
  *     file_extensions?: string[],
@@ -67,12 +74,7 @@ use Exception;
  *     modes?: array<string, array<string, mixed>>,
  *     path_prefixes?: class-string<object&callable(Config $config): iterable<string, string>>|callable(Config $config): iterable<string, string>,
  *     tsconfig_path?: string,
- *     export_http_requests_and_responses?: array<string, array{
- *         routes?: string[],
- *         exact_routes?: string[],
- *         request_methods?: string[],
- *         include_requests_without_body?: bool,
- *     }>,
+ *     export_http_requests_and_responses?: array<string, TypeScriptRouteExportConfig>,
  * }
  *
  * @phpstan-type TypeScriptConfig array{
@@ -86,12 +88,7 @@ use Exception;
  *     modes: array<string, array<string, mixed>>,
  *     path_prefixes: iterable<string, string>,
  *     tsconfig_path?: string,
- *     export_http_requests_and_responses?: array<string, array{
- *         routes?: string[],
- *         exact_routes?: string[],
- *         request_methods?: string[],
- *         include_requests_without_body?: bool,
- *     }>,
+ *     export_http_requests_and_responses?: array<string, TypeScriptRouteExportConfig>,
  * }
  *
  * @phpstan-type ConfigArray array{
@@ -167,6 +164,13 @@ class Config
      * @var ?array<int|string, WorkspaceConfig>
      */
     private ?array $workspaces = null;
+
+    /**
+     * Resolved TypeScript config per mode ('' = no mode).
+     *
+     * @var array<string, TypeScriptConfig>
+     */
+    private array $typeScriptConfigByMode = [];
 
 
     /**
@@ -276,6 +280,14 @@ class Config
      */
     public function getTypeScriptConfig(?string $mode = null): array
     {
+        return $this->typeScriptConfigByMode[$mode ?? ''] ??= $this->resolveTypeScriptConfig($mode);
+    }
+
+    /**
+     * @return TypeScriptConfig
+     */
+    private function resolveTypeScriptConfig(?string $mode): array
+    {
         $defaults = [
             'file_extensions' => ['ts', 'tsx', 'vue'],
             'indent' => '    ',
@@ -311,7 +323,7 @@ class Config
                 throw new Exception('Error: path_prefixes in autodoc config must return an iterable.');
             }
 
-            $tsConfig['path_prefixes'] = $prefixes;
+            $tsConfig['path_prefixes'] = is_array($prefixes) ? $prefixes : iterator_to_array($prefixes);
 
         } else {
             $type = gettype($pathPrefixesLoader);

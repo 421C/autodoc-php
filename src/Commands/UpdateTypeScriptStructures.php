@@ -64,7 +64,7 @@ class UpdateTypeScriptStructures
     private function exportRequestsAndResponses(): iterable
     {
         foreach ($this->config->data['typescript']['export_http_requests_and_responses'] ?? [] as $filePath => $options) {
-            yield new RoutesExporter($this->config, $filePath)->export();
+            yield new RoutesExporter($this->config, $filePath, $options)->export();
         }
     }
 
@@ -88,23 +88,20 @@ class UpdateTypeScriptStructures
         foreach ($files as $filePath) {
             try {
                 $tsFile = new TypeScriptFile($filePath, $generator);
+                $processedTags = $tsFile->processAutodocTags($scope);
+
+                if ($processedTags > 0) {
+                    $tsFile->writeLines();
+
+                    yield [
+                        'filePath' => $filePath,
+                        'processedTags' => $processedTags,
+                    ];
+                }
 
             } catch (Throwable $exception) {
                 yield [
                     'error' => $exception,
-                ];
-
-                continue;
-            }
-
-            $processedTags = $tsFile->processAutodocTags($scope);
-
-            if ($processedTags > 0) {
-                $tsFile->writeLines();
-
-                yield [
-                    'filePath' => $filePath,
-                    'processedTags' => $processedTags,
                 ];
             }
         }

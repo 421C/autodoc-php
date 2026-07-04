@@ -8,8 +8,9 @@ use Exception;
 class TypeScriptFile
 {
     public function __construct(
-        public ?string $filePath = null,
-        private readonly ?TypeScriptGenerator $generator = null,
+        public ?string $filePath,
+        private readonly TypeScriptGenerator $generator,
+        private readonly TypeScriptSourceScanner $sourceScanner = new TypeScriptSourceScanner,
     ) {
         if ($this->filePath) {
             $this->lines = $this->readLines();
@@ -20,7 +21,6 @@ class TypeScriptFile
      * @var string[]
      */
     public array $lines;
-
 
     /**
      * @return string[]
@@ -54,78 +54,46 @@ class TypeScriptFile
 
     public function findFirstAutodocTag(Scope $scope, int $startLineIndex = 0): ?AutoDocTag
     {
-        $lineIndex = $startLineIndex;
-        $currentTag = '';
-        $tagFinished = true;
+        $tagMatch = $this->sourceScanner->findAutoDocTag($this->lines, $startLineIndex);
 
-        while (isset($this->lines[$lineIndex])) {
-            if (! $tagFinished) {
-                $indexOfCommentEnd = strpos($this->lines[$lineIndex], '*/');
-
-                if ($indexOfCommentEnd !== false) {
-                    $tagFinished = true;
-                    $currentTag .= "\n" . substr($this->lines[$lineIndex], 0, $indexOfCommentEnd);
-
-                } else {
-                    $currentTag .= "\n" . $this->lines[$lineIndex];
-                    $lineIndex++;
-
-                    continue;
-                }
-            }
-
-            if (preg_match('/^[\s\*\/]*@autodoc\s+(.*?)\s*[\s\*\/]*$/', $this->lines[$lineIndex], $matches)) {
-                $currentTag = $matches[1];
-                $tagFinished = str_contains($this->lines[$lineIndex], '*/');
-            }
-
-            if ($currentTag && $tagFinished) {
-                $tag = new AutoDocTag(
-                    scope: $scope,
-                    tsFile: $this,
-                    lineIndex: $lineIndex,
-                    value: $currentTag,
-                    addExportKeyword: $this->filePath && ! str_ends_with($this->filePath, '.vue'),
-                );
-
-                if ($tag->addExportKeyword) {
-                    $indent = $tag->getDeclarationIndent();
-
-                    if ($indent) {
-                        $tag->addExportKeyword = false;
-                    }
-                }
-
-                return $tag;
-            }
-
-            $lineIndex++;
+        if ($tagMatch === null) {
+            return null;
         }
 
-        return null;
+        $tag = new AutoDocTag(
+            scope: $scope,
+            tsFile: $this,
+            lineIndex: $tagMatch['lineIndex'],
+            value: $tagMatch['value'],
+            addExportKeyword: $this->filePath && ! str_ends_with($this->filePath, '.vue'),
+        );
+
+        if ($tag->addExportKeyword && $tag->getDeclarationIndent()) {
+            $tag->addExportKeyword = false;
+        }
+
+        return $tag;
     }
 
 
     public function processAutodocTags(Scope $scope): int
     {
-        $generator = $this->generator ?? new TypeScriptGenerator;
-
         $processedTags = 0;
         $tag = $this->findFirstAutodocTag($scope);
 
         while ($tag !== null) {
-            $newDeclarationLines = $generator->generateTypeScriptDeclaration($tag);
+            $newDeclaration = $this->generator->generateTypeScriptDeclaration($tag);
             $commentLinesAfterTag = $this->getCommentLinesAfterTag($tag);
 
             $newDeclarationIndex = $tag->lineIndex + count($commentLinesAfterTag) + 1;
 
             $this->lines = array_merge(
                 array_slice($this->lines, 0, $newDeclarationIndex),
-                $newDeclarationLines,
+                [$newDeclaration],
                 array_slice($this->lines, $newDeclarationIndex + ($tag->hasExistingDeclaration() ? count($tag->getExistingStructureLines()) : 0)),
             );
 
-            $tag = $this->findFirstAutodocTag($scope, $newDeclarationIndex + count($newDeclarationLines));
+            $tag = $this->findFirstAutodocTag($scope, $newDeclarationIndex + 1);
 
             $processedTags++;
         }
@@ -143,98 +111,9 @@ class TypeScriptFile
 
         $startIndex = $tag->lineIndex + count($commentLines) + 1;
 
-        $lineCount = $this->getStructureLineCount($startIndex);
+        $lineCount = $this->sourceScanner->getStructureLineCount($this->lines, $startIndex);
 
         return array_slice($this->lines, $startIndex, $lineCount);
-    }
-
-
-    private function getStructureLineCount(int $startIndex): int
-    {
-        if (! isset($this->lines[$startIndex])) {
-            return 0;
-        }
-
-        if (trim($this->lines[$startIndex]) === '') {
-            return 0;
-        }
-
-        if (! str_contains($this->lines[$startIndex], '{')) {
-            return 1;
-        }
-
-        $braceLevel = 0;
-        $inBlockComment = false;
-        $inString = false;
-        $stringChar = '';
-        $lineCount = 0;
-        $counter = count($this->lines);
-
-        for ($lineIndex = $startIndex; $lineIndex < $counter; $lineIndex++) {
-            $line = $this->lines[$lineIndex];
-            $lineCount++;
-
-            $chars = str_split($line);
-
-            for ($charIndex = 0; $charIndex < count($chars); $charIndex++) {
-                $char = $chars[$charIndex];
-                $nextChar = $chars[$charIndex + 1] ?? '';
-
-                if ($inBlockComment) {
-                    if ($char === '*' && $nextChar === '/') {
-                        $inBlockComment = false;
-                        $charIndex++;
-                    }
-
-                    continue;
-                }
-
-                if ($inString) {
-                    if ($char === '\\') {
-                        $charIndex++; // skip escaped character
-
-                    } else if ($char === $stringChar) {
-                        $inString = false;
-                    }
-
-                    continue;
-                }
-
-                // Start of string
-                if ($char === '"' || $char === "'" || $char === '`') {
-                    $inString = true;
-                    $stringChar = $char;
-
-                    continue;
-                }
-
-                // Start of block comment
-                if ($char === '/' && $nextChar === '*') {
-                    $inBlockComment = true;
-                    $charIndex++;
-
-                    continue;
-                }
-
-                // Line comment
-                if ($char === '/' && $nextChar === '/') {
-                    break;
-                }
-
-                if ($char === '{') {
-                    $braceLevel++;
-
-                } else if ($char === '}') {
-                    $braceLevel--;
-                }
-            }
-
-            if ($braceLevel === 0) {
-                return $lineCount;
-            }
-        }
-
-        return $lineCount;
     }
 
 
@@ -243,49 +122,14 @@ class TypeScriptFile
      */
     public function getCommentLinesBeforeTag(AutoDocTag $tag): array
     {
-        if (str_contains($this->lines[$tag->lineIndex], '/*')) {
-            return [];
-        }
-
-        $commentLines = [];
-
-        for ($i = $tag->lineIndex - 1; $i >= 0; $i--) {
-            $currentLine = $this->lines[$i];
-
-            $commentLines[] = $currentLine;
-
-            if (str_contains($currentLine, '/*')) {
-                break;
-            }
-        }
-
-        return array_reverse($commentLines);
+        return $this->sourceScanner->getCommentLinesBeforeTag($this->lines, $tag->lineIndex);
     }
-
-
 
     /**
      * @return string[]
      */
     public function getCommentLinesAfterTag(AutoDocTag $tag): array
     {
-        if (str_contains($this->lines[$tag->lineIndex], '*/')) {
-            return [];
-        }
-
-        $commentLines = [];
-        $counter = count($this->lines);
-
-        for ($i = $tag->lineIndex + 1; $i < $counter; $i++) {
-            $currentLine = $this->lines[$i];
-
-            $commentLines[] = $currentLine;
-
-            if (str_contains($currentLine, '*/')) {
-                break;
-            }
-        }
-
-        return $commentLines;
+        return $this->sourceScanner->getCommentLinesAfterTag($this->lines, $tag->lineIndex);
     }
 }

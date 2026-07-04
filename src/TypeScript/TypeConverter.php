@@ -3,8 +3,6 @@
 namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\PhpClass;
-use AutoDoc\Analyzer\Scope;
-use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
@@ -19,24 +17,25 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 
-/**
- * @phpstan-import-type TypeScriptConfig from Config
- */
 class TypeConverter
 {
-    /**
-     * @param TypeScriptConfig $tsConfig
-     */
     public function convertToTypeScriptType(
         Type $type,
-        Scope $scope,
-        array $tsConfig,
-        string $baseIndent,
-        ?AutoDocTag $tag = null,
-        bool $isRootLevel = false,
+        TypeScriptRenderContext $context,
     ): string {
+        $scope = $context->scope;
+        $tsConfig = $context->config;
+        $baseIndent = $context->baseIndent;
 
         $type = $type->unwrapType($scope->config);
+
+        if (! $context->isRootLevel
+            && ($type instanceof ObjectType || $type instanceof ArrayType)
+            && $type->className
+            && isset($context->namedTypes[ltrim($type->className, '\\')])
+        ) {
+            return $context->namedTypes[ltrim($type->className, '\\')];
+        }
 
         if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
             $phpClass = new PhpClass($type->className, $scope);
@@ -104,7 +103,7 @@ class TypeConverter
         if ($type instanceof ArrayType) {
             if ($type->shape) {
                 if (array_is_list($type->shape) && !in_array(false, array_column($type->shape, 'required'))) {
-                    $tsTypes = array_map(fn ($value) => $this->convertToTypeScriptType($value, $scope, $tsConfig, $baseIndent, $tag), $type->shape);
+                    $tsTypes = array_map(fn ($value) => $this->convertToTypeScriptType($value, $context->nested()), $type->shape);
 
                     if (count($type->shape) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
                         return '[' . implode(', ', $tsTypes) . ']';
@@ -115,22 +114,24 @@ class TypeConverter
                         foreach ($type->shape as $propertyType) {
                             $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
 
-                            $tsType = $this->convertToTypeScriptType($propertyType, $scope, $tsConfig, $propertyBaseIndent, $tag);
+                            $tsType = $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent));
 
                             $result .= "\n" . $propertyBaseIndent . $tsType . ',';
                         }
 
                         $result .= "\n" . $baseIndent . ']';
+
+                        return $result;
                     }
                 }
 
-                return $this->toTsObject($type->shape, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel);
+                return $this->toTsObject($type->shape, $context);
             }
 
             $keyType = $type->keyType?->unwrapType($scope->config);
             $itemType = $type->itemType?->unwrapType($scope->config);
 
-            $tsItemType = $this->convertToTypeScriptType($itemType ?? new UnknownType, $scope, $tsConfig, $baseIndent, $tag);
+            $tsItemType = $this->convertToTypeScriptType($itemType ?? new UnknownType, $context->nested());
 
             if ($keyType && !($keyType instanceof IntegerType)) {
                 return 'Record<string, ' . $tsItemType . '>';
@@ -145,16 +146,16 @@ class TypeConverter
 
         if ($type instanceof ObjectType) {
             if ($type->typeToDisplay) {
-                return $this->convertToTypeScriptType($type->typeToDisplay, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel);
+                return $this->convertToTypeScriptType($type->typeToDisplay, $context);
             }
 
-            return $this->toTsObject($type->properties, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel);
+            return $this->toTsObject($type->properties, $context);
         }
 
         if ($type instanceof UnionType) {
             $type->mergeDuplicateTypes(config: $scope->config);
 
-            $types = array_unique(array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel), $type->types));
+            $types = array_unique(array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $context), $type->types));
 
             // TS `unknown` already includes null, so `unknown|null` is just noise.
             if (count($types) > 1 && in_array('unknown', $types, true)) {
@@ -167,7 +168,7 @@ class TypeConverter
         if ($type instanceof IntersectionType) {
             $type->mergeDuplicateTypes(config: $scope->config, mergeAsIntersection: true);
 
-            $types = array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $scope, $tsConfig, $baseIndent, $tag, $isRootLevel), $type->types);
+            $types = array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $context), $type->types);
 
             return implode('&', array_unique($types));
         }
@@ -177,24 +178,17 @@ class TypeConverter
 
     /**
      * @param array<int|string, Type> $properties
-     * @param TypeScriptConfig $tsConfig
      */
-    private function toTsObject(array $properties, Scope $scope, array $tsConfig, string $baseIndent, ?AutoDocTag $tag, bool $isRootLevel): string
+    private function toTsObject(
+        array $properties,
+        TypeScriptRenderContext $context,
+    ): string
     {
-        if ($isRootLevel) {
-            if (isset($tag->options['only'])) {
-                $properties = array_filter($properties, fn ($name) => in_array($name, $tag->options['only']), ARRAY_FILTER_USE_KEY);
-            }
+        $tsConfig = $context->config;
+        $baseIndent = $context->baseIndent;
 
-            if (! empty($tag->options['with'])) {
-                foreach ($tag->options['with'] as $propName => $propType) {
-                    $properties[$propName] = $propType;
-                }
-            }
-
-            if (isset($tag->options['omit'])) {
-                $properties = array_filter($properties, fn ($name) => ! in_array($name, $tag->options['omit']), ARRAY_FILTER_USE_KEY);
-            }
+        if ($context->isRootLevel) {
+            $properties = $this->projectRootProperties($properties, $context->rootOptions);
         }
 
         if (! $properties) {
@@ -206,7 +200,7 @@ class TypeConverter
         foreach ($properties as $propertyName => $propertyType) {
             $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
 
-            $tsType = $this->convertToTypeScriptType($propertyType, $scope, $tsConfig, $propertyBaseIndent, $tag);
+            $tsType = $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent));
 
             $propertyName = $this->toTsPropertyName((string) $propertyName, $tsConfig['string_quote']);
 
@@ -218,8 +212,34 @@ class TypeConverter
         return $result;
     }
 
+    /**
+     * @param array<int|string, Type> $properties
+     * @param array{
+     *     omit?: string[],
+     *     only?: string[],
+     *     with?: array<int|string, Type>,
+     * } $options
+     * @return array<int|string, Type>
+     */
+    private function projectRootProperties(array $properties, array $options): array
+    {
+        if (isset($options['only'])) {
+            $properties = array_filter($properties, fn ($name) => in_array($name, $options['only']), ARRAY_FILTER_USE_KEY);
+        }
 
-    private function toTsString(string $input, string $quote): string
+        foreach ($options['with'] ?? [] as $propertyName => $propertyType) {
+            $properties[$propertyName] = $propertyType;
+        }
+
+        if (isset($options['omit'])) {
+            $properties = array_filter($properties, fn ($name) => ! in_array($name, $options['omit']), ARRAY_FILTER_USE_KEY);
+        }
+
+        return $properties;
+    }
+
+
+    public function toTsString(string $input, string $quote): string
     {
         $escaped = str_replace('\\', '\\\\', $input);
         $escaped = str_replace($quote, '\\' . $quote, $escaped);

@@ -33,6 +33,7 @@ $configPath ??= __DIR__ . '/../config/autodoc.php';
 $config = new AutoDoc\Config(require $configPath);
 
 $commandOutput = (new AutoDoc\Commands\UpdateTypeScriptStructures($config))->run($workingDirectory);
+$hasErrors = false;
 
 foreach ($commandOutput as $message) {
     if (isset($message['filePath'], $message['processedTags'])) {
@@ -47,7 +48,9 @@ foreach ($commandOutput as $message) {
         echo 'Updated ' . $message['filePath'] . ' (' . $requestsResponsesText . ')' . PHP_EOL;
 
     } else if (isset($message['error'])) {
-        if ($fimessagele['error'] instanceof Throwable) {
+        $hasErrors = true;
+
+        if ($message['error'] instanceof Throwable) {
             echo PHP_EOL . '[ERROR] ' . $message['error']->getMessage() . ' [' . $message['error']->getFile() . ':' . $message['error']->getLine() . ']' . PHP_EOL . PHP_EOL;
 
         } else {
@@ -55,3 +58,5 @@ foreach ($commandOutput as $message) {
         }
     }
 }
+
+exit($hasErrors ? 1 : 0);

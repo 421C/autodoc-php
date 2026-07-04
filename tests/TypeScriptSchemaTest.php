@@ -63,7 +63,7 @@ final class TypeScriptSchemaTest extends TestCase
         }
 
         export type IntegerKeyWithMixedValuesResponse = {
-            '15': Record<string, 4.21|true|'Big'|'Small'>
+            '15': Record<string, 4.21|true|RocketCategory>
         }
 
         export type Route36Response = Array<Array<1|2|3|'a'|'b'|'c'>>
@@ -84,6 +84,14 @@ final class TypeScriptSchemaTest extends TestCase
                 name?: string
             }>
             token: string
+        }
+
+        export type TypeScriptReferencingType = {
+            referenced: ReferencedType
+        }
+
+        export type ReferencedType = {
+            id: number
         }
         EOF), $fileContents);
     }
@@ -120,7 +128,11 @@ final class TypeScriptSchemaTest extends TestCase
     #[Test]
     public function exportRequestsAndResponses(): void
     {
-        $exporter = (new RoutesExporter(self::$scope->config, '@/requests-and-responses.ts'))->export();
+        $exporter = (new RoutesExporter(
+            self::$scope->config,
+            '@/requests-and-responses.ts',
+            self::$scope->config->data['typescript']['export_http_requests_and_responses']['@/requests-and-responses.ts'] ?? [],
+        ))->export();
 
         $generatedFileName = __DIR__ . '/typescript/requests-and-responses.ts';
 
@@ -181,7 +193,11 @@ final class TypeScriptSchemaTest extends TestCase
     #[Test]
     public function exportRequestsAndResponsesIncludingRequestsWithoutBody(): void
     {
-        $exporter = (new RoutesExporter(self::$scope->config, '@/requests-and-responses-with-empty.ts'))->export();
+        $exporter = (new RoutesExporter(
+            self::$scope->config,
+            '@/requests-and-responses-with-empty.ts',
+            self::$scope->config->data['typescript']['export_http_requests_and_responses']['@/requests-and-responses-with-empty.ts'] ?? [],
+        ))->export();
 
         $generatedFileName = __DIR__ . '/typescript/requests-and-responses-with-empty.ts';
 
@@ -543,6 +559,26 @@ final class TypeScriptSchemaTest extends TestCase
             expected: '
             /** @autodoc POST /api/test/generictypes/tuple-with-template-type */
             type TestResponseInterface = [0|1, string]
+            ',
+        );
+    }
+
+    #[Test]
+    public function multilineTupleType(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{int, string, bool, string} */
+            type LongTuple = [number, string]
+            ',
+            expected: '
+            /** @autodoc array{int, string, bool, string} */
+            type LongTuple = [
+                number,
+                string,
+                boolean,
+                string,
+            ]
             ',
         );
     }
@@ -1237,6 +1273,23 @@ final class TypeScriptSchemaTest extends TestCase
              *  } */
             type HeadersAndRequestBodyRequest = import('@/types.ts').HeadersAndRequestBodyRequest
 
+            EOS,
+        );
+    }
+
+    #[Test]
+    public function separateFileModeUsesNamesForTypesExportedToTheSameFile(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: <<<EOS
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\TypeScriptReferencingType { mode: 'separate_file' } */
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\TypeScriptReferencedType { mode: 'separate_file', as: 'ReferencedType' } */
+            EOS,
+            expected: <<<EOS
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\TypeScriptReferencingType { mode: 'separate_file' } */
+            type TypeScriptReferencingType = import('@/types.ts').TypeScriptReferencingType
+            /** @autodoc AutoDoc\Tests\TestProject\Entities\TypeScriptReferencedType { mode: 'separate_file', as: 'ReferencedType' } */
+            type TypeScriptReferencedType = import('@/types.ts').ReferencedType
             EOS,
         );
     }

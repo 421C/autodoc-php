@@ -2,18 +2,13 @@
 
 namespace AutoDoc\TypeScript;
 
-use AutoDoc\Analyzer\PhpDoc;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
-use AutoDoc\DataTypes\ArrayType;
-use AutoDoc\DataTypes\ObjectType;
-use AutoDoc\DataTypes\StringType;
-use AutoDoc\DataTypes\Type;
-use AutoDoc\DataTypes\UnresolvedType;
 use Exception;
 
 /**
  * @phpstan-import-type TypeScriptConfig from Config
+ * @phpstan-import-type AutoDocTagOptions from ParsedAutoDocTag
  */
 class AutoDocTag
 {
@@ -23,90 +18,18 @@ class AutoDocTag
         public int $lineIndex,
         public string $value,
         public bool $addExportKeyword = true,
+        AutoDocTagParser $parser = new AutoDocTagParser,
     ) {
-        if (preg_match('/^(.*)\s+(\{.*\})\s*/s', $value, $matches)) {
-            $this->value = $matches[1];
+        try {
+            $parsedTag = $parser->parse($value, $scope);
 
-            $optionsString = $matches[2];
-            $phpDoc = new PhpDoc('/**  */', $this->scope);
-
-            $optionsType = $phpDoc->createUnresolvedType($phpDoc->createTypeNode('array' . $optionsString))->resolve();
-
-            if (! $optionsType instanceof ArrayType || empty($optionsType->shape)) {
-                $this->reportError('Failed to parse @autodoc tag options: ' . $optionsString);
-
-                return;
-            }
-
-            foreach ($optionsType->shape as $key => $optionType) {
-                $optionType = $optionType->unwrapType($this->scope->config);
-
-                if ($key === 'omit') {
-                    if ($optionType instanceof StringType && $optionType->value) {
-                        $this->options[$key] = $optionType->getPossibleValues() ?? [];
-
-                    } else {
-                        $this->reportError('The value of `omit` tag must be a string or union of strings.');
-                    }
-
-                } else if ($key === 'only') {
-                    if ($optionType instanceof StringType && $optionType->value) {
-                        $this->options[$key] = $optionType->getPossibleValues() ?? [];
-
-                    } else {
-                        $this->reportError('The value of `only` tag must be a string or union of strings.');
-                    }
-
-                } else if ($key === 'from') {
-                    if ($optionType instanceof StringType && is_string($optionType->value)) {
-                        if (class_exists($optionType->value) || interface_exists($optionType->value) || trait_exists($optionType->value)) {
-                            $this->options[$key] = $optionType->value;
-                            $this->scope = $this->scope->createChildScope($optionType->value);
-
-                        } else {
-                            $this->reportError('The value of `from` tag is not a valid class name.');
-                        }
-
-                    } else if (($optionType instanceof ObjectType || $optionType instanceof ArrayType) && $optionType->className) {
-                        $this->options[$key] = $optionType->className;
-                        $this->scope = $this->scope->createChildScope($optionType->className);
-
-                    } else {
-                        $this->reportError('The value of `from` tag must be a string or a class type identifier.');
-                    }
-
-                } else if ($key === 'with') {
-                    if ($optionType instanceof ObjectType && $optionType->properties) {
-                        $this->options[$key] = $optionType->properties;
-
-                    } else if ($optionType instanceof ArrayType && $optionType->shape) {
-                        $this->options[$key] = $optionType->shape;
-
-                    } else {
-                        $this->reportError('The value of `with` tag must be an object or array shape.');
-                    }
-
-                } else if ($key === 'mode') {
-                    if ($optionType instanceof StringType && is_string($optionType->value)) {
-                        $this->options[$key] = $optionType->value;
-
-                    } else {
-                        $this->reportError('The value of `mode` tag must be a string.');
-                    }
-
-                } else if ($key === 'as') {
-                    if ($optionType instanceof StringType && is_string($optionType->value)) {
-                        $this->options[$key] = $optionType->value;
-
-                    } else {
-                        $this->reportError('The value of `as` tag must be a string.');
-                    }
-
-                } else {
-                    $this->reportError('Unknown tag option: ' . $key);
-                }
-            }
+        } catch (Exception $exception) {
+            $this->throwError($exception->getMessage());
         }
+
+        $this->scope = $parsedTag->scope;
+        $this->value = $parsedTag->value;
+        $this->options = $parsedTag->options;
     }
 
     /**
@@ -117,21 +40,7 @@ class AutoDocTag
     private string $existingStructureType;
     private string $existingStructureName;
 
-    /**
-     * @var UnresolvedType[]
-     */
-    public array $templateTypeValues = [];
-
-    /**
-     * @var array{
-     *     omit?: string[],
-     *     only?: string[],
-     *     from?: class-string,
-     *     with?: array<int|string, Type>,
-     *     mode?: string,
-     *     as?: string,
-     * }
-     */
+    /** @var AutoDocTagOptions */
     public array $options = [];
 
     /**
@@ -239,7 +148,7 @@ class AutoDocTag
     }
 
 
-    public function reportError(string $message): void
+    public function throwError(string $message): never
     {
         $file = $this->tsFile->filePath;
         $line = $this->lineIndex + 1;
