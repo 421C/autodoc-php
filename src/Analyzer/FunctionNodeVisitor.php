@@ -170,7 +170,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
-            $this->scope->handleExpectedRequestTypeFromExtensions(new MethodCallContext(node: $node, scope: $this->scope));
+            $this->scope->runSideEffectExtensions(new MethodCallContext(node: $node, scope: $this->scope));
+
+        } else if ($node instanceof Node\Expr\FuncCall) {
+            $this->scope->runSideEffectExtensions(new FuncCallContext(node: $node, scope: $this->scope));
+
+        } else if ($node instanceof Node\Expr\StaticCall) {
+            $this->scope->runSideEffectExtensions(new StaticCallContext(node: $node, scope: $this->scope));
         }
 
         return null;

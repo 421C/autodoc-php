@@ -13,10 +13,7 @@ abstract class StaticCallExtension
         return null;
     }
 
-    public function getRequestType(StaticCallContext $context): ?Type
-    {
-        return null;
-    }
+    public function handleSideEffect(StaticCallContext $context): void {}
 
     public function narrowTypeFromCondition(StaticCallContext $context, bool $negated): void {}
 }

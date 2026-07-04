@@ -32,32 +32,70 @@ trait HandlesExtensions
 {
     public function getReturnTypeFromMethodCallExtensions(MethodCallContext $context): ?Type
     {
-        return $this->runExtensions(
-            extensionTypeClass: MethodCallExtension::class,
-            node: $context->node,
-            getRequestType: fn ($ext) => $ext->getRequestType($context),
-            getReturnType: fn ($ext) => $ext->getReturnType($context),
-        );
+        foreach ($this->getExtensionsOfType(MethodCallExtension::class) as $extensionClass) {
+            $returnType = (new $extensionClass)->getReturnType($context);
+
+            if ($returnType instanceof Type) {
+                return $returnType;
+            }
+        }
+
+        return null;
     }
 
     public function getReturnTypeFromFuncCallExtensions(FuncCallContext $context): ?Type
     {
-        return $this->runExtensions(
-            extensionTypeClass: FuncCallExtension::class,
-            node: $context->node,
-            getRequestType: fn ($ext) => $ext->getRequestType($context),
-            getReturnType: fn ($ext) => $ext->getReturnType($context),
-        );
+        foreach ($this->getExtensionsOfType(FuncCallExtension::class) as $extensionClass) {
+            $returnType = (new $extensionClass)->getReturnType($context);
+
+            if ($returnType instanceof Type) {
+                return $returnType;
+            }
+        }
+
+        return null;
     }
 
     public function getReturnTypeFromStaticCallExtensions(StaticCallContext $context): ?Type
     {
-        return $this->runExtensions(
-            extensionTypeClass: StaticCallExtension::class,
-            node: $context->node,
-            getRequestType: fn ($ext) => $ext->getRequestType($context),
-            getReturnType: fn ($ext) => $ext->getReturnType($context),
-        );
+        foreach ($this->getExtensionsOfType(StaticCallExtension::class) as $extensionClass) {
+            $returnType = (new $extensionClass)->getReturnType($context);
+
+            if ($returnType instanceof Type) {
+                return $returnType;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Run side-effect hooks once per call and analysis pass, in configured order
+     * with built-ins last. Suppressed during return-type peeks.
+     */
+    public function runSideEffectExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
+    {
+        if ($this->suppressSideEffects || isset($this->nodesWithHandledSideEffects[$context->node])) {
+            return;
+        }
+
+        $this->nodesWithHandledSideEffects[$context->node] = true;
+
+        if ($context instanceof MethodCallContext) {
+            foreach ($this->getExtensionsOfType(MethodCallExtension::class) as $extensionClass) {
+                (new $extensionClass)->handleSideEffect($context);
+            }
+
+        } else if ($context instanceof FuncCallContext) {
+            foreach ($this->getExtensionsOfType(FuncCallExtension::class) as $extensionClass) {
+                (new $extensionClass)->handleSideEffect($context);
+            }
+
+        } else {
+            foreach ($this->getExtensionsOfType(StaticCallExtension::class) as $extensionClass) {
+                (new $extensionClass)->handleSideEffect($context);
+            }
+        }
     }
 
     /**
@@ -101,43 +139,7 @@ trait HandlesExtensions
      */
     public function getReturnTypeFromClassExtensions(PhpClass $phpClass): ?Type
     {
-        return $this->runExtensions(
-            extensionTypeClass: ClassExtension::class,
-            node: $phpClass,
-            getRequestType: fn ($ext) => $ext->getRequestType($phpClass),
-            getReturnType: fn ($ext) => $ext->getReturnType($phpClass),
-        );
-    }
-
-    public function handleExpectedRequestTypeFromExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
-    {
-        if ($context instanceof MethodCallContext) {
-            $this->runExtensions(
-                extensionTypeClass: MethodCallExtension::class,
-                node: $context->node,
-                getRequestType: fn ($ext) => $ext->getRequestType($context),
-                getReturnType: fn ($ext) => $ext->getReturnType($context),
-                returnType: false,
-            );
-
-        } else if ($context instanceof FuncCallContext) {
-            $this->runExtensions(
-                extensionTypeClass: FuncCallExtension::class,
-                node: $context->node,
-                getRequestType: fn ($ext) => $ext->getRequestType($context),
-                getReturnType: fn ($ext) => $ext->getReturnType($context),
-                returnType: false,
-            );
-
-        } else {
-            $this->runExtensions(
-                extensionTypeClass: StaticCallExtension::class,
-                node: $context->node,
-                getRequestType: fn ($ext) => $ext->getRequestType($context),
-                getReturnType: fn ($ext) => $ext->getReturnType($context),
-                returnType: false,
-            );
-        }
+        return $this->runClassExtensions($phpClass);
     }
 
     /**
@@ -145,53 +147,46 @@ trait HandlesExtensions
      */
     public function handleExpectedRequestTypeFromClassExtensions(PhpClass $phpClass): void
     {
-        $this->runExtensions(
-            extensionTypeClass: ClassExtension::class,
-            node: $phpClass,
-            getRequestType: fn ($ext) => $ext->getRequestType($phpClass),
-            getReturnType: fn ($ext) => $ext->getReturnType($phpClass),
-            returnType: false,
-        );
+        $this->runClassExtensions($phpClass, returnType: false);
     }
 
     /**
-     * @template T of object
-     * @param class-string<T> $extensionTypeClass
-     * @param \Closure(T): ?Type $getRequestType
-     * @param \Closure(T): ?Type $getReturnType
+     * A class extension may act as the request body (form-request pattern) and/or
+     * resolve a return type. Request capture is recorded onto the route once per
+     * class and suppressed during return-type peeks.
      *
+     * @param PhpClass<object> $phpClass
      * @return ($returnType is true ? Type|null : null)
      */
-    private function runExtensions(string $extensionTypeClass, object $node, \Closure $getRequestType, \Closure $getReturnType, bool $returnType = true): ?Type
+    private function runClassExtensions(PhpClass $phpClass, bool $returnType = true): ?Type
     {
-        $suppressRequestTypeHandling = $this->suppressRequestBodyCapture;
-        $requestTypeHandled = isset($this->objectsHandlingRequestBody[$node]);
+        $requestTypeHandled = $this->suppressSideEffects || isset($this->classesHandlingRequestBody[$phpClass]);
         $returnTypeHandled = ! $returnType;
         $result = null;
 
-        foreach ($this->getExtensionsOfType($extensionTypeClass) as $extensionClass) {
+        foreach ($this->getExtensionsOfType(ClassExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
-            if (! $requestTypeHandled && ! $suppressRequestTypeHandling) {
-                $requestResult = $getRequestType($extension);
+            if (! $requestTypeHandled) {
+                $requestResult = $extension->getRequestType($phpClass);
 
                 if ($requestResult instanceof Type) {
                     $requestTypeHandled = true;
 
-                    $this->objectsHandlingRequestBody[$node] = true;
+                    $this->classesHandlingRequestBody[$phpClass] = true;
                     $this->route?->addRequestBodyType($requestResult);
                 }
             }
 
             if (! $returnTypeHandled) {
-                $result = $getReturnType($extension);
+                $result = $extension->getReturnType($phpClass);
 
                 if ($result instanceof Type) {
                     $returnTypeHandled = true;
                 }
             }
 
-            if (($requestTypeHandled || $suppressRequestTypeHandling) && $returnTypeHandled) {
+            if ($requestTypeHandled && $returnTypeHandled) {
                 break;
             }
         }

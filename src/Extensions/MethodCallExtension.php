@@ -13,10 +13,7 @@ abstract class MethodCallExtension
         return null;
     }
 
-    public function getRequestType(MethodCallContext $context): ?Type
-    {
-        return null;
-    }
+    public function handleSideEffect(MethodCallContext $context): void {}
 
     public function narrowTypeFromCondition(MethodCallContext $context, bool $negated): void {}
 }

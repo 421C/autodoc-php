@@ -53,7 +53,8 @@ class Scope
     ) {
         $this->constructorArgs = new ArgumentList($this);
         $this->eventLog = new ScopeEventLog;
-        $this->objectsHandlingRequestBody = new WeakMap;
+        $this->classesHandlingRequestBody = new WeakMap;
+        $this->nodesWithHandledSideEffects = new WeakMap;
         $this->nodesBeingResolved = new WeakMap;
     }
 
@@ -63,18 +64,31 @@ class Scope
     public ?Node $callerNode = null;
 
     /**
+     * Classes whose request body has already been captured (form-request style
+     * class extensions), so a repeated resolution doesn't record it twice.
+     *
      * @internal
      * @var WeakMap<object, true>
      */
-    public WeakMap $objectsHandlingRequestBody;
+    public WeakMap $classesHandlingRequestBody;
 
     /**
-     * Prevents request body capture during early call return-type checks.
+     * Call nodes whose side-effect hook has already run this pass, so a node
+     * visited both as a statement and during return-type resolution fires once.
      *
-     * Only set through {@see withoutRequestBodyCapture()}.
+     * @internal
+     * @var WeakMap<Node, true>
+     */
+    public WeakMap $nodesWithHandledSideEffects;
+
+    /**
+     * Suppresses extension side effects (request-body capture + variable
+     * mutation) during return-type peeks.
+     *
+     * Only set through {@see withoutSideEffects()}.
      * @internal
      */
-    private bool $suppressRequestBodyCapture = false;
+    private bool $suppressSideEffects = false;
 
     /**
      * Cache for resolved variable types, keyed by "varName:filePos".
@@ -175,6 +189,8 @@ class Scope
             if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
                 $context = new MethodCallContext(node: $node, scope: $this);
 
+                $this->runSideEffectExtensions($context);
+
                 $returnType = $this->getReturnTypeFromMethodCallExtensions($context);
 
                 if ($returnType !== null) {
@@ -224,6 +240,8 @@ class Scope
             if ($node instanceof Node\Expr\FuncCall) {
                 $context = new FuncCallContext(node: $node, scope: $this);
 
+                $this->runSideEffectExtensions($context);
+
                 $returnType = $this->getReturnTypeFromFuncCallExtensions($context);
 
                 if ($returnType !== null) {
@@ -257,6 +275,8 @@ class Scope
 
             if ($node instanceof Node\Expr\StaticCall) {
                 $context = new StaticCallContext(node: $node, scope: $this);
+
+                $this->runSideEffectExtensions($context);
 
                 $returnType = $this->getReturnTypeFromStaticCallExtensions($context);
 
@@ -845,25 +865,39 @@ class Scope
 
 
     /**
-     * Run $callback with request body capture disabled, so incompletely-resolved
-     * arguments neither leak into the request body nor dedup-block the real capture
-     * during body traversal.
+     * Run $callback with extension side effects disabled, so a call resolved only
+     * to peek at its return type neither captures a request body nor mutates a
+     * variable from incompletely-resolved arguments.
      *
      * @template TResult
      * @param (callable(): TResult) $callback
      * @return TResult
      */
-    public function withoutRequestBodyCapture(callable $callback): mixed
+    public function withoutSideEffects(callable $callback): mixed
     {
-        $initialValue = $this->suppressRequestBodyCapture;
-        $this->suppressRequestBodyCapture = true;
+        $initialValue = $this->suppressSideEffects;
+        $this->suppressSideEffects = true;
 
         try {
             return $callback();
 
         } finally {
-            $this->suppressRequestBodyCapture = $initialValue;
+            $this->suppressSideEffects = $initialValue;
         }
+    }
+
+
+    /**
+     * Record a request body type from an extension side effect. Suppressed
+     * during return-type peeks so an incompletely-resolved call can't leak.
+     */
+    public function recordRequestBodyType(Type $type): void
+    {
+        if ($this->suppressSideEffects) {
+            return;
+        }
+
+        $this->route?->addRequestBodyType($type);
     }
 
 

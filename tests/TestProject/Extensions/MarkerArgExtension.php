@@ -13,11 +13,11 @@ use AutoDoc\Extensions\MethodCallExtension;
  */
 class MarkerArgExtension extends MethodCallExtension
 {
-    public function getRequestType(MethodCallContext $context): ?Type
+    public function handleSideEffect(MethodCallContext $context): void
     {
-        return $context->methodName === 'markRequest'
-            ? $context->argTypes->get(0)->unwrapType($context->scope->config)
-            : null;
+        if ($context->methodName === 'markRequest') {
+            $context->setRequestType($context->argTypes->get(0)->unwrapType($context->scope->config));
+        }
     }
 
     public function getReturnType(MethodCallContext $context): ?Type

@@ -87,9 +87,10 @@ class BranchBreakout
 
         try {
             // Peek at the call's return type only. This runs before the
-            // surrounding statements are analyzed, so it must not capture a
-            // request body from arguments that reference not-yet-assigned vars.
-            $returnType = $this->scope->withoutRequestBodyCapture(
+            // surrounding statements are analyzed, so extension side effects
+            // (request-body capture, variable mutation) must not fire from a
+            // call whose arguments reference not-yet-assigned vars.
+            $returnType = $this->scope->withoutSideEffects(
                 fn () => $this->scope->resolveType($expr)->unwrapType($this->scope->config),
             );
 

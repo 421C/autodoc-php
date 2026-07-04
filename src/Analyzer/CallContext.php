@@ -44,6 +44,15 @@ abstract class CallContext
     }
 
     /**
+     * Record this call as contributing to the request body. Multiple recorded
+     * bodies are combined conjunctively (see {@see Route::getRequestBodyType()}).
+     */
+    public function setRequestType(Type $type): void
+    {
+        $this->scope->recordRequestBodyType($type);
+    }
+
+    /**
      * Record a variable type narrowing from an extension while analyzing a
      * condition. These facts are collected by TypeNarrower, which still owns
      * boolean composition and event emission.
