@@ -104,6 +104,17 @@ class Scope
      */
     public WeakMap $nodesBeingResolved;
 
+    private ?BranchBreakout $branchBreakout = null;
+
+    /**
+     * Shared per scope so the body-entry breakout scan and every condition's
+     * exit check reuse one per-statement cache.
+     */
+    public function getBranchBreakout(): BranchBreakout
+    {
+        return $this->branchBreakout ??= new BranchBreakout($this);
+    }
+
     public function resolveType(Node $node, ?string $variableName = null, bool $isFinalResponse = false): Type
     {
         if (isset($this->nodesBeingResolved[$node])) {
@@ -749,12 +760,13 @@ class Scope
         $this->config->data['openapi']['show_values_for_scalar_types'] = true;
         $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = false;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
-        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
-
-        return $returnValue;
+        } finally {
+            $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+            $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+        }
     }
 
 
@@ -773,12 +785,13 @@ class Scope
         $this->config->data['openapi']['show_values_for_scalar_types'] = false;
         $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
-        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
-
-        return $returnValue;
+        } finally {
+            $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+            $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+        }
     }
 
 
@@ -793,11 +806,12 @@ class Scope
 
         $this->config->data['arrays']['resolve_partial_shapes'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['resolve_partial_shapes'] = $initialValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['arrays']['resolve_partial_shapes'] = $initialValue;
+        }
     }
 
 
@@ -812,11 +826,12 @@ class Scope
 
         $this->config->data['arrays']['deep_shape_inference'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['deep_shape_inference'] = $initialValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['arrays']['deep_shape_inference'] = $initialValue;
+        }
     }
 
 
@@ -833,12 +848,13 @@ class Scope
         $this->config->data['arrays']['merge_shapes_in_type_unions'] = true;
         $this->config->data['objects']['merge_shapes_in_type_unions'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialArrayValue;
-        $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialArrayValue;
+            $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
+        }
     }
 
 
@@ -856,11 +872,12 @@ class Scope
 
         $this->config->data['intersections']['coercive_scalar_overlap'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['intersections']['coercive_scalar_overlap'] = $initialValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['intersections']['coercive_scalar_overlap'] = $initialValue;
+        }
     }
 
 

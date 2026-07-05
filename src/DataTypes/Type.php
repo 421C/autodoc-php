@@ -432,6 +432,8 @@ abstract class Type
                 $type = reset($this->types);
 
                 $type->addDescription($this->description);
+                $this->description = null;
+
                 $type->examples = $this->examples ?: $type->examples;
                 $type->example = $this->example ?: $type->example;
 

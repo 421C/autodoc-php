@@ -37,6 +37,14 @@ class ObjectType extends Type
     ) {}
 
 
+    public function __clone(): void
+    {
+        if ($this->typeToDisplay) {
+            $this->typeToDisplay = clone $this->typeToDisplay;
+        }
+    }
+
+
     /**
      * Contextual descriptions (array item comments, PHPDoc param descriptions)
      * must reach the displayed schema; the class docblock is assigned to

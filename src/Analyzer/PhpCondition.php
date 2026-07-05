@@ -27,12 +27,17 @@ class PhpCondition
 
     private readonly BranchBreakout $branchBreakout;
 
+    /**
+     * @var ?list<ConditionBranch>
+     */
+    private ?array $conditionBranches = null;
+
     public function __construct(
         public readonly If_|While_|For_|Foreach_|Switch_|TryCatch|Match_|Ternary $node,
         Scope $scope,
     ) {
         $this->id = self::$nextId++;
-        $this->branchBreakout = new BranchBreakout($scope);
+        $this->branchBreakout = $scope->getBranchBreakout();
     }
 
     public static function resetIdCounter(): void
@@ -134,6 +139,14 @@ class PhpCondition
      * @return list<ConditionBranch>
      */
     public function getConditionBranches(): array
+    {
+        return $this->conditionBranches ??= $this->resolveConditionBranches();
+    }
+
+    /**
+     * @return list<ConditionBranch>
+     */
+    private function resolveConditionBranches(): array
     {
         if ($this->node instanceof If_) {
             $positions = array_values([

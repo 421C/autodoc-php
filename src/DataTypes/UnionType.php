@@ -39,6 +39,8 @@ class UnionType extends Type
             }
 
             if ($nullableType) {
+                $nullableType = clone $nullableType;
+
                 $nullableType->addDescription($this->description);
 
                 $nullableType->examples = $nullableType->examples ?: $this->examples;

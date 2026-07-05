@@ -81,7 +81,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope, $usedVarNames);
             }
 
-            $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts) !== null;
+            $this->bodyBreaksOut = $this->scope->getBranchBreakout()->getBreakOutNodeFromStatements($node->stmts) !== null;
 
             return $node->stmts;
         }
@@ -91,7 +91,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope);
 
             $this->scope->className = ($this->parentScope ?? $this->scope)->className;
-            $this->bodyBreaksOut = new BranchBreakout($this->scope)->statementBreaksOut(new Node\Stmt\Expression($node->expr));
+            $this->bodyBreaksOut = $this->scope->getBranchBreakout()->statementBreaksOut(new Node\Stmt\Expression($node->expr));
 
             $this->returnTypes = [
                 new UnresolvedParserNodeType(
@@ -105,7 +105,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Stmt\Function_) {
             $this->handleParameters($node->params, $node->getDocComment());
-            $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts) !== null;
+            $this->bodyBreaksOut = $this->scope->getBranchBreakout()->getBreakOutNodeFromStatements($node->stmts) !== null;
 
             return $node->stmts;
         }
@@ -131,7 +131,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $this->targetMethodExists = true;
 
                 $this->handleParameters($node->params, $node->getDocComment());
-                $this->bodyBreaksOut = new BranchBreakout($this->scope)->getBreakOutNodeFromStatements($node->stmts ?? []) !== null;
+                $this->bodyBreaksOut = $this->scope->getBranchBreakout()->getBreakOutNodeFromStatements($node->stmts ?? []) !== null;
             }
 
             if (! $this->inTargetMethod) {

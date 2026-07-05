@@ -747,7 +747,7 @@ class TypeNarrower
             || ($lastStatement instanceof Node\Stmt\Expression
                 && ($lastStatement->expr instanceof Node\Expr\Exit_
                     || $lastStatement->expr instanceof Node\Expr\Throw_))
-            || new BranchBreakout($scope)->statementBreaksOut($lastStatement);
+            || $scope->getBranchBreakout()->statementBreaksOut($lastStatement);
     }
 
     private static function isNull(Node $node): bool
