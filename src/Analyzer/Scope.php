@@ -439,6 +439,10 @@ class Scope
                 return new StringType($node->value);
             }
 
+            if ($node instanceof Node\Scalar\InterpolatedString) {
+                return new StringType;
+            }
+
             if ($node instanceof Node\Scalar\Int_) {
                 return new IntegerType($node->value);
             }

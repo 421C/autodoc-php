@@ -5,6 +5,7 @@ namespace AutoDoc\Tests\Analyzer;
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\DataTypes\StringType;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
@@ -88,6 +89,23 @@ final class ControlFlowAnalysisTest extends TestCase
         $this->assertSchemaArraysMatch([
             'type' => 'boolean',
         ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function interpolatedStringResolvesToString(): void
+    {
+        // {type: string} can't tell a real string from unknown (UnknownType renders
+        // the same), so assert on the resolved Type class instead of the schema.
+        $config = self::loadConfig();
+        $scope = new Scope($config);
+        $type = new PhpCallable(
+            scope: $scope,
+            reflection: new ReflectionFunction(function (string $name): mixed {
+                return "Hello $name!";
+            }),
+        )->getReturnType();
+
+        $this->assertInstanceOf(StringType::class, $type);
     }
 
     #[Test]
