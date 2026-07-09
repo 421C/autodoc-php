@@ -3647,6 +3647,91 @@ final class ControlFlowAnalysisTest extends TestCase
             'type' => 'integer',
         ], $schema, 'closure', 'return');
     }
+
+    #[Test]
+    public function shortListDestructuringAssignsEachVariable(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            [$id, $name] = [1, 'Ada'];
+
+            return ['id' => $id, 'name' => $name];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+                'name' => [
+                    'const' => 'Ada',
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'id',
+                'name',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function keyedArrayDestructuringAssignsNamedVariables(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            ['id' => $id, 'label' => $label] = ['id' => 5, 'label' => 'Big', 'extra' => true];
+
+            return ['id' => $id, 'label' => $label];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'id' => [
+                    'const' => 5,
+                    'type' => 'integer',
+                ],
+                'label' => [
+                    'const' => 'Big',
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'id',
+                'label',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function listFunctionSyntaxDestructuringAssignsEachVariable(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            list($first, $second) = ['x', 'y'];
+
+            return ['first' => $first, 'second' => $second];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'first' => [
+                    'const' => 'x',
+                    'type' => 'string',
+                ],
+                'second' => [
+                    'const' => 'y',
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'first',
+                'second',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
     /**
      * @return array<string, mixed>
      */

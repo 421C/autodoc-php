@@ -4,6 +4,9 @@ namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
+use AutoDoc\DataTypes\UnionType;
+use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\DataTypes\UnresolvedArrayDimType;
 use AutoDoc\DataTypes\UnresolvedArrayItemType;
 use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedClassType;
@@ -446,6 +449,35 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     );
                 }
             }
+
+        } else if ($varNode instanceof Node\Expr\List_ || $varNode instanceof Node\Expr\Array_) {
+            $this->handleDestructuring($varNode, $assignedType);
+        }
+    }
+
+
+    private function handleDestructuring(Node\Expr\List_|Node\Expr\Array_ $listNode, Type $sourceType): void
+    {
+        $position = 0;
+
+        foreach ($listNode->items as $item) {
+            if ($item === null) {
+                $position++;
+
+                continue;
+            }
+
+            if ($item->key === null) {
+                $key = $position++;
+
+            } else {
+                $key = $this->getRawArrayKeyValue($item->key);
+            }
+
+            $this->handleAssignment(
+                varNode: $item->value,
+                valueNode: $key === null ? new UnknownType : new UnresolvedArrayDimType($sourceType, $key, $this->scope),
+            );
         }
     }
 
