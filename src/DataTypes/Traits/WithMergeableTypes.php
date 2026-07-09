@@ -369,6 +369,17 @@ trait WithMergeableTypes
             }
         }
 
+        // Folding unrelated classes into one object would lose the class identity
+        // that method resolution and instanceof narrowing rely on.
+        if (! $mergeAsIntersection
+            && $object1->className !== null
+            && $object2->className !== null
+            && ! is_a($object1->className, $object2->className, true)
+            && ! is_a($object2->className, $object1->className, true)
+        ) {
+            return null;
+        }
+
         $mergeShapesInTypeUnions = $config->data['objects']['merge_shapes_in_type_unions'] ?? false;
 
         if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {

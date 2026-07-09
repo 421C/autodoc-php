@@ -5,7 +5,9 @@ namespace AutoDoc\Tests\Analyzer;
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
+use AutoDoc\DataTypes\UnionType;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
@@ -13,6 +15,7 @@ use AutoDoc\Tests\TestProject\Entities\Rocket;
 use AutoDoc\Tests\TestProject\Entities\RocketCategory;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
+use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
 use AutoDoc\Tests\TestProject\Extensions\ArrayMapOverrideExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
@@ -3511,6 +3514,139 @@ final class ControlFlowAnalysisTest extends TestCase
         ], $schema, 'closure', 'return');
     }
 
+    #[Test]
+    public function catchVariableResolvesToTheDeclaredExceptionType(): void
+    {
+        // Nothing seeds $e from the catch clause's type today, so it silently
+        // resolves to UnknownType instead of the caught exception's class.
+        $config = self::loadConfig();
+        $scope = new Scope($config);
+        $type = new PhpCallable(
+            scope: $scope,
+            reflection: new ReflectionFunction(function (): mixed {
+                try {
+                    throw new NotFoundException('missing');
+                } catch (NotFoundException $e) {
+                    return $e;
+                }
+            }),
+        )->getReturnType();
+
+        $this->assertInstanceOf(ObjectType::class, $type);
+        $this->assertSame(NotFoundException::class, $type->className);
+    }
+
+    #[Test]
+    public function catchVariableMethodCallResolvesUsingTheDeclaredExceptionType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            try {
+                throw new NotFoundException('missing');
+            } catch (NotFoundException $e) {
+                return $e->render();
+            }
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'name' => [
+                    'const' => 'not_found',
+                    'type' => 'string',
+                ],
+                'message' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'name',
+                'message',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function multiCatchVariableResolvesToAUnionOfTheCaughtTypes(): void
+    {
+        $config = self::loadConfig();
+        $scope = new Scope($config);
+        $type = new PhpCallable(
+            scope: $scope,
+            reflection: new ReflectionFunction(function (): mixed {
+                try {
+                    throw new NotFoundException('missing');
+                } catch (NotFoundException | \RuntimeException $e) { // @phpstan-ignore catch.neverThrown
+                    return $e;
+                }
+            }),
+        )->getReturnType();
+
+        $this->assertInstanceOf(UnionType::class, $type);
+
+        $classNames = [];
+
+        foreach ($type->types as $memberType) {
+            $classNames[] = $memberType instanceof ObjectType ? $memberType->className : null;
+        }
+
+        sort($classNames);
+
+        $this->assertSame([NotFoundException::class, \RuntimeException::class], $classNames);
+    }
+
+    #[Test]
+    public function backedEnumFromResolvesToTheEnumType(): void
+    {
+        // Only ::cases() is modeled today (BuiltIn\EnumStaticCall); ::from()
+        // falls through to generic static-call resolution instead of
+        // resolving to the enum's scalar type.
+        $schema = $this->getClosureReturnSchema(function (int $value): mixed {
+            return StateEnum::from($value);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'description' => '[StateEnum](#/schemas/StateEnum)',
+            'enum' => [1, 2],
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function backedEnumTryFromResolvesToTheEnumTypeOrNull(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $value): mixed {
+            return StateEnum::tryFrom($value);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'description' => '[StateEnum](#/schemas/StateEnum)',
+            'enum' => [1, 2],
+            'type' => [
+                'integer',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nullGuardAfterTryFromNarrowsToTheNonNullEnumType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $value): mixed {
+            $state = StateEnum::tryFrom($value);
+
+            if ($state === null) {
+                throw new \RuntimeException('invalid state');
+            }
+
+            return $state;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'description' => '[StateEnum](#/schemas/StateEnum)',
+            'enum' => [1, 2],
+            'type' => 'integer',
+        ], $schema, 'closure', 'return');
+    }
     /**
      * @return array<string, mixed>
      */

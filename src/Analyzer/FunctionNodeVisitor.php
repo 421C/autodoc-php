@@ -6,6 +6,7 @@ use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedArrayItemType;
 use AutoDoc\DataTypes\UnresolvedArrayKeyType;
+use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedParameterType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\VoidType;
@@ -338,6 +339,18 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     }
 
 
+    private function getCaughtExceptionType(Node\Stmt\Catch_ $node): Type
+    {
+        $caughtTypes = [];
+
+        foreach ($node->types as $className) {
+            $caughtTypes[] = new UnresolvedClassType($this->scope->getResolvedClassName($className), $this->scope);
+        }
+
+        return count($caughtTypes) === 1 ? $caughtTypes[0] : new UnionType($caughtTypes);
+    }
+
+
     private function handleReturnStatement(Node\Stmt\Return_ $node): void
     {
         if ($node->expr) {
@@ -626,6 +639,10 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
                 );
+            }
+
+            if ($node->var instanceof Variable) {
+                $this->scope->assignVariable($node->var, $this->getCaughtExceptionType($node));
             }
 
         } else if ($node instanceof Node\Stmt\Finally_) {
