@@ -34,6 +34,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     /** @var Type[] */
     public array $returnTypes = [];
 
+    /**
+     * Return points used to resolve mutations visible to the caller.
+     *
+     * @var list<array{readFilePos: int, branchPath: BranchPath}>
+     */
+    public array $returnPoints = [];
+
     public bool $bodyBreaksOut = false;
 
     public bool $targetMethodExists = false;
@@ -356,6 +363,11 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
     private function handleReturnStatement(Node\Stmt\Return_ $node): void
     {
+        $this->returnPoints[] = [
+            'readFilePos' => $this->getNodeEndFilePos($node) + 1,
+            'branchPath' => $this->scope->eventLog->getCurrentBranchPath(),
+        ];
+
         if ($node->expr) {
             $this->returnTypes[] = new UnresolvedParserNodeType(
                 node: $node->expr,

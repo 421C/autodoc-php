@@ -17,7 +17,7 @@ class UnresolvedArrayDimType extends UnresolvedType
     public function resolve(): Type
     {
         $type = $this->scope->withPartialArraysResolvingAsShapes(
-            fn () => $this->potentialArrayType->unwrapType($this->scope->config)->unwrapType($this->scope->config),
+            fn () => $this->potentialArrayType->unwrapType($this->scope->config),
         );
 
         if ($type instanceof UnionType) {

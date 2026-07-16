@@ -36,6 +36,23 @@ abstract class CallContext
     }
 
     /**
+     * Mutate attributes on the variable or literal path referenced by `$node`.
+     * Does nothing for non-variable-backed expressions or dynamic paths.
+     *
+     * @param array<int|string, Type> $attributes
+     */
+    public function mutateExpression(Node $node, array $attributes): void
+    {
+        $target = NarrowingTarget::fromNode($node);
+
+        if ($target === null) {
+            return;
+        }
+
+        $this->scope->eventLog->mutate($target->baseVar, $attributes, $this->startFilePos(), $this->endFilePos(), $target->attributePath() ?? []);
+    }
+
+    /**
      * Assign a new type to a variable from an extension.
      */
     public function setVarType(string $varName, Type $type): void

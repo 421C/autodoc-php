@@ -2,10 +2,17 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\DataTypes\Type;
 
 /**
- * @phpstan-import-type VariableMutationChanges from PhpVariableMutation
+ * @phpstan-type ScopeEventChanges array{
+ *     type?: Type,
+ *     attributes?: array<int|string, Type>,
+ *     narrowing?: Narrowing,
+ *     narrowingPath?: list<int|string>,
+ *     mutationPath?: list<int|string>,
+ * }
  */
 class ScopeEvent
 {
@@ -15,7 +22,7 @@ class ScopeEvent
         public readonly BranchPath $branchPath,
 
         /**
-         * @var VariableMutationChanges
+         * @var ScopeEventChanges
          */
         public readonly array $changes = [],
 

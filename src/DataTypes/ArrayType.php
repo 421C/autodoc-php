@@ -104,8 +104,8 @@ class ArrayType extends Type
                 $itemTypes[] = $value->unwrapType($config);
             }
 
-            $this->keyType = new UnionType($keyTypes)->unwrapType($config)->unwrapType($config);
-            $this->itemType = new UnionType($itemTypes)->unwrapType($config)->unwrapType($config);
+            $this->keyType = new UnionType($keyTypes)->unwrapType($config);
+            $this->itemType = new UnionType($itemTypes)->unwrapType($config);
             $this->shape = [];
         }
 

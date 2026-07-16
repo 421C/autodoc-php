@@ -13,6 +13,7 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\UnresolvedReflectionType;
+use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Parameter;
@@ -73,8 +74,90 @@ class PhpCallable
      */
     public function resolveReturnType(ArgumentList $args, ?Node $callerNode = null): Type
     {
-        if (! $this->node) {
+        $analysis = $this->traverseInlineBody($args, $callerNode);
+
+        if (! $analysis) {
             return new UnknownType;
+        }
+
+        [$nodeVisitor] = $analysis;
+
+        $returnType = new UnionType($nodeVisitor->returnTypes);
+
+        return $returnType->unwrapType($this->scope->config);
+    }
+
+    /**
+     * Resolve a parameter's type after an inline callable runs.
+     *
+     * Parameter mutations are resolved at each possible exit and then merged.
+     */
+    public function resolveParameterTypeAfterInvocation(int $parameterIndex, ArgumentList $args, ?Node $callerNode = null): ?Type
+    {
+        $param = $this->node?->params[$parameterIndex] ?? null;
+
+        if (! ($param?->var instanceof Node\Expr\Variable) || ! is_string($param->var->name)) {
+            return null;
+        }
+
+        $paramName = $param->var->name;
+
+        $analysis = $this->traverseInlineBody($args, $callerNode);
+
+        if (! $analysis) {
+            return null;
+        }
+
+        [$nodeVisitor, $functionScope] = $analysis;
+
+        // Arrow function bodies are resolved lazily, so resolve the return type to
+        // record side effects such as parameter mutations.
+        new UnionType($nodeVisitor->returnTypes)->unwrapType($this->scope->config);
+
+        $returnPoints = $nodeVisitor->returnPoints;
+
+        // A body that always returns or throws never reaches its closing brace.
+        if (! $nodeVisitor->bodyBreaksOut) {
+            $returnPoints[] = ['readFilePos' => PHP_INT_MAX, 'branchPath' => new BranchPath];
+        }
+
+        // No exit means no execution returns to the caller (the body always
+        // throws), so any mutation before the throw is unobservable.
+        if ($returnPoints === []) {
+            return null;
+        }
+
+        $exitTypes = array_map(
+            fn (array $exit): Type => new UnresolvedVariableType(
+                varName: $paramName,
+                scope: $functionScope,
+                varStartFilePos: $exit['readFilePos'],
+                readBranchPath: $exit['branchPath'],
+            )->resolve(),
+            $returnPoints,
+        );
+
+        if (count($exitTypes) === 1) {
+            return $exitTypes[0];
+        }
+
+        // An attribute only some exits carry becomes optional, so the exit shapes
+        // have to merge rather than stay a union of alternatives.
+        return $this->scope->withShapeMerging(
+            fn (): Type => new UnionType($exitTypes)->unwrapType($this->scope->config),
+        );
+    }
+
+    /**
+     * Traverse the inline callable's body in a child scope with the given
+     * invocation arguments bound to its parameters.
+     *
+     * @return array{FunctionNodeVisitor, Scope}|null
+     */
+    private function traverseInlineBody(ArgumentList $args, ?Node $callerNode): ?array
+    {
+        if (! $this->node) {
+            return null;
         }
 
         $traverser = new NodeTraverser;
@@ -92,9 +175,7 @@ class PhpCallable
         $traverser->addVisitor($nodeVisitor);
         $traverser->traverse([$this->node]);
 
-        $returnType = new UnionType($nodeVisitor->returnTypes);
-
-        return $returnType->unwrapType($this->scope->config);
+        return [$nodeVisitor, $functionScope];
     }
 
     public function narrowArgumentTypeFromTruthyReturn(int $argumentIndex, Type $argumentType, ?Node $callerNode = null): ?Type

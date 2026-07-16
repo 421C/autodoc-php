@@ -159,7 +159,7 @@ final class IntersectionTypeTest extends TestCase
     {
         $never = (new IntersectionType([
             new NullType,
-            new UnionType([new IntegerType, new FloatType]),
+            new UnionType([new IntegerType, new StringType]),
         ]))->setRequired(true)->unwrapType($this->configWithScalarValues());
 
         self::assertInstanceOf(NeverType::class, $never);

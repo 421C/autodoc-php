@@ -7,12 +7,6 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\Extensions\MethodCallExtension;
 use PhpParser\Node\Expr\Variable;
 
-/**
- * Exercises the side-effect hook: `injectAttribute` mutates the call target
- * variable's type (the `setAttribute` pattern), `captureBody` records the first
- * argument as the request body. Every dispatch is logged so a test can assert
- * the hook fires exactly once per call node.
- */
 class SideEffectMethodExtension extends MethodCallExtension
 {
     /** @var list<string> */
@@ -26,6 +20,10 @@ class SideEffectMethodExtension extends MethodCallExtension
 
         if ($context->methodName === 'injectAttribute' && $var instanceof Variable && is_string($var->name)) {
             $context->mutateVar($var->name, ['injected' => new StringType]);
+        }
+
+        if ($context->methodName === 'injectNested') {
+            $context->mutateExpression($var, ['tagged' => new StringType]);
         }
 
         if ($context->methodName === 'captureBody') {

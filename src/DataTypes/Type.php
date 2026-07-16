@@ -429,18 +429,7 @@ abstract class Type
             }
 
             if (count($this->types) === 1) {
-                $type = reset($this->types);
-
-                $type->addDescription($this->description);
-                $this->description = null;
-
-                $type->examples = $this->examples ?: $type->examples;
-                $type->example = $this->example ?: $type->example;
-
-                $type->required = $type->required || $this->required;
-                $type->deprecated = $type->deprecated || $this->deprecated;
-
-                return $type->unwrapType($config);
+                return $this->collapseSingleMemberOnto(reset($this->types), $config);
             }
 
             if (empty($this->types)) {
@@ -449,17 +438,15 @@ abstract class Type
 
             $this->mergeDuplicateTypes(mergeAsIntersection: is_a($this, IntersectionType::class), config: $config);
 
-            if (is_a($this, IntersectionType::class)) {
-                if (count($this->types) >= 2 && $this->intersectionIsEmpty($this->types, $config)) {
-                    return new NeverType(conflictingTypes: $this->types, required: $this->required);
-                }
+            if (is_a($this, IntersectionType::class)
+                && count($this->types) >= 2
+                && $this->intersectionIsEmpty($this->types, $config)
+            ) {
+                return new NeverType(conflictingTypes: $this->types, required: $this->required);
+            }
 
-                if (count($this->types) === 1) {
-                    $single = reset($this->types);
-                    $single->required = $single->required || $this->required;
-
-                    return $single->unwrapType($config);
-                }
+            if (count($this->types) === 1) {
+                return $this->collapseSingleMemberOnto(reset($this->types), $config);
             }
 
         } else if (is_a($this, UnresolvedType::class)) {
@@ -467,6 +454,25 @@ abstract class Type
         }
 
         return $this;
+    }
+
+
+    /**
+     * Transfer union/intersection wrapper metadata to the remaining member.
+     */
+    private function collapseSingleMemberOnto(Type $member, Config $config): Type
+    {
+        $member = clone $member;
+
+        $member->addDescription($this->description);
+
+        $member->examples = $this->examples ?: $member->examples;
+        $member->example = $this->example ?? $member->example;
+
+        $member->required = $member->required || $this->required;
+        $member->deprecated = $member->deprecated || $this->deprecated;
+
+        return $member->unwrapType($config);
     }
 
 

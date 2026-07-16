@@ -383,14 +383,7 @@ class TypeNarrower
         int $filePos,
     ): void {
 
-        $path = $target->attributePath();
-
-        if ($path !== null) {
-            $scope->eventLog->narrowAttributePath($target->baseVar, $path, $narrowing, $condition, $filePos);
-
-        } else {
-            $scope->eventLog->narrow($target->baseVar, $narrowing, $condition, $filePos);
-        }
+        $scope->eventLog->narrow($target->baseVar, $narrowing, $condition, $filePos, $target->attributePath() ?? []);
     }
 
     /**

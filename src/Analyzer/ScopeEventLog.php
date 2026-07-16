@@ -88,53 +88,35 @@ class ScopeEventLog
     }
 
     /**
+     * Add attributes to the variable's type or to the nested type at `$path`.
+     *
      * @param array<int|string, Type> $attributes
+     * @param list<int|string> $path
      */
-    public function mutate(string $varName, array $attributes, int $startFilePos, int $endFilePos = 0): void
+    public function mutate(string $varName, array $attributes, int $startFilePos, int $endFilePos = 0, array $path = []): void
     {
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Mutate,
             varName: $varName,
             branchPath: $this->getBranchPathAtPosition($startFilePos),
-            changes: ['attributes' => $attributes],
+            changes: ['attributes' => $attributes, 'mutationPath' => $path],
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
         );
     }
 
-    public function narrow(string $varName, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
-    {
-        $this->events[] = new ScopeEvent(
-            type: ScopeEventType::Narrow,
-            varName: $varName,
-            branchPath: $this->currentBranchPath,
-            changes: ['narrowing' => $narrowing],
-            startFilePos: $filePos,
-            endFilePos: $filePos,
-            condition: $condition,
-        );
-    }
-
     /**
-     * Narrow one property or literal-key element of `$varName`'s type.
-     */
-    public function narrowAttribute(string $varName, int|string $key, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
-    {
-        $this->narrowAttributePath($varName, [$key], $narrowing, $condition, $filePos);
-    }
-
-    /**
-     * Narrow a literal property/array-key path of `$varName`'s type.
+     * Narrow the variable's type from a condition, optionally at a literal nested `$path`.
      *
-     * @param non-empty-list<int|string> $path
+     * @param list<int|string> $path
      */
-    public function narrowAttributePath(string $varName, array $path, Narrowing $narrowing, PhpCondition $condition, int $filePos): void
+    public function narrow(string $varName, Narrowing $narrowing, PhpCondition $condition, int $filePos, array $path = []): void
     {
         $this->events[] = new ScopeEvent(
-            type: ScopeEventType::NarrowAttribute,
+            type: $path === [] ? ScopeEventType::Narrow : ScopeEventType::NarrowAttribute,
             varName: $varName,
             branchPath: $this->currentBranchPath,
-            changes: ['narrowingPath' => $path, 'narrowing' => $narrowing],
+            changes: ['narrowing' => $narrowing, 'narrowingPath' => $path],
             startFilePos: $filePos,
             endFilePos: $filePos,
             condition: $condition,

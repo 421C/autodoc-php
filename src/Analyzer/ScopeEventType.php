@@ -7,7 +7,10 @@ enum ScopeEventType
     /** Full variable assignment ($x = ...) */
     case Assign;
 
-    /** Attribute mutation ($x['key'] = ... or $x->prop = ...) */
+    /**
+     * Mutates a property or array key, optionally on a nested value selected by
+     * `mutationPath`.
+     */
     case Mutate;
 
     /** Type narrowing from a condition (instanceof, !== null, etc.) */

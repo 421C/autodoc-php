@@ -19,6 +19,14 @@ class CallableType extends Type
         return $this->phpCallable?->resolveReturnType($args, $callerNode) ?? new UnknownType;
     }
 
+    /**
+     * Resolve the parameter's type after the call, including changes to its properties or array keys.
+     */
+    public function resolveParameterTypeAfterInvocation(int $parameterIndex, ArgumentList $args, ?Node $callerNode = null): ?Type
+    {
+        return $this->phpCallable?->resolveParameterTypeAfterInvocation($parameterIndex, $args, $callerNode);
+    }
+
     public function narrowArgumentTypeFromTruthyReturn(int $argumentIndex, Type $argumentType, ?Node $callerNode = null): ?Type
     {
         return $this->phpCallable?->narrowArgumentTypeFromTruthyReturn($argumentIndex, $argumentType, $callerNode);
