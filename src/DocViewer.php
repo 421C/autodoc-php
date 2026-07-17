@@ -3,6 +3,7 @@
 namespace AutoDoc;
 
 use Exception;
+use Throwable;
 
 /**
  * @phpstan-import-type UiConfig from Config
@@ -129,38 +130,30 @@ class DocViewer
      *   'wiki/<id>'              -> a `path`-backed wiki page of the selected workspace
      *   anything else            -> HTTP 404
      */
-    public function handle(string $path = ''): void
+    public function handle(string $path = ''): DocViewerResponse
     {
         $path = trim($path, '/');
 
         if ($path === '') {
-            $this->renderPage();
-
-            return;
+            return $this->renderPage();
         }
 
         if ($path === self::OPENAPI_PATH) {
-            $this->outputOpenApiJson();
-
-            return;
+            return $this->outputOpenApiJson();
         }
 
         if (str_starts_with($path, self::ASSETS_PATH)) {
-            self::serveAsset(substr($path, strlen(self::ASSETS_PATH)));
-
-            return;
+            return self::serveAsset(substr($path, strlen(self::ASSETS_PATH)));
         }
 
         if (str_starts_with($path, self::WIKI_PATH)) {
-            $this->serveWikiPage(substr($path, strlen(self::WIKI_PATH)));
-
-            return;
+            return $this->serveWikiPage(substr($path, strlen(self::WIKI_PATH)));
         }
 
-        http_response_code(404);
+        return DocViewerResponse::notFound();
     }
 
-    public function serveWikiPage(string $id): void
+    public function serveWikiPage(string $id): DocViewerResponse
     {
         $ui = self::resolveUi($this->config, $this->workspaceKey);
 
@@ -172,40 +165,42 @@ class DocViewer
             $markdown = is_file($page['path']) ? file_get_contents($page['path']) : false;
 
             if ($markdown === false) {
-                http_response_code(404);
-
-                return;
+                return DocViewerResponse::notFound();
             }
 
-            header('Content-Type: text/markdown; charset=utf-8');
-            echo $markdown;
-
-            return;
+            return DocViewerResponse::make($markdown, ['Content-Type' => 'text/markdown; charset=utf-8']);
         }
 
-        http_response_code(404);
+        return DocViewerResponse::notFound();
     }
 
-    public function renderPage(): void
+    public function renderPage(): DocViewerResponse
     {
-        include dirname(__DIR__) . '/resources/views/docs.php';
+        ob_start();
+
+        try {
+            include dirname(__DIR__) . '/resources/views/docs.php';
+
+        } catch (Throwable $exception) {
+            ob_end_clean();
+
+            throw $exception;
+        }
+
+        return DocViewerResponse::make((string) ob_get_clean(), ['Content-Type' => 'text/html; charset=utf-8']);
     }
 
-    public function outputOpenApiJson(): void
+    public function outputOpenApiJson(): DocViewerResponse
     {
         $workspace = $this->workspaceKey === null
             ? Workspace::getDefault($this->config)
             : Workspace::findUsingKey((string) $this->workspaceKey, $this->config);
 
         if (! $workspace instanceof Workspace) {
-            http_response_code(404);
-
-            return;
+            return DocViewerResponse::notFound();
         }
 
-        header('Content-Type: application/json');
-
-        echo $workspace->getJson();
+        return DocViewerResponse::make($workspace->getJson() ?? '', ['Content-Type' => 'application/json']);
     }
 
     /**
@@ -275,33 +270,31 @@ class DocViewer
         return is_file($path) ? $path : null;
     }
 
-    public static function serveAsset(string $file): void
+    public static function serveAsset(string $file): DocViewerResponse
     {
         $file = basename($file);
 
         if (! isset(self::ASSETS[$file])) {
-            http_response_code(404);
-
-            return;
+            return DocViewerResponse::notFound();
         }
 
         $path = dirname(__DIR__) . '/resources/viewer/' . $file;
 
         if (! is_file($path)) {
-            http_response_code(404);
-
-            return;
+            return DocViewerResponse::notFound();
         }
 
-        header('Content-Type: ' . self::ASSETS[$file]);
-        header('Cache-Control: public, max-age=31536000, immutable');
+        $headers = [
+            'Content-Type' => self::ASSETS[$file],
+            'Cache-Control' => 'public, max-age=31536000, immutable',
+        ];
 
         $mtime = filemtime($path);
 
         if ($mtime !== false) {
-            header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $mtime) . ' GMT');
+            $headers['Last-Modified'] = gmdate('D, d M Y H:i:s', $mtime) . ' GMT';
         }
 
-        readfile($path);
+        return DocViewerResponse::file($path, $headers);
     }
 }
