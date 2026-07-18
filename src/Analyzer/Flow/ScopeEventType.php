@@ -15,11 +15,8 @@ enum ScopeEventType
      */
     case Mutate;
 
-    /** Type narrowing from a condition (instanceof, !== null, etc.) */
-    case Narrow;
-
     /**
-     * Narrows a statically known property or array-key path rooted at a variable.
+     * Narrows a variable or a statically known property or array-key path within it.
      */
-    case NarrowAttribute;
+    case Narrow;
 }

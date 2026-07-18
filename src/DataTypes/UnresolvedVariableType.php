@@ -114,11 +114,8 @@ class UnresolvedVariableType extends UnresolvedType
             } else if ($event->type === ScopeEventType::Mutate) {
                 $pendingMutations[] = [$event, $isCertain];
 
-            } else {
-                // ScopeEventType::Narrow or ScopeEventType::NarrowAttribute
-                if ($isCertain) {
-                    $pendingMutations[] = [$event, true];
-                }
+            } else if ($isCertain) {
+                $pendingMutations[] = [$event, true];
             }
         }
 
@@ -155,18 +152,10 @@ class UnresolvedVariableType extends UnresolvedType
 
             } else if ($event->type === ScopeEventType::Narrow && isset($event->changes['narrowing'])) {
                 if ($resolvedType !== null) {
-                    $resolvedType = $event->changes['narrowing']->apply($resolvedType, $this->scope);
-                }
-
-            } else if ($event->type === ScopeEventType::NarrowAttribute
-                && isset($event->changes['narrowing'])
-                && ! empty($event->changes['narrowingPath'])
-            ) {
-                if ($resolvedType !== null) {
-                    $resolvedType = $narrowingApplier->applyAttributePath(
-                        $resolvedType,
-                        $event->changes['narrowingPath'],
-                        $event->changes['narrowing'],
+                    $resolvedType = $narrowingApplier->applyPath(
+                        base: $resolvedType,
+                        path: $event->changes['narrowingPath'] ?? [],
+                        narrowing: $event->changes['narrowing'],
                     );
                 }
             }

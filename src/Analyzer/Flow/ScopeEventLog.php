@@ -126,14 +126,15 @@ class ScopeEventLog
     }
 
     /**
-     * Narrow the variable's type from a condition, optionally at a literal nested `$path`.
+     * Narrow a variable from a condition, optionally at a statically known
+     * property or array-key path.
      *
      * @param list<int|string> $path
      */
     public function narrow(string $varName, Narrowing $narrowing, PhpCondition $condition, int $filePos, array $path = []): void
     {
         $this->events[] = new ScopeEvent(
-            type: $path === [] ? ScopeEventType::Narrow : ScopeEventType::NarrowAttribute,
+            type: ScopeEventType::Narrow,
             varName: $varName,
             branchPath: $this->currentBranchPath,
             changes: ['narrowing' => $narrowing, 'narrowingPath' => $path],

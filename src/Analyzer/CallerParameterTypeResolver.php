@@ -52,17 +52,10 @@ final readonly class CallerParameterTypeResolver
                 && $event->type === ScopeEventType::Narrow
                 && isset($event->changes['narrowing'])
             ) {
-                $resolvedType = $event->changes['narrowing']->apply($resolvedType, $this->scope);
-
-            } else if ($isCertain
-                && $event->type === ScopeEventType::NarrowAttribute
-                && isset($event->changes['narrowing'])
-                && ! empty($event->changes['narrowingPath'])
-            ) {
-                $resolvedType = $narrowingApplier->applyAttributePath(
-                    $resolvedType,
-                    $event->changes['narrowingPath'],
-                    $event->changes['narrowing'],
+                $resolvedType = $narrowingApplier->applyPath(
+                    base: $resolvedType,
+                    path: $event->changes['narrowingPath'] ?? [],
+                    narrowing: $event->changes['narrowing'],
                 );
             }
         }
