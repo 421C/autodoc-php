@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
-use AutoDoc\Analyzer\Ast\ClassNameResolver;
+use AutoDoc\Analyzer\Ast\SymbolNameResolver;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -41,7 +41,7 @@ class PhpClass
         public Scope $scope,
     ) {}
 
-    public ?ClassNameResolver $classNameResolver = null;
+    public ?SymbolNameResolver $symbolNameResolver = null;
 
     public ?Type $typeToDisplay = null;
 
@@ -550,25 +550,25 @@ class PhpClass
     }
 
 
-    public function getClassNameResolver(): ?ClassNameResolver
+    public function getSymbolNameResolver(): ?SymbolNameResolver
     {
-        if ($this->classNameResolver === null) {
-            $classNameResolver = new ClassNameResolver;
+        if ($this->symbolNameResolver === null) {
+            $symbolNameResolver = new SymbolNameResolver;
 
-            $traversed = $this->traverse($classNameResolver);
+            $traversed = $this->traverse($symbolNameResolver);
 
             if ($traversed) {
                 // Add name aliases from traits since some PHPDoc comments might be
                 // defined in traits but resolved in class context.
                 foreach ($this->getTraits() as $traitName) {
-                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($classNameResolver);
+                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($symbolNameResolver);
                 }
 
-                $this->classNameResolver = $classNameResolver;
+                $this->symbolNameResolver = $symbolNameResolver;
             }
         }
 
-        return $this->classNameResolver;
+        return $this->symbolNameResolver;
     }
 
 

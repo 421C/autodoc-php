@@ -477,6 +477,12 @@ class Scope
                 if ($keyword === 'true' || $keyword === 'false') {
                     return new BoolType($keyword === 'true');
                 }
+
+                $constantName = $this->getResolvedConstantName($node->name);
+
+                if (defined($constantName)) {
+                    return Type::fromValue(constant($constantName));
+                }
             }
 
             if ($node instanceof Node\Expr\ClassConstFetch) {
@@ -1040,9 +1046,53 @@ class Scope
             return null;
         }
 
-        $classNameResolver = $this->getCurrentPhpClass()?->getClassNameResolver();
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
 
-        return $classNameResolver?->getResolvedClassName($name);
+        return $symbolNameResolver?->getResolvedClassName($name);
+    }
+
+
+    public function getResolvedFunctionName(Node\Name $name): string
+    {
+        if ($name instanceof Node\Name\FullyQualified) {
+            return PhpClass::removeLeadingBackslash($name->name);
+        }
+
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
+
+        if ($symbolNameResolver) {
+            return $symbolNameResolver->getResolvedFunctionName($name->name);
+        }
+
+        $namespacedName = $name->getAttribute('namespacedName');
+
+        if ($namespacedName instanceof Node\Name && function_exists($namespacedName->name)) {
+            return $namespacedName->name;
+        }
+
+        return $name->name;
+    }
+
+
+    public function getResolvedConstantName(Node\Name $name): string
+    {
+        if ($name instanceof Node\Name\FullyQualified) {
+            return PhpClass::removeLeadingBackslash($name->name);
+        }
+
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
+
+        if ($symbolNameResolver) {
+            return $symbolNameResolver->getResolvedConstantName($name->name);
+        }
+
+        $namespacedName = $name->getAttribute('namespacedName');
+
+        if ($namespacedName instanceof Node\Name && defined($namespacedName->name)) {
+            return $namespacedName->name;
+        }
+
+        return $name->name;
     }
 
 

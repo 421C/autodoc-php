@@ -20,7 +20,7 @@ class FuncCallContext extends CallContext
         parent::__construct($node, $scope);
 
         $rawName = $node->name instanceof Node\Name
-            ? $node->name->name
+            ? $scope->getResolvedFunctionName($node->name)
             : $scope->getRawValueFromNode($node->name);
 
         $this->functionName = is_string($rawName) ? $rawName : null;

@@ -4,7 +4,7 @@ namespace AutoDoc\Commands;
 
 use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\Ast\FunctionBodyVisitor;
-use AutoDoc\Analyzer\Ast\ClassNameResolver;
+use AutoDoc\Analyzer\Ast\SymbolNameResolver;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
@@ -255,12 +255,12 @@ class ProcessAutoDocDebugTags
 
         if ($classMethodNodeVisitor->className) {
             $traverser = new NodeTraverser;
-            $classNameResolver = new ClassNameResolver;
+            $symbolNameResolver = new SymbolNameResolver;
 
-            $traverser->addVisitor($classNameResolver);
+            $traverser->addVisitor($symbolNameResolver);
             $traverser->traverse($ast);
 
-            $className = $classNameResolver->getResolvedClassName($classMethodNodeVisitor->className);
+            $className = $symbolNameResolver->getResolvedClassName($classMethodNodeVisitor->className);
 
         } else {
             $className = null;
