@@ -16,6 +16,7 @@ use Exception;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
+use stdClass;
 
 final class CallbackParameterResolutionTest extends TestCase
 {
@@ -126,6 +127,166 @@ final class CallbackParameterResolutionTest extends TestCase
         });
 
         $this->assertSchemaArraysMatch(['type' => 'string'], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationBeforeReassignmentIsReported(): void
+    {
+        // Items are passed by value: the mutation reached the original object
+        // even though the variable itself ends as a string.
+        $schema = $this->analyze(function (object $model) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item): void {
+                // @phpstan-ignore method.notFound
+                $item->injectAttribute();
+
+                $item = 'done';
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: true), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationAfterReassignmentIsNotReported(): void
+    {
+        // Reassignment breaks the link to the original item, so the later
+        // mutation lands on the new object only.
+        $schema = $this->analyze(function (object $model) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item): void {
+                $item = new stdClass;
+
+                // @phpstan-ignore method.nonObject
+                $item->injectAttribute();
+            });
+        });
+
+        $this->assertSchemaArraysMatch(['type' => 'object'], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationInReassignmentValueIsReported(): void
+    {
+        $schema = $this->analyze(function (object $model) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item): void {
+                // @phpstan-ignore method.notFound
+                $item = $item->injectAttribute();
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: true), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function phpDocVarAnnotationDoesNotCountAsReassignment(): void
+    {
+        $schema = $this->analyze(function (object $model) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item): void {
+                /** @var object $item */
+
+                // @phpstan-ignore method.notFound
+                $item->injectAttribute();
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: true), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationBeforeConditionalReassignmentIsReported(): void
+    {
+        $schema = $this->analyze(function (object $model, bool $flag) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item) use ($flag): void {
+                // @phpstan-ignore method.notFound
+                $item->injectAttribute();
+
+                if ($flag) {
+                    $item = 'done';
+                }
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: true), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationAfterConditionalReassignmentIsOptional(): void
+    {
+        $schema = $this->analyze(function (object $model, bool $flag) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item) use ($flag): void {
+                if ($flag) {
+                    $item = new stdClass;
+                }
+
+                // @phpstan-ignore method.notFound
+                $item->injectAttribute();
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: false), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationAfterReassignmentInSameBranchIsNotReported(): void
+    {
+        $schema = $this->analyze(function (object $model, bool $flag) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item) use ($flag): void {
+                if ($flag) {
+                    $item = new stdClass;
+
+                    // @phpstan-ignore method.nonObject
+                    $item->injectAttribute();
+                }
+            });
+        });
+
+        $this->assertSchemaArraysMatch(['type' => 'object'], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationInSiblingBranchOfReassignmentIsOptional(): void
+    {
+        $schema = $this->analyze(function (object $model, bool $flag) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item) use ($flag): void {
+                if ($flag) {
+                    $item = new stdClass;
+
+                } else {
+                    // @phpstan-ignore method.notFound
+                    $item->injectAttribute();
+                }
+            });
+        });
+
+        $this->assertSchemaArraysMatch($this->injectedBody(required: false), $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function mutationAfterReassignmentInEveryBranchIsNotReported(): void
+    {
+        $schema = $this->analyze(function (object $model, bool $flag) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (object $item) use ($flag): void {
+                if ($flag) {
+                    $item = new stdClass;
+
+                } else {
+                    $item = new stdClass;
+                }
+
+                // @phpstan-ignore method.nonObject
+                $item->injectAttribute();
+            });
+        });
+
+        $this->assertSchemaArraysMatch(['type' => 'object'], $schema, '/test', 'response');
     }
 
     #[Test]

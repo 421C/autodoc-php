@@ -2,6 +2,8 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Flow\BranchPath;
+use AutoDoc\Analyzer\Flow\PhpCondition;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -49,6 +51,9 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
     /** @var Comment[] */
     private array $currentExpressionComments = [];
+
+    /** @var array<int, true> */
+    private array $handledPhpDocComments = [];
 
     /**
      * Tracks the active PhpCondition for branch index management.
@@ -277,6 +282,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     {
         foreach ($comments as $comment) {
             if ($comment instanceof Comment\Doc) {
+                $startFilePos = $comment->getStartFilePos();
+
+                if (isset($this->handledPhpDocComments[$startFilePos])) {
+                    continue;
+                }
+
+                $this->handledPhpDocComments[$startFilePos] = true;
                 $phpDoc = new PhpDoc($comment->getText(), $this->scope);
 
                 foreach ($phpDoc->getVarTags() as $var) {
@@ -289,13 +301,14 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     $varNode = new Variable($varName, [
                         'startLine' => $comment->getStartLine(),
                         'endLine' => $comment->getEndLine(),
-                        'startFilePos' => $comment->getStartFilePos(),
+                        'startFilePos' => $startFilePos,
                         'endFilePos' => $comment->getEndFilePos(),
                     ]);
 
                     $this->scope->assignVariable(
                         varNode: $varNode,
                         valueNode: $varType,
+                        isTypeAnnotation: true,
                     );
                 }
             }

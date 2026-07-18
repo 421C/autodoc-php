@@ -2,6 +2,8 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Flow\BranchPath;
+use AutoDoc\Analyzer\Flow\CallerParameterBindingAnalysis;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\NeverType;
@@ -13,7 +15,6 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\UnresolvedReflectionType;
-use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Parameter;
@@ -88,9 +89,7 @@ class PhpCallable
     }
 
     /**
-     * Resolve a parameter's type after an inline callable runs.
-     *
-     * Parameter mutations are resolved at each possible exit and then merged.
+     * Resolve the caller-visible parameter type across every callable exit.
      */
     public function resolveParameterTypeAfterInvocation(int $parameterIndex, ArgumentList $args, ?Node $callerNode = null): ?Type
     {
@@ -127,13 +126,24 @@ class PhpCallable
             return null;
         }
 
+        /** @var int */
+        $paramVarStartFilePos = $param->var->getAttribute('startFilePos');
+
+        $bindingAnalysis = new CallerParameterBindingAnalysis(
+            eventLog: $functionScope->eventLog,
+            parameterName: $paramName,
+            parameterStartFilePos: $paramVarStartFilePos,
+        );
+        $parameterTypeResolver = new CallerParameterTypeResolver(
+            scope: $functionScope,
+            bindingAnalysis: $bindingAnalysis,
+        );
+
         $exitTypes = array_map(
-            fn (array $exit): Type => new UnresolvedVariableType(
-                varName: $paramName,
-                scope: $functionScope,
-                varStartFilePos: $exit['readFilePos'],
+            fn (array $exit): Type => $parameterTypeResolver->resolveAtExit(
+                readFilePos: $exit['readFilePos'],
                 readBranchPath: $exit['branchPath'],
-            )->resolve(),
+            ),
             $returnPoints,
         );
 

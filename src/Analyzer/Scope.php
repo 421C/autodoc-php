@@ -2,6 +2,8 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Flow\BranchBreakout;
+use AutoDoc\Analyzer\Flow\ScopeEventLog;
 use AutoDoc\Analyzer\Traits\HandlesExtensions;
 use AutoDoc\Analyzer\Traits\StoresVariables;
 use AutoDoc\Config;

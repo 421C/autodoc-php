@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Flow\PhpCondition;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
 use AutoDoc\Analyzer\Narrowing\IsFalsey;

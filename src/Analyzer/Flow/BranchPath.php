@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
 class BranchPath
 {
@@ -61,6 +61,33 @@ class BranchPath
     {
         return count($this->segments) > count($other->segments)
             && $other->isVisibleFrom($this);
+    }
+
+    /**
+     * Find the segment where this path diverges from or extends another path.
+     *
+     * @return array{conditionId: int, branchIndex: int}|null
+     */
+    public function findDivergingSegmentFrom(self $other): ?array
+    {
+        $minDepth = min($this->depth(), $other->depth());
+
+        for ($index = 0; $index < $minDepth; $index++) {
+            $segment = $this->segments[$index];
+            $otherSegment = $other->segments[$index];
+
+            if ($segment['conditionId'] === $otherSegment['conditionId']
+                && $segment['branchIndex'] !== $otherSegment['branchIndex']
+            ) {
+                return $segment;
+            }
+
+            if ($segment !== $otherSegment) {
+                return null;
+            }
+        }
+
+        return $this->segments[$minDepth] ?? null;
     }
 
     public function push(int $conditionId, int $branchIndex): self

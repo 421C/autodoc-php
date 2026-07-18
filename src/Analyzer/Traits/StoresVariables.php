@@ -2,8 +2,8 @@
 
 namespace AutoDoc\Analyzer\Traits;
 
+use AutoDoc\Analyzer\Flow\ScopeEventLog;
 use AutoDoc\Analyzer\Scope;
-use AutoDoc\Analyzer\ScopeEventLog;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
@@ -25,6 +25,7 @@ trait StoresVariables
         Node\Expr\Variable $varNode,
         Node|Type $valueNode,
         array $comments = [],
+        bool $isTypeAnnotation = false,
     ): void {
 
         if ($valueNode instanceof Node) {
@@ -53,7 +54,13 @@ trait StoresVariables
         /** @var int */
         $startFilePos = $varNode->getAttribute('startFilePos');
 
-        $this->eventLog->assign($varNode->name, $type, $startFilePos, $endFilePos);
+        $this->eventLog->assign(
+            varName: $varNode->name,
+            type: $type,
+            startFilePos: $startFilePos,
+            endFilePos: $endFilePos,
+            isTypeAnnotation: $isTypeAnnotation,
+        );
     }
 
 

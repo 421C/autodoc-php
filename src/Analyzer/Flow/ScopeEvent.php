@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\DataTypes\Type;
@@ -38,5 +38,7 @@ class ScopeEvent
          * Null for Assign/Mutate events.
          */
         public readonly ?PhpCondition $condition = null,
+
+        public readonly bool $isTypeAnnotation = false,
     ) {}
 }

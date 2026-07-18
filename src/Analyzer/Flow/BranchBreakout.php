@@ -1,7 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\NeverType;
 use PhpParser\Node;

@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\DataTypes\Type;
@@ -75,7 +75,13 @@ class ScopeEventLog
         return $result;
     }
 
-    public function assign(string $varName, Type $type, int $startFilePos, int $endFilePos = 0): void
+    public function assign(
+        string $varName,
+        Type $type,
+        int $startFilePos,
+        int $endFilePos = 0,
+        bool $isTypeAnnotation = false,
+    ): void
     {
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Assign,
@@ -84,6 +90,7 @@ class ScopeEventLog
             changes: ['type' => $type],
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
+            isTypeAnnotation: $isTypeAnnotation,
         );
     }
 
@@ -168,11 +175,86 @@ class ScopeEventLog
     }
 
     /**
+     * Return events in PHP evaluation order, applying assignments after their values.
+     *
+     * @return ScopeEvent[]
+     */
+    public function getEventsInEvaluationOrder(string $varName, int $readFilePos, BranchPath $readBranchPath): array
+    {
+        $events = $this->getEventsForVariable($varName, $readFilePos, $readBranchPath);
+
+        usort(
+            array: $events,
+            callback: fn (ScopeEvent $left, ScopeEvent $right): int => [
+                $left->endFilePos,
+                $left->type === ScopeEventType::Assign ? 1 : 0,
+            ] <=> [
+                $right->endFilePos,
+                $right->type === ScopeEventType::Assign ? 1 : 0,
+            ],
+        );
+
+        return $events;
+    }
+
+    /**
      * @return ScopeEvent[]
      */
     public function getAllEvents(): array
     {
         return $this->events;
+    }
+
+    public function getEventVisibility(ScopeEvent $event, BranchPath $readBranchPath): ScopeEventVisibility
+    {
+        $eventPath = $event->branchPath;
+
+        if ($eventPath->depth() === 0 || $eventPath->isVisibleFrom($readBranchPath)) {
+            return ScopeEventVisibility::Certain;
+        }
+
+        $divergingSegment = $eventPath->findDivergingSegmentFrom($readBranchPath);
+
+        if ($divergingSegment === null) {
+            return ScopeEventVisibility::Hidden;
+        }
+
+        $readDivergingSegment = $readBranchPath->findDivergingSegmentFrom($eventPath);
+
+        if ($readDivergingSegment !== null
+            && $divergingSegment['conditionId'] === $readDivergingSegment['conditionId']
+        ) {
+            return ScopeEventVisibility::Hidden;
+        }
+
+        $eventBranchIndex = $divergingSegment['branchIndex'];
+        $condition = $this->getConditionById($divergingSegment['conditionId']);
+
+        if ($readBranchPath->depth() < $eventPath->depth()
+            && $condition?->branchHasBreakout($eventBranchIndex)
+        ) {
+            return ScopeEventVisibility::Hidden;
+        }
+
+        if ($condition !== null
+            && $condition->isExhaustive()
+            && $readBranchPath->depth() < $eventPath->depth()
+        ) {
+            $allOtherBranchesBreakOut = true;
+
+            for ($branchIndex = 0; $branchIndex < $condition->getBranchCount(); $branchIndex++) {
+                if ($branchIndex !== $eventBranchIndex && ! $condition->branchHasBreakout($branchIndex)) {
+                    $allOtherBranchesBreakOut = false;
+                    break;
+                }
+            }
+
+            if ($allOtherBranchesBreakOut) {
+                return ScopeEventVisibility::Certain;
+            }
+        }
+
+        return ScopeEventVisibility::Uncertain;
     }
 
     /**

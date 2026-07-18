@@ -3,7 +3,7 @@
 namespace AutoDoc\Debugger;
 
 use AutoDoc\Analyzer\PhpClass;
-use AutoDoc\Analyzer\ScopeEventLog;
+use AutoDoc\Analyzer\Flow\ScopeEventLog;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node;

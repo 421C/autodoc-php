@@ -1,7 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
+use AutoDoc\Analyzer\Scope;
 use PhpParser\Node;
 use PhpParser\Node\Expr\Match_;
 use PhpParser\Node\Expr\Ternary;

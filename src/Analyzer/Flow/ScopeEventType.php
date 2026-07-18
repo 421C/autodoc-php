@@ -1,10 +1,12 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
 enum ScopeEventType
 {
-    /** Full variable assignment ($x = ...) */
+    /**
+     * Full variable assignment ($x = ...)
+     */
     case Assign;
 
     /**
@@ -17,7 +19,7 @@ enum ScopeEventType
     case Narrow;
 
     /**
-     * Type narrowing of a literal attribute path on a variable's type from a condition.
+     * Narrows a statically known property or array-key path rooted at a variable.
      */
     case NarrowAttribute;
 }
