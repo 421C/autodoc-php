@@ -50,10 +50,14 @@ class PhpClass
      */
     private array $publicProperties;
 
+    private int $publicPropertiesDepthBudget;
+
     /**
      * @var array<string, Type>
      */
     private array $privateAndProtectedProperties;
+
+    private int $privateAndProtectedPropertiesDepthBudget;
 
     /**
      * @var ReflectionClass<TClass>
@@ -61,6 +65,8 @@ class PhpClass
     private ReflectionClass $classReflection;
 
     private ?PhpDoc $docComment = null;
+
+    private int $docCommentDepthBudget;
 
     /**
      * @var Node\Stmt[]
@@ -164,13 +170,25 @@ class PhpClass
      */
     private function getProperties(bool $onlyPublic = true): array
     {
+        $depthBudget = $this->getRemainingDepthBudget();
+
         if ($this->scopeAllowsUsingCache()) {
             if ($onlyPublic) {
-                if (isset($this->publicProperties)) {
+                if (isset($this->publicProperties, $this->publicPropertiesDepthBudget)
+                    && $this->publicPropertiesDepthBudget >= $depthBudget
+                ) {
                     return $this->publicProperties;
                 }
 
-            } else if (isset($this->publicProperties, $this->privateAndProtectedProperties)) {
+            } else if (isset(
+                $this->publicProperties,
+                $this->publicPropertiesDepthBudget,
+                $this->privateAndProtectedProperties,
+                $this->privateAndProtectedPropertiesDepthBudget,
+            )
+                && $this->publicPropertiesDepthBudget >= $depthBudget
+                && $this->privateAndProtectedPropertiesDepthBudget >= $depthBudget
+            ) {
                 return array_merge($this->publicProperties, $this->privateAndProtectedProperties);
             }
         }
@@ -240,12 +258,19 @@ class PhpClass
         }
 
         if ($this->scopeAllowsUsingCache() && $propertyScopeAllowsUsingCache) {
-            if ($onlyPublic) {
+            if (! isset($this->publicPropertiesDepthBudget)
+                || $depthBudget >= $this->publicPropertiesDepthBudget
+            ) {
                 $this->publicProperties = $publicProperties;
+                $this->publicPropertiesDepthBudget = $depthBudget;
+            }
 
-            } else {
-                $this->publicProperties = $publicProperties;
+            if (! $onlyPublic
+                && (! isset($this->privateAndProtectedPropertiesDepthBudget)
+                    || $depthBudget >= $this->privateAndProtectedPropertiesDepthBudget)
+            ) {
                 $this->privateAndProtectedProperties = $privateAndProtectedProperties;
+                $this->privateAndProtectedPropertiesDepthBudget = $depthBudget;
             }
         }
 
@@ -306,6 +331,12 @@ class PhpClass
     public function scopeAllowsUsingCache(): bool
     {
         return ! $this->scope->constructorTemplateTypes;
+    }
+
+
+    private function getRemainingDepthBudget(): int
+    {
+        return $this->scope->config->data['max_depth'] - $this->scope->depth;
     }
 
 
@@ -379,10 +410,6 @@ class PhpClass
 
 
     /**
-     * PHPDoc types must resolve against the declaring class's name-resolution
-     * context, regardless of which scope the cached PhpClass is bound to —
-     * the resolved property map is memoized globally.
-     *
      * @param class-string $className
      */
     private function getDeclaringClassScope(string $className): Scope
@@ -418,7 +445,12 @@ class PhpClass
 
     public function getPhpDoc(): ?PhpDoc
     {
-        if ($this->docComment !== null) {
+        $depthBudget = $this->getRemainingDepthBudget();
+
+        if ($this->docComment !== null
+            && isset($this->docCommentDepthBudget)
+            && $this->docCommentDepthBudget >= $depthBudget
+        ) {
             return $this->docComment;
         }
 
@@ -426,6 +458,7 @@ class PhpClass
 
         if ($comment) {
             $this->docComment = new PhpDoc($comment, $this->getDeclaringClassScope($this->className));
+            $this->docCommentDepthBudget = $depthBudget;
         }
 
         return $this->docComment;
