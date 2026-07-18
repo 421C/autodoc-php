@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\DocBlock;
 
+use AutoDoc\Analyzer\PhpClass;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\ClassStringType;
@@ -561,7 +563,7 @@ class PhpDoc
 
         foreach ($tagTypes as $tagName => $paramLocation) {
             foreach ($this->node->getTagsByName($tagName) as $tag) {
-                $param = new PhpDocRequestParamTag($tag, $this)->resolve();
+                $param = new RequestParamTag($tag, $this)->resolve();
 
                 if (! $param) {
                     continue;

@@ -15,7 +15,7 @@ final class ScopeEventLogTest extends TestCase
     #[Test]
     public function eventIsHiddenFromSiblingBranch(): void
     {
-        $eventLog = new ScopeEventLog;
+        $events = new ScopeEventLog;
         $event = new ScopeEvent(
             type: ScopeEventType::Mutate,
             varName: 'value',
@@ -29,7 +29,7 @@ final class ScopeEventLogTest extends TestCase
 
         self::assertSame(
             ScopeEventVisibility::Hidden,
-            $eventLog->getEventVisibility($event, $siblingBranch),
+            $events->getEventVisibility($event, $siblingBranch),
         );
     }
 }

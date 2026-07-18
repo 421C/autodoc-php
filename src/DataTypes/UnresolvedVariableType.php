@@ -2,13 +2,13 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\AttributeMutationApplier;
 use AutoDoc\Analyzer\Flow\BranchPath;
+use AutoDoc\Analyzer\Flow\AttributeMutationApplier;
 use AutoDoc\Analyzer\Flow\ScopeEvent;
 use AutoDoc\Analyzer\Flow\ScopeEventType;
 use AutoDoc\Analyzer\Flow\ScopeEventVisibility;
 use AutoDoc\Analyzer\Scope;
-use AutoDoc\Analyzer\TypeNarrowingApplier;
+use AutoDoc\Analyzer\Narrowing\TypeNarrowingApplier;
 
 class UnresolvedVariableType extends UnresolvedType
 {
@@ -31,18 +31,18 @@ class UnresolvedVariableType extends UnresolvedType
     {
         $cacheKey = $this->varName . ':' . $this->varStartFilePos . ($readPath === [] ? '' : ':' . json_encode($readPath));
 
-        if (isset($this->scope->resolvedVariables[$cacheKey])) {
-            return $this->scope->resolvedVariables[$cacheKey];
+        if (isset($this->scope->variables->resolvedTypes[$cacheKey])) {
+            return $this->scope->variables->resolvedTypes[$cacheKey];
         }
 
-        $events = $this->scope->eventLog->getEventsForVariable(
+        $events = $this->scope->variables->events->getEventsForVariable(
             $this->varName,
             $this->varStartFilePos,
             $this->readBranchPath,
         );
 
         if ($readPath !== [] && ! $this->eventsContainMutation($events)) {
-            return $this->scope->resolvedVariables[$cacheKey] = $this->resolve();
+            return $this->scope->variables->resolvedTypes[$cacheKey] = $this->resolve();
         }
 
         $resolvedType = $this->resolveFromEvents($events, $readPath);
@@ -55,7 +55,7 @@ class UnresolvedVariableType extends UnresolvedType
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
 
-        $this->scope->resolvedVariables[$cacheKey] = $resolvedType;
+        $this->scope->variables->resolvedTypes[$cacheKey] = $resolvedType;
 
         return $resolvedType;
     }
@@ -92,7 +92,7 @@ class UnresolvedVariableType extends UnresolvedType
         $pendingMutations = [];
 
         foreach ($events as $event) {
-            $visibility = $this->scope->eventLog->getEventVisibility($event, $this->readBranchPath);
+            $visibility = $this->scope->variables->events->getEventVisibility($event, $this->readBranchPath);
 
             if ($visibility === ScopeEventVisibility::Hidden) {
                 continue;

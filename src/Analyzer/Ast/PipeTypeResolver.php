@@ -1,14 +1,16 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Ast;
 
+use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node;
 use PhpParser\Node\Expr\BinaryOp\Pipe;
 
-class PhpPipeOperator
+class PipeTypeResolver
 {
     public function __construct(
         private readonly Pipe $pipeNode,

@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Tests\TestProject\Extensions;
 
-use AutoDoc\Analyzer\StaticCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\Extensions\StaticCallExtension;
 
 /**

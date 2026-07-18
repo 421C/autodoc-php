@@ -3,8 +3,8 @@
 namespace AutoDoc\Commands;
 
 use AutoDoc\Analyzer\ArgumentList;
-use AutoDoc\Analyzer\FunctionNodeVisitor;
-use AutoDoc\Analyzer\NameResolver;
+use AutoDoc\Analyzer\Ast\FunctionBodyVisitor;
+use AutoDoc\Analyzer\Ast\ClassNameResolver;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
@@ -164,7 +164,7 @@ class ProcessAutoDocDebugTags
         }
 
         if ($scope->methodName) {
-            $methodNodeVisitor = new FunctionNodeVisitor(
+            $methodNodeVisitor = new FunctionBodyVisitor(
                 scope: $scope,
                 analyzeReturnValue: false,
                 args: new ArgumentList($scope),
@@ -255,12 +255,12 @@ class ProcessAutoDocDebugTags
 
         if ($classMethodNodeVisitor->className) {
             $traverser = new NodeTraverser;
-            $nameResolver = new NameResolver;
+            $classNameResolver = new ClassNameResolver;
 
-            $traverser->addVisitor($nameResolver);
+            $traverser->addVisitor($classNameResolver);
             $traverser->traverse($ast);
 
-            $className = $nameResolver->getResolvedClassName($classMethodNodeVisitor->className);
+            $className = $classNameResolver->getResolvedClassName($classMethodNodeVisitor->className);
 
         } else {
             $className = null;

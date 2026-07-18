@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Ast;
 
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use Override;
 use PhpParser\Comment;
@@ -11,7 +13,7 @@ use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitorAbstract;
 
 
-class ClassConstructorPropertyVisitor extends NodeVisitorAbstract
+class PromotedPropertyPhpDocCollector extends NodeVisitorAbstract
 {
     public function __construct(
         private readonly Scope $scope,
@@ -20,7 +22,7 @@ class ClassConstructorPropertyVisitor extends NodeVisitorAbstract
     /**
      * @var array<string, UnresolvedPhpDocType>
      */
-    public array $promotedProperties = [];
+    public array $propertyTypes = [];
 
     /**
      * @return null|NodeVisitor::*
@@ -52,7 +54,7 @@ class ClassConstructorPropertyVisitor extends NodeVisitorAbstract
                                 continue;
                             }
 
-                            $this->promotedProperties[$param->var->name] = $varType;
+                            $this->propertyTypes[$param->var->name] = $varType;
                         }
                     }
                 }

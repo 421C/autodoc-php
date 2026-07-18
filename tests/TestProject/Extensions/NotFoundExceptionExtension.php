@@ -3,7 +3,7 @@
 namespace AutoDoc\Tests\TestProject\Extensions;
 
 use AutoDoc\DataTypes\Type;
-use AutoDoc\Analyzer\ThrowContext;
+use AutoDoc\Extensions\ThrowContext;
 use AutoDoc\Extensions\ThrowExtension;
 use AutoDoc\Tests\TestProject\Exceptions\NotFoundException;
 

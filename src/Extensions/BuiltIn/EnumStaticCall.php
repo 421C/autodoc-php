@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Extensions\BuiltIn;
 
-use AutoDoc\Analyzer\StaticCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\Type;

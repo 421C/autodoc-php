@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Extensions;
 
+use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\Scope;
 use PhpParser\Node;
 use PhpParser\Node\Expr\FuncCall;
 

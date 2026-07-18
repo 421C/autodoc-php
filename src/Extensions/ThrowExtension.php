@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\ThrowContext;
 use AutoDoc\DataTypes\Type;
 
 

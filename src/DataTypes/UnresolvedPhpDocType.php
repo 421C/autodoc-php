@@ -2,7 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 

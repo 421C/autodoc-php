@@ -1,11 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Flow;
 
-use AutoDoc\Analyzer\Flow\BranchPath;
-use AutoDoc\Analyzer\Flow\CallerParameterBindingAnalysis;
-use AutoDoc\Analyzer\Flow\ScopeEventType;
-use AutoDoc\Analyzer\Flow\ScopeEventVisibility;
+use AutoDoc\Analyzer\Narrowing\TypeNarrowingApplier;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnknownType;
 

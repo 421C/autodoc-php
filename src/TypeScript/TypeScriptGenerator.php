@@ -3,7 +3,7 @@
 namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\PhpClass;
-use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
@@ -92,7 +92,7 @@ class TypeScriptGenerator
         if (($type instanceof ObjectType || $type instanceof ArrayType) && $type->className) {
             $phpClass = new PhpClass($type->className, $tag->scope);
 
-            $type = $tag->scope->handleTypeScriptExportExtensions($phpClass, $type);
+            $type = $tag->scope->extensions->handleTypeScriptExportExtensions($phpClass, $type);
         }
 
         if ($type instanceof ObjectType && $type->typeToDisplay) {

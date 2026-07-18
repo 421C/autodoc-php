@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Extensions\BuiltIn;
 
-use AutoDoc\Analyzer\FuncCallContext;
+use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotNull;

@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Tests\TestProject\Extensions;
 
-use AutoDoc\Analyzer\FuncCallContext;
+use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\Extensions\FuncCallExtension;

@@ -3,7 +3,7 @@
 namespace AutoDoc\Extensions\BuiltIn;
 
 use AutoDoc\Analyzer\ArgumentList;
-use AutoDoc\Analyzer\FuncCallContext;
+use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
 use AutoDoc\Analyzer\Narrowing\IsFalsey;
@@ -90,7 +90,7 @@ class ArrayFuncCall extends FuncCallExtension
         $varTypes = [];
 
         foreach ($varNames as $varName) {
-            $varTypes[$varName] = $call->scope->getVariableType(new Node\Expr\Variable($varName, [
+            $varTypes[$varName] = $call->scope->variables->getType(new Node\Expr\Variable($varName, [
                 'startLine' => $call->node->getStartLine(),
                 'endLine' => $call->node->getEndLine(),
                 'startFilePos' => $call->node->getStartFilePos(),

@@ -1,8 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Narrowing;
 
-use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\ObjectType;

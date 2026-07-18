@@ -1,10 +1,13 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Extensions;
 
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\Analyzer\Narrowing\NarrowingFact;
 use AutoDoc\Analyzer\Narrowing\NotType;
+use AutoDoc\Analyzer\Narrowing\Target;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node;
 
@@ -14,9 +17,9 @@ use PhpParser\Node;
 abstract class CallContext
 {
     /**
-     * @var list<array{NarrowingTarget, Narrowing}>
+     * @var list<NarrowingFact>
      */
-    private array $typeNarrowings = [];
+    private array $narrowingFacts = [];
 
     public function __construct(
         /** @var TNode */
@@ -32,7 +35,7 @@ abstract class CallContext
      */
     public function mutateVar(string $varName, array $attributes): void
     {
-        $this->scope->eventLog->mutate($varName, $attributes, $this->startFilePos(), $this->endFilePos());
+        $this->scope->variables->events->mutate($varName, $attributes, $this->startFilePos(), $this->endFilePos());
     }
 
     /**
@@ -43,13 +46,13 @@ abstract class CallContext
      */
     public function mutateExpression(Node $node, array $attributes): void
     {
-        $target = NarrowingTarget::fromNode($node);
+        $target = Target::fromNode($node);
 
         if ($target === null) {
             return;
         }
 
-        $this->scope->eventLog->mutate($target->baseVar, $attributes, $this->startFilePos(), $this->endFilePos(), $target->attributePath() ?? []);
+        $this->scope->variables->events->mutate($target->baseVar, $attributes, $this->startFilePos(), $this->endFilePos(), $target->attributePath() ?? []);
     }
 
     /**
@@ -57,7 +60,7 @@ abstract class CallContext
      */
     public function setVarType(string $varName, Type $type): void
     {
-        $this->scope->eventLog->assign($varName, $type, $this->startFilePos(), $this->endFilePos());
+        $this->scope->variables->events->assign($varName, $type, $this->startFilePos(), $this->endFilePos());
     }
 
     /**
@@ -66,17 +69,17 @@ abstract class CallContext
      */
     public function setRequestType(Type $type): void
     {
-        $this->scope->recordRequestBodyType($type);
+        $this->scope->extensions->recordRequestBodyType($type);
     }
 
     /**
      * Record a variable type narrowing from an extension while analyzing a
-     * condition. These facts are collected by TypeNarrower, which still owns
-     * boolean composition and event emission.
+     * condition. These facts are collected by the narrowing analyzer, which
+     * still owns boolean composition and event emission.
      */
     public function narrowVarType(string $varName, Type|Narrowing $type, bool $negated = false): void
     {
-        $this->narrowTargetType(new NarrowingTarget($varName), $type, $negated);
+        $this->narrowTargetType(new Target($varName), $type, $negated);
     }
 
     /**
@@ -84,7 +87,7 @@ abstract class CallContext
      */
     public function narrowExpressionType(Node $node, Type|Narrowing $type, bool $negated = false): void
     {
-        $target = NarrowingTarget::fromNode($node);
+        $target = Target::fromNode($node);
 
         if ($target !== null) {
             $this->narrowTargetType($target, $type, $negated);
@@ -92,20 +95,20 @@ abstract class CallContext
     }
 
     /**
-     * @return list<array{NarrowingTarget, Narrowing}>
+     * @return list<NarrowingFact>
      */
-    public function getTypeNarrowings(): array
+    public function getNarrowingFacts(): array
     {
-        return $this->typeNarrowings;
+        return $this->narrowingFacts;
     }
 
-    private function narrowTargetType(NarrowingTarget $target, Type|Narrowing $type, bool $negated = false): void
+    private function narrowTargetType(Target $target, Type|Narrowing $type, bool $negated = false): void
     {
         $narrowing = $type instanceof Narrowing
             ? $type
             : ($negated ? new NotType($type) : new IsType($type));
 
-        $this->typeNarrowings[] = [$target, $narrowing];
+        $this->narrowingFacts[] = new NarrowingFact($target, $narrowing);
     }
 
     private function startFilePos(): int

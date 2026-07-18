@@ -2,7 +2,7 @@
 
 namespace AutoDoc\TypeScript;
 
-use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;

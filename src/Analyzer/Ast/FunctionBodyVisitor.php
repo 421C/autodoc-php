@@ -1,9 +1,16 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Ast;
 
+use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\PhpCondition;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\Narrowing\BranchNarrowingEmitter;
+use AutoDoc\Analyzer\Scope;
+use AutoDoc\Extensions\FuncCallContext;
+use AutoDoc\Extensions\MethodCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -22,7 +29,7 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitorAbstract;
 
-class FunctionNodeVisitor extends NodeVisitorAbstract
+class FunctionBodyVisitor extends NodeVisitorAbstract
 {
     public function __construct(
         protected Scope $scope,
@@ -31,7 +38,11 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         private readonly bool $isOperationEntrypoint = false,
         private readonly ?string $methodName = null,
         private readonly ?Scope $parentScope = null,
-    ) {}
+    ) {
+        $this->narrowingEmitter = new BranchNarrowingEmitter;
+    }
+
+    private readonly BranchNarrowingEmitter $narrowingEmitter;
 
     /** @var Type[] */
     public array $returnTypes = [];
@@ -94,7 +105,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                     }
                 }
 
-                $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope, $usedVarNames);
+                $this->scope->variables->transferFrom($this->parentScope ?? $this->scope, $usedVarNames);
             }
 
             $this->bodyBreaksOut = $this->scope->getBranchBreakout()->getBreakOutNodeFromStatements($node->stmts) !== null;
@@ -104,7 +115,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Expr\ArrowFunction) {
             $this->handleParameters($node->params, $node->getDocComment());
-            $this->scope->transferVariablesFrom($this->parentScope ?? $this->scope);
+            $this->scope->variables->transferFrom($this->parentScope ?? $this->scope);
 
             $this->scope->className = ($this->parentScope ?? $this->scope)->className;
             $this->bodyBreaksOut = $this->scope->getBranchBreakout()->statementBreaksOut(new Node\Stmt\Expression($node->expr));
@@ -186,13 +197,13 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         }
 
         if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
-            $this->scope->runSideEffectExtensions(new MethodCallContext(node: $node, scope: $this->scope));
+            $this->scope->extensions->runSideEffectExtensions(new MethodCallContext(node: $node, scope: $this->scope));
 
         } else if ($node instanceof Node\Expr\FuncCall) {
-            $this->scope->runSideEffectExtensions(new FuncCallContext(node: $node, scope: $this->scope));
+            $this->scope->extensions->runSideEffectExtensions(new FuncCallContext(node: $node, scope: $this->scope));
 
         } else if ($node instanceof Node\Expr\StaticCall) {
-            $this->scope->runSideEffectExtensions(new StaticCallContext(node: $node, scope: $this->scope));
+            $this->scope->extensions->runSideEffectExtensions(new StaticCallContext(node: $node, scope: $this->scope));
         }
 
         return null;
@@ -239,7 +250,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $argIndex = $paramName !== null ? $this->args->indexForParameter($paramName, $paramIndex) : null;
 
                 if ($paramName !== null && isset($phpDocParameters[$paramName])) {
-                    $this->scope->assignVariable($paramNode->var, $phpDocParameters[$paramName], $docComment ? [$docComment] : []);
+                    $this->scope->variables->assign($paramNode->var, $phpDocParameters[$paramName], $docComment ? [$docComment] : []);
 
                 } else if ($argIndex !== null) {
                     $argType = $this->args->get($argIndex, autoResolve: false);
@@ -248,15 +259,15 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                         $argType = new UnresolvedParameterType($argType, $paramNode->type, $this->scope);
                     }
 
-                    $this->scope->assignVariable($paramNode->var, $argType, $docComment ? [$docComment] : []);
+                    $this->scope->variables->assign($paramNode->var, $argType, $docComment ? [$docComment] : []);
 
                 } else if (! $this->isOperationEntrypoint && $paramNode->default !== null) {
                     // A skipped argument takes its default; an entrypoint's params
                     // come from the framework, so they keep their declared type.
-                    $this->scope->assignVariable($paramNode->var, $paramNode->default, $docComment ? [$docComment] : []);
+                    $this->scope->variables->assign($paramNode->var, $paramNode->default, $docComment ? [$docComment] : []);
 
                 } else if (isset($paramNode->type)) {
-                    $this->scope->assignVariable($paramNode->var, $paramNode->type, $docComment ? [$docComment] : []);
+                    $this->scope->variables->assign($paramNode->var, $paramNode->type, $docComment ? [$docComment] : []);
                 }
 
                 if ($paramNode->type instanceof Node\Name) {
@@ -266,7 +277,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                         $phpClass = $this->scope->getPhpClassInDeeperScope($className);
 
                         if ($phpClass->exists()) {
-                            $this->scope->handleExpectedRequestTypeFromClassExtensions($phpClass);
+                            $this->scope->extensions->handleExpectedRequestTypeFromClassExtensions($phpClass);
                         }
                     }
                 }
@@ -305,7 +316,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                         'endFilePos' => $comment->getEndFilePos(),
                     ]);
 
-                    $this->scope->assignVariable(
+                    $this->scope->variables->assign(
                         varNode: $varNode,
                         valueNode: $varType,
                         isTypeAnnotation: true,
@@ -343,7 +354,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         }
 
         if ($this->isOperationEntrypoint && $node instanceof Node\Expr\Throw_) {
-            $responseType = $this->scope->handleThrowExtensions($node->expr);
+            $responseType = $this->scope->extensions->handleThrowExtensions($node->expr);
 
             if ($responseType !== null) {
                 $this->returnTypes[] = $responseType;
@@ -378,7 +389,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
     {
         $this->returnPoints[] = [
             'readFilePos' => $this->getNodeEndFilePos($node) + 1,
-            'branchPath' => $this->scope->eventLog->getCurrentBranchPath(),
+            'branchPath' => $this->scope->variables->events->getCurrentBranchPath(),
         ];
 
         if ($node->expr) {
@@ -402,7 +413,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         $assignedType = $valueNode instanceof Type ? $valueNode : new UnresolvedParserNodeType($valueNode, $this->scope);
 
         if ($varNode instanceof Node\Expr\Variable) {
-            $this->scope->assignVariable(
+            $this->scope->variables->assign(
                 varNode: $varNode,
                 valueNode: $valueNode,
                 comments: $comments,
@@ -412,7 +423,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $assignedItemKey = $this->getRawArrayKeyValue($varNode instanceof Node\Expr\ArrayDimFetch ? $varNode->dim : $varNode->name);
 
             if ($varNode->var instanceof Node\Expr\Variable) {
-                $this->scope->mutateVariable(
+                $this->scope->variables->mutate(
                     varNode: $varNode->var,
                     attributes: $assignedItemKey === null ? [] : [$assignedItemKey => $assignedType],
                     dynamicAttribute: $assignedItemKey === null ? $assignedType : null,
@@ -426,7 +437,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $sourceType = $assignedType;
 
             if ($valueNode instanceof Node\Expr\Variable) {
-                $variableType = $this->scope->getVariableType($valueNode);
+                $variableType = $this->scope->variables->getType($valueNode);
 
                 if ($variableType instanceof UnresolvedVariableType) {
                     $sourceType = $variableType;
@@ -451,7 +462,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
         $lastKey = array_pop($keyPath);
 
-        $this->scope->mutateVariable(
+        $this->scope->variables->mutate(
             varNode: $baseVariable,
             attributes: $lastKey === null ? [] : [$lastKey => $assignedType],
             path: $keyPath,
@@ -586,14 +597,14 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $condition = new PhpCondition($node, $this->scope);
             $this->conditionStack[] = $condition;
             $this->branchIndexStack[] = 0;
-            $this->scope->eventLog->enterBranch(
+            $this->scope->variables->events->enterBranch(
                 $condition->id,
                 0,
                 $this->getBranchBodyStartFilePos($node->stmts, $node),
                 $condition,
             );
 
-            TypeNarrower::emitNarrowingEvents($node->cond, $this->scope, $condition);
+            $this->narrowingEmitter->emitForCondition($node->cond, $this->scope, $condition);
 
         } else if ($node instanceof Node\Stmt\ElseIf_) {
             $condition = end($this->conditionStack);
@@ -601,18 +612,18 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($condition !== false) {
                 $branchIndex = array_pop($this->branchIndexStack) + 1;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
                 );
 
                 if ($condition->node instanceof Node\Stmt\If_) {
-                    TypeNarrower::emitPreviousElseIfNarrowingEvents($condition->node, $node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitExclusionsBeforeElseIf($condition->node, $node, $this->scope, $condition);
                 }
 
-                TypeNarrower::emitNarrowingEvents($node->cond, $this->scope, $condition);
+                $this->narrowingEmitter->emitForCondition($node->cond, $this->scope, $condition);
             }
 
         } else if ($node instanceof Node\Stmt\Else_) {
@@ -621,15 +632,15 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($condition !== false) {
                 $branchIndex = array_pop($this->branchIndexStack) + 1;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
                 );
 
                 if ($condition->node instanceof Node\Stmt\If_) {
-                    TypeNarrower::emitElseNarrowingEvents($condition->node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitForElse($condition->node, $this->scope, $condition);
                 }
             }
 
@@ -652,7 +663,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 default => $this->getNodeStartFilePos($node),
             };
 
-            $this->scope->eventLog->enterBranch($condition->id, 0, $branchStartPos, $condition);
+            $this->scope->variables->events->enterBranch($condition->id, 0, $branchStartPos, $condition);
 
         } else if ($node instanceof Node\Stmt\Switch_) {
             $condition = new PhpCondition($node, $this->scope);
@@ -665,8 +676,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($condition !== false) {
                 $branchIndex = array_pop($this->branchIndexStack) + 1;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
@@ -674,7 +685,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             }
 
             if ($node->var instanceof Variable) {
-                $this->scope->assignVariable($node->var, $this->getCaughtExceptionType($node));
+                $this->scope->variables->assign($node->var, $this->getCaughtExceptionType($node));
             }
 
         } else if ($node instanceof Node\Stmt\Finally_) {
@@ -683,8 +694,8 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($condition !== false) {
                 $branchIndex = array_pop($this->branchIndexStack) + 1;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
@@ -698,20 +709,20 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $branchIndex = array_pop($this->branchIndexStack);
 
                 if ($branchIndex >= 0) {
-                    $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                    $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
                 }
 
                 $branchIndex++;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getBranchBodyStartFilePos($node->stmts, $node),
                 );
 
                 if ($condition->node instanceof Node\Stmt\Switch_) {
-                    TypeNarrower::emitPreviousCaseNarrowingEvents($condition->node, $node, $this->scope, $condition);
-                    TypeNarrower::emitCaseNarrowingEvents($condition->node, $node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitExclusionsBeforeSwitchCase($condition->node, $node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitForSwitchCase($condition->node, $node, $this->scope, $condition);
                 }
             }
 
@@ -727,20 +738,20 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $branchIndex = array_pop($this->branchIndexStack);
 
                 if ($branchIndex >= 0) {
-                    $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
+                    $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
                 }
 
                 $branchIndex++;
                 $this->branchIndexStack[] = $branchIndex;
-                $this->scope->eventLog->enterBranch(
+                $this->scope->variables->events->enterBranch(
                     $condition->id,
                     $branchIndex,
                     $this->getNodeStartFilePos($node->body),
                 );
 
                 if ($condition->node instanceof Node\Expr\Match_) {
-                    TypeNarrower::emitPreviousMatchArmNarrowingEvents($condition->node, $node, $this->scope, $condition);
-                    TypeNarrower::emitMatchArmNarrowingEvents($condition->node->cond, $node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitExclusionsBeforeMatchArm($condition->node, $node, $this->scope, $condition);
+                    $this->narrowingEmitter->emitForMatchArm($condition->node, $node, $this->scope, $condition);
                 }
             }
 
@@ -771,15 +782,15 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         $ternary = $condition->node;
 
         if ($node === $ternary->if) {
-            $this->scope->eventLog->enterBranch($condition->id, 0, $this->getNodeStartFilePos($node));
+            $this->scope->variables->events->enterBranch($condition->id, 0, $this->getNodeStartFilePos($node));
 
-            TypeNarrower::emitNarrowingEvents($ternary->cond, $this->scope, $condition);
+            $this->narrowingEmitter->emitForCondition($ternary->cond, $this->scope, $condition);
 
         } else if ($node === $ternary->else) {
-            $this->scope->eventLog->exitBranch($this->getNodeStartFilePos($node));
-            $this->scope->eventLog->enterBranch($condition->id, 1, $this->getNodeStartFilePos($node));
+            $this->scope->variables->events->exitBranch($this->getNodeStartFilePos($node));
+            $this->scope->variables->events->enterBranch($condition->id, 1, $this->getNodeStartFilePos($node));
 
-            TypeNarrower::emitNegatedNarrowingEvents($ternary->cond, $this->scope, $condition);
+            $this->narrowingEmitter->emitForNegatedCondition($ternary->cond, $this->scope, $condition);
         }
     }
 
@@ -792,7 +803,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             if ($condition instanceof PhpCondition && $condition->node === $node) {
                 array_pop($this->conditionStack);
                 array_pop($this->branchIndexStack);
-                $this->scope->eventLog->exitBranch($this->getNodeEndFilePos($node));
+                $this->scope->variables->events->exitBranch($this->getNodeEndFilePos($node));
             }
         }
 
@@ -801,7 +812,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             $activeBranchIndex = array_pop($this->branchIndexStack);
 
             if (is_int($activeBranchIndex) && $activeBranchIndex >= 0) {
-                $this->scope->eventLog->exitBranch($this->getNodeEndFilePos($node));
+                $this->scope->variables->events->exitBranch($this->getNodeEndFilePos($node));
             }
         }
 
@@ -815,7 +826,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
 
             array_pop($this->conditionStack);
             array_pop($this->branchIndexStack);
-            $this->scope->eventLog->exitBranch($this->getNodeEndFilePos($node));
+            $this->scope->variables->events->exitBranch($this->getNodeEndFilePos($node));
 
             // Early-return guard: an `if`/`elseif` chain with no `else` whose every
             // branch breaks out (return/exit/throw). The code after it is only
@@ -826,7 +837,7 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 && $node->else === null
                 && $condition->allBranchesBreakOut()
             ) {
-                TypeNarrower::emitElseNarrowingEvents(
+                $this->narrowingEmitter->emitForElse(
                     $node,
                     $this->scope,
                     $condition,

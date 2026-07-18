@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Tests\Analyzer;
 
-use AutoDoc\Analyzer\AttributeMutationApplier;
+use AutoDoc\Analyzer\Flow\AttributeMutationApplier;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\IntegerType;

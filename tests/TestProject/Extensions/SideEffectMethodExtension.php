@@ -2,7 +2,7 @@
 
 namespace AutoDoc\Tests\TestProject\Extensions;
 
-use AutoDoc\Analyzer\MethodCallContext;
+use AutoDoc\Extensions\MethodCallContext;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\Extensions\MethodCallExtension;
 use PhpParser\Node\Expr\Variable;

@@ -15,7 +15,7 @@ final readonly class CallerParameterBindingAnalysis
     private ?ScopeEvent $parameterBinding;
 
     public function __construct(
-        private ScopeEventLog $eventLog,
+        private ScopeEventLog $events,
         private string $parameterName,
         private int $parameterStartFilePos,
     ) {
@@ -37,7 +37,7 @@ final readonly class CallerParameterBindingAnalysis
         }
 
         $eventsAffectingOriginalBinding = [];
-        $candidateEvents = $this->eventLog->getEventsInEvaluationOrder(
+        $candidateEvents = $this->events->getEventsInEvaluationOrder(
             varName: $this->parameterName,
             readFilePos: $readFilePos,
             readBranchPath: $readBranchPath,
@@ -51,7 +51,7 @@ final readonly class CallerParameterBindingAnalysis
                 continue;
             }
 
-            $eventVisibility = $this->eventLog->getEventVisibility($event, $readBranchPath);
+            $eventVisibility = $this->events->getEventVisibility($event, $readBranchPath);
             $reassignmentState = $this->getReassignmentStateBefore($event);
             $visibilityOnOriginalBinding = $reassignmentState->restrictEventVisibility(
                 eventVisibility: $eventVisibility,
@@ -74,7 +74,7 @@ final readonly class CallerParameterBindingAnalysis
     {
         $parameterBinding = null;
 
-        foreach ($this->eventLog->getAllEvents() as $event) {
+        foreach ($this->events->getAllEvents() as $event) {
             if ($event->varName !== $this->parameterName
                 || $event->type !== ScopeEventType::Assign
                 || $event->isTypeAnnotation
@@ -126,7 +126,7 @@ final readonly class CallerParameterBindingAnalysis
         }
 
         $assignments = array_filter(
-            array: $this->eventLog->getAllEvents(),
+            array: $this->events->getAllEvents(),
             callback: fn (ScopeEvent $event): bool => $event !== $this->parameterBinding
                 && $event->varName === $this->parameterName
                 && $event->type === ScopeEventType::Assign
@@ -165,7 +165,7 @@ final readonly class CallerParameterBindingAnalysis
         }
 
         foreach ($assignedBranches as $conditionId => $branchAssignments) {
-            $condition = $this->eventLog->getConditionById($conditionId);
+            $condition = $this->events->getConditionById($conditionId);
 
             if ($condition === null || ! $condition->isExhaustive()) {
                 continue;
@@ -218,7 +218,7 @@ final readonly class CallerParameterBindingAnalysis
             return ScopeEventVisibility::Hidden;
         }
 
-        $condition = $this->eventLog->getConditionById($assignmentSegment['conditionId']);
+        $condition = $this->events->getConditionById($assignmentSegment['conditionId']);
 
         if ($condition?->branchHasBreakout($assignmentSegment['branchIndex'])) {
             return ScopeEventVisibility::Hidden;

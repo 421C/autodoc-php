@@ -1,8 +1,7 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer\Traits;
+namespace AutoDoc\Analyzer\Flow;
 
-use AutoDoc\Analyzer\Flow\ScopeEventLog;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
@@ -11,17 +10,23 @@ use AutoDoc\DataTypes\UnresolvedVariableType;
 use PhpParser\Comment;
 use PhpParser\Node;
 
-/**
- * @phpstan-require-extends Scope
- */
-trait StoresVariables
+final class VariableStore
 {
-    public ScopeEventLog $eventLog;
+    public readonly ScopeEventLog $events;
+
+    /** @var array<string, Type> */
+    public array $resolvedTypes = [];
+
+    public function __construct(
+        private readonly Scope $scope,
+    ) {
+        $this->events = new ScopeEventLog;
+    }
 
     /**
      * @param Comment[] $comments
      */
-    public function assignVariable(
+    public function assign(
         Node\Expr\Variable $varNode,
         Node|Type $valueNode,
         array $comments = [],
@@ -35,7 +40,7 @@ trait StoresVariables
                 $valueNode->getComments(),
             ));
 
-            $type = new UnresolvedParserNodeType(node: $valueNode, scope: $this);
+            $type = new UnresolvedParserNodeType(node: $valueNode, scope: $this->scope);
 
             /** @var int */
             $endFilePos = $valueNode->getAttribute('endFilePos');
@@ -54,7 +59,7 @@ trait StoresVariables
         /** @var int */
         $startFilePos = $varNode->getAttribute('startFilePos');
 
-        $this->eventLog->assign(
+        $this->events->assign(
             varName: $varNode->name,
             type: $type,
             startFilePos: $startFilePos,
@@ -68,7 +73,7 @@ trait StoresVariables
      * @param array<int|string, Type> $attributes
      * @param list<int|string|null> $path
      */
-    public function mutateVariable(
+    public function mutate(
         Node\Expr\Variable $varNode,
         array $attributes,
         array $path = [],
@@ -85,23 +90,23 @@ trait StoresVariables
         /** @var int */
         $endFilePos = $varNode->getAttribute('endFilePos');
 
-        $this->eventLog->mutate($varNode->name, $attributes, $startFilePos, $endFilePos, $path, $dynamicAttribute);
+        $this->events->mutate($varNode->name, $attributes, $startFilePos, $endFilePos, $path, $dynamicAttribute);
     }
 
 
-    public function getVariableType(Node\Expr\Variable $varNode): ?Type
+    public function getType(Node\Expr\Variable $varNode): ?Type
     {
         if (! is_string($varNode->name)) {
             return null;
         }
 
         if ($varNode->name === 'this') {
-            if ($this->className) {
-                return new ObjectType(className: $this->className);
+            if ($this->scope->className) {
+                return new ObjectType(className: $this->scope->className);
             }
         }
 
-        if (! $this->eventLog->hasVariable($varNode->name)) {
+        if (! $this->events->hasVariable($varNode->name)) {
             return null;
         }
 
@@ -110,9 +115,9 @@ trait StoresVariables
 
         return new UnresolvedVariableType(
             varName: $varNode->name,
-            scope: $this,
+            scope: $this->scope,
             varStartFilePos: $nodeStartFilePos,
-            readBranchPath: $this->eventLog->getBranchPathAtPosition($nodeStartFilePos),
+            readBranchPath: $this->events->getBranchPathAtPosition($nodeStartFilePos),
         );
     }
 
@@ -120,21 +125,21 @@ trait StoresVariables
     /**
      * @param string[]|null $variableNames
      */
-    public function transferVariablesFrom(Scope $parentScope, ?array $variableNames = null): void
+    public function transferFrom(Scope $parentScope, ?array $variableNames = null): void
     {
-        if (! $this->callerNode) {
+        if (! $this->scope->callerNode) {
             return;
         }
 
         /** @var int */
-        $callerNodeStartFilePos = $this->callerNode->getAttribute('startFilePos');
+        $callerNodeStartFilePos = $this->scope->callerNode->getAttribute('startFilePos');
 
-        $transferNames = $variableNames ?? $parentScope->eventLog->getAssignedVariableNames();
+        $transferNames = $variableNames ?? $parentScope->variables->events->getAssignedVariableNames();
 
-        $readBranchPath = $parentScope->eventLog->getBranchPathAtPosition($callerNodeStartFilePos);
+        $readBranchPath = $parentScope->variables->events->getBranchPathAtPosition($callerNodeStartFilePos);
 
         foreach ($transferNames as $varName) {
-            if (! $parentScope->eventLog->hasVariable($varName)) {
+            if (! $parentScope->variables->events->hasVariable($varName)) {
                 continue;
             }
 
@@ -145,7 +150,7 @@ trait StoresVariables
                 readBranchPath: $readBranchPath,
             );
 
-            $this->eventLog->assign($varName, $parentType, 0);
+            $this->events->assign($varName, $parentType, 0);
         }
     }
 }

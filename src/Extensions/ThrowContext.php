@@ -1,7 +1,8 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Extensions;
 
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node\Expr;

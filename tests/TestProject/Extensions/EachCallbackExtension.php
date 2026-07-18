@@ -3,7 +3,7 @@
 namespace AutoDoc\Tests\TestProject\Extensions;
 
 use AutoDoc\Analyzer\ArgumentList;
-use AutoDoc\Analyzer\MethodCallContext;
+use AutoDoc\Extensions\MethodCallContext;
 use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\Extensions\MethodCallExtension;

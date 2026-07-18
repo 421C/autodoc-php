@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Ast\EnumCaseCollector;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -32,7 +33,7 @@ class PhpEnum
         $enumConfig = $this->phpClass->scope->config->getEnumConfig($this->phpClass->className);
         $enumPhpDoc = $this->phpClass->getPhpDoc();
 
-        $enumCaseNodeVisitor = new EnumCaseNodeVisitor($this->phpClass->scope);
+        $enumCaseNodeVisitor = new EnumCaseCollector($this->phpClass->scope);
         $this->phpClass->traverse($enumCaseNodeVisitor);
 
         $type = $enumCaseNodeVisitor->backingType === 'int'
@@ -94,7 +95,7 @@ class PhpEnum
     }
 
 
-    private function generateDescriptionFromCases(EnumCaseNodeVisitor $enumCaseNodeVisitor): string
+    private function generateDescriptionFromCases(EnumCaseCollector $enumCaseNodeVisitor): string
     {
         if (! $enumCaseNodeVisitor->enumCases) {
             return '';

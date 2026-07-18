@@ -1,35 +1,37 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer\Traits;
+namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\FuncCallContext;
-use AutoDoc\Analyzer\MethodCallContext;
-use AutoDoc\Analyzer\Narrowing\Narrowing;
-use AutoDoc\Analyzer\NarrowingTarget;
+use AutoDoc\Analyzer\Narrowing\NarrowingFact;
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
-use AutoDoc\Analyzer\StaticCallContext;
-use AutoDoc\Analyzer\ThrowContext;
 use AutoDoc\DataTypes\Type;
-use AutoDoc\Extensions\ClassExtension;
-use AutoDoc\Extensions\FuncCallExtension;
-use AutoDoc\Extensions\MethodCallExtension;
-use AutoDoc\Extensions\OperationExtension;
-use AutoDoc\Extensions\StaticCallExtension;
-use AutoDoc\Extensions\ThrowExtension;
-use AutoDoc\Extensions\TypeScriptExportExtension;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\Route;
 use PhpParser\Node;
+use WeakMap;
 
 /**
  * Dispatches the configured extensions for the current scope. The grouped
  * extension list lives on `Config` (resolved once); this only runs them.
- *
- * @phpstan-require-extends Scope
  */
-trait HandlesExtensions
+final class ExtensionDispatcher
 {
+    /** @var WeakMap<object, true> */
+    private WeakMap $classesHandlingRequestBody;
+
+    /** @var WeakMap<Node, true> */
+    private WeakMap $nodesWithHandledSideEffects;
+
+    private bool $suppressSideEffects = false;
+
+    public function __construct(
+        private readonly Scope $scope,
+    ) {
+        $this->classesHandlingRequestBody = new WeakMap;
+        $this->nodesWithHandledSideEffects = new WeakMap;
+    }
+
     public function getReturnTypeFromMethodCallExtensions(MethodCallContext $context): ?Type
     {
         foreach ($this->getExtensionsOfType(MethodCallExtension::class) as $extensionClass) {
@@ -99,7 +101,7 @@ trait HandlesExtensions
     }
 
     /**
-     * @return list<array{NarrowingTarget, Narrowing}>
+     * @return list<NarrowingFact>
      */
     public function getNarrowingsFromFuncCallExtensions(FuncCallContext $context, bool $negated): array
     {
@@ -107,11 +109,11 @@ trait HandlesExtensions
             (new $extensionClass)->narrowTypeFromCondition($context, $negated);
         }
 
-        return $context->getTypeNarrowings();
+        return $context->getNarrowingFacts();
     }
 
     /**
-     * @return list<array{NarrowingTarget, Narrowing}>
+     * @return list<NarrowingFact>
      */
     public function getNarrowingsFromMethodCallExtensions(MethodCallContext $context, bool $negated): array
     {
@@ -119,11 +121,11 @@ trait HandlesExtensions
             (new $extensionClass)->narrowTypeFromCondition($context, $negated);
         }
 
-        return $context->getTypeNarrowings();
+        return $context->getNarrowingFacts();
     }
 
     /**
-     * @return list<array{NarrowingTarget, Narrowing}>
+     * @return list<NarrowingFact>
      */
     public function getNarrowingsFromStaticCallExtensions(StaticCallContext $context, bool $negated): array
     {
@@ -131,7 +133,7 @@ trait HandlesExtensions
             (new $extensionClass)->narrowTypeFromCondition($context, $negated);
         }
 
-        return $context->getTypeNarrowings();
+        return $context->getNarrowingFacts();
     }
 
     /**
@@ -174,7 +176,7 @@ trait HandlesExtensions
                     $requestTypeHandled = true;
 
                     $this->classesHandlingRequestBody[$phpClass] = true;
-                    $this->route?->addRequestBodyType($requestResult);
+                    $this->scope->route?->addRequestBodyType($requestResult);
                 }
             }
 
@@ -199,7 +201,7 @@ trait HandlesExtensions
         foreach ($this->getExtensionsOfType(OperationExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
 
-            $extensionResult = $extension->handle($operation, $route, $this);
+            $extensionResult = $extension->handle($operation, $route, $this->scope);
 
             if ($extensionResult !== null) {
                 $operation = $extensionResult;
@@ -229,7 +231,7 @@ trait HandlesExtensions
 
     public function handleThrowExtensions(Node\Expr $expr): ?Type
     {
-        $throw = new ThrowContext($expr, $this);
+        $throw = new ThrowContext($expr, $this->scope);
 
         foreach ($this->getExtensionsOfType(ThrowExtension::class) as $extensionClass) {
             $extension = new $extensionClass;
@@ -270,8 +272,35 @@ trait HandlesExtensions
     private function getExtensionsOfType(string $extensionTypeClass): array
     {
         /** @var array<class-string<T>> */
-        $extensions = $this->config->getExtensions()[$extensionTypeClass] ?? [];
+        $extensions = $this->scope->config->getExtensions()[$extensionTypeClass] ?? [];
 
         return $extensions;
+    }
+
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withoutSideEffects(callable $callback): mixed
+    {
+        $initialValue = $this->suppressSideEffects;
+        $this->suppressSideEffects = true;
+
+        try {
+            return $callback();
+
+        } finally {
+            $this->suppressSideEffects = $initialValue;
+        }
+    }
+
+    public function recordRequestBodyType(Type $type): void
+    {
+        if ($this->suppressSideEffects) {
+            return;
+        }
+
+        $this->scope->route?->addRequestBodyType($type);
     }
 }

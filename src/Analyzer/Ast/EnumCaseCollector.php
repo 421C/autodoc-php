@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Ast;
 
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\Scope;
 use Override;
 use PhpParser\Comment;
 use PhpParser\Node;
@@ -9,7 +11,7 @@ use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitorAbstract;
 
 
-class EnumCaseNodeVisitor extends NodeVisitorAbstract
+class EnumCaseCollector extends NodeVisitorAbstract
 {
     public function __construct(
         private readonly Scope $scope,

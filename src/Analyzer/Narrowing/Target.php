@@ -1,13 +1,13 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Narrowing;
 
 use PhpParser\Node;
 
 /**
  * A condition target: a variable, or a literal property/array-key path from it.
  */
-final readonly class NarrowingTarget
+final readonly class Target
 {
     /**
      * @param list<int|string> $path

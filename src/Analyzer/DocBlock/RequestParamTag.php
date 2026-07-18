@@ -1,6 +1,6 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\DocBlock;
 
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -11,7 +11,7 @@ use Exception;
 use PHPStan\PhpDocParser\Ast\PhpDoc\GenericTagValueNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagNode;
 
-class PhpDocRequestParamTag
+class RequestParamTag
 {
     public function __construct(
         private readonly PhpDocTagNode $tag,

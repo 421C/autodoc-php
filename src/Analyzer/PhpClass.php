@@ -2,6 +2,8 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Ast\ClassNameResolver;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
@@ -39,7 +41,7 @@ class PhpClass
         public Scope $scope,
     ) {}
 
-    public ?NameResolver $nameResolver = null;
+    public ?ClassNameResolver $classNameResolver = null;
 
     public ?Type $typeToDisplay = null;
 
@@ -80,7 +82,7 @@ class PhpClass
         $objectType->constructorArgs = $this->scope->constructorArgs;
 
         if ($useExtensions) {
-            $returnType = $this->scope->getReturnTypeFromClassExtensions($this);
+            $returnType = $this->scope->extensions->getReturnTypeFromClassExtensions($this);
 
             if ($returnType !== null) {
                 $returnType = $returnType->unwrapType($this->scope->config);
@@ -548,25 +550,25 @@ class PhpClass
     }
 
 
-    public function getNameResolver(): ?NameResolver
+    public function getClassNameResolver(): ?ClassNameResolver
     {
-        if ($this->nameResolver === null) {
-            $nameResolver = new NameResolver;
+        if ($this->classNameResolver === null) {
+            $classNameResolver = new ClassNameResolver;
 
-            $traversed = $this->traverse($nameResolver);
+            $traversed = $this->traverse($classNameResolver);
 
             if ($traversed) {
                 // Add name aliases from traits since some PHPDoc comments might be
                 // defined in traits but resolved in class context.
                 foreach ($this->getTraits() as $traitName) {
-                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($nameResolver);
+                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($classNameResolver);
                 }
 
-                $this->nameResolver = $nameResolver;
+                $this->classNameResolver = $classNameResolver;
             }
         }
 
-        return $this->nameResolver;
+        return $this->classNameResolver;
     }
 
 

@@ -3977,7 +3977,7 @@ final class ControlFlowAnalysisTest extends TestCase
 
     /**
      * Like {@see paginateColumns()} but with no `@return`, so the return type
-     * comes from analyzing the body (exercising `FunctionNodeVisitor` parameter
+     * comes from analyzing the body (exercising `FunctionBodyVisitor` parameter
      * binding rather than `PhpCallable::getArgumentType()`).
      */
     private static function paginateColumnsViaBody(int $perPage, mixed $columns = 0, string $pageName = 'page'): mixed

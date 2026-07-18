@@ -2,8 +2,14 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Ast\FunctionBodyVisitor;
+use AutoDoc\Analyzer\Ast\PromotedPropertyPhpDocCollector;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\CallerParameterBindingAnalysis;
+use AutoDoc\Analyzer\Flow\CallerParameterTypeResolver;
+use AutoDoc\Analyzer\Narrowing\Target;
+use AutoDoc\Analyzer\Narrowing\ConditionTypeNarrower;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\NeverType;
@@ -130,7 +136,7 @@ class PhpCallable
         $paramVarStartFilePos = $param->var->getAttribute('startFilePos');
 
         $bindingAnalysis = new CallerParameterBindingAnalysis(
-            eventLog: $functionScope->eventLog,
+            events: $functionScope->variables->events,
             parameterName: $paramName,
             parameterStartFilePos: $paramVarStartFilePos,
         );
@@ -162,7 +168,7 @@ class PhpCallable
      * Traverse the inline callable's body in a child scope with the given
      * invocation arguments bound to its parameters.
      *
-     * @return array{FunctionNodeVisitor, Scope}|null
+     * @return array{FunctionBodyVisitor, Scope}|null
      */
     private function traverseInlineBody(ArgumentList $args, ?Node $callerNode): ?array
     {
@@ -175,7 +181,7 @@ class PhpCallable
 
         $functionScope->callerNode = $callerNode;
 
-        $nodeVisitor = new FunctionNodeVisitor(
+        $nodeVisitor = new FunctionBodyVisitor(
             scope: $functionScope,
             analyzeReturnValue: true,
             args: $args,
@@ -212,12 +218,12 @@ class PhpCallable
         $paramName = $param->var->name;
         $functionScope = $this->scope->createChildScope();
         $functionScope->callerNode = $callerNode;
-        $functionScope->assignVariable($param->var, $argumentType);
+        $functionScope->variables->assign($param->var, $argumentType);
 
-        return TypeNarrower::narrowTypeForTarget(
+        return (new ConditionTypeNarrower)->narrow(
             conditionNode: $returnExpression,
             scope: $functionScope,
-            target: new NarrowingTarget($paramName),
+            target: new Target($paramName),
             baseType: $argumentType,
         );
     }
@@ -401,7 +407,7 @@ class PhpCallable
             return ['analyzedReturnType' => null, 'requestBodyType' => null];
         }
 
-        $methodNodeVisitor = new FunctionNodeVisitor(
+        $methodNodeVisitor = new FunctionBodyVisitor(
             scope: $this->scope,
             analyzeReturnValue: $analyzeReturnValue,
             args: $this->args,
@@ -473,7 +479,7 @@ class PhpCallable
 
         $functionScope = $this->scope->createChildScope();
 
-        $nodeVisitor = new FunctionNodeVisitor(
+        $nodeVisitor = new FunctionBodyVisitor(
             scope: $functionScope,
             analyzeReturnValue: $analyzeReturnValue,
             args: $this->args,
@@ -734,11 +740,11 @@ class PhpCallable
         if ($this->methodName === '__construct') {
             $templateTypes = array_merge($templateTypes, $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? []);
 
-            $propNodeVisitor = new ClassConstructorPropertyVisitor($this->scope);
+            $promotedPropertyPhpDocCollector = new PromotedPropertyPhpDocCollector($this->scope);
 
-            $this->scope->getCurrentPhpClass()?->traverse($propNodeVisitor);
+            $this->scope->getCurrentPhpClass()?->traverse($promotedPropertyPhpDocCollector);
 
-            $phpDocParamTypes = array_merge($phpDocParamTypes, $propNodeVisitor->promotedProperties);
+            $phpDocParamTypes = array_merge($phpDocParamTypes, $promotedPropertyPhpDocCollector->propertyTypes);
         }
 
         foreach ($phpDocParamTypes as $name => $unresolvedType) {

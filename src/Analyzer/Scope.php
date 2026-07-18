@@ -2,10 +2,11 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Ast\ArrayTypeResolver;
+use AutoDoc\Analyzer\Ast\PipeTypeResolver;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Flow\BranchBreakout;
-use AutoDoc\Analyzer\Flow\ScopeEventLog;
-use AutoDoc\Analyzer\Traits\HandlesExtensions;
-use AutoDoc\Analyzer\Traits\StoresVariables;
+use AutoDoc\Analyzer\Flow\VariableStore;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -26,6 +27,10 @@ use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
+use AutoDoc\Extensions\ExtensionDispatcher;
+use AutoDoc\Extensions\FuncCallContext;
+use AutoDoc\Extensions\MethodCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
@@ -35,9 +40,6 @@ use WeakMap;
 
 class Scope
 {
-    use HandlesExtensions;
-    use StoresVariables;
-
     public function __construct(
         public Config $config,
         public int $depth = 0,
@@ -55,51 +57,19 @@ class Scope
         public array $constructorTemplateTypes = [],
     ) {
         $this->constructorArgs = new ArgumentList($this);
-        $this->eventLog = new ScopeEventLog;
-        $this->classesHandlingRequestBody = new WeakMap;
-        $this->nodesWithHandledSideEffects = new WeakMap;
+        $this->variables = new VariableStore($this);
+        $this->extensions = new ExtensionDispatcher($this);
         $this->nodesBeingResolved = new WeakMap;
     }
 
     public ArgumentList $constructorArgs;
 
+    public readonly VariableStore $variables;
+
+    public readonly ExtensionDispatcher $extensions;
+
 
     public ?Node $callerNode = null;
-
-    /**
-     * Classes whose request body has already been captured (form-request style
-     * class extensions), so a repeated resolution doesn't record it twice.
-     *
-     * @internal
-     * @var WeakMap<object, true>
-     */
-    public WeakMap $classesHandlingRequestBody;
-
-    /**
-     * Call nodes whose side-effect hook has already run this pass, so a node
-     * visited both as a statement and during return-type resolution fires once.
-     *
-     * @internal
-     * @var WeakMap<Node, true>
-     */
-    public WeakMap $nodesWithHandledSideEffects;
-
-    /**
-     * Suppresses extension side effects (request-body capture + variable
-     * mutation) during return-type peeks.
-     *
-     * Only set through {@see withoutSideEffects()}.
-     * @internal
-     */
-    private bool $suppressSideEffects = false;
-
-    /**
-     * Cache for resolved variable types, keyed by "varName:filePos".
-     *
-     * @internal
-     * @var array<string, Type>
-     */
-    public array $resolvedVariables = [];
 
     /**
      * @internal
@@ -197,15 +167,15 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Variable) {
-                return $this->getVariableType($node)?->unwrapType($this->config) ?? new UnknownType;
+                return $this->variables->getType($node)?->unwrapType($this->config) ?? new UnknownType;
             }
 
             if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
                 $context = new MethodCallContext(node: $node, scope: $this);
 
-                $this->runSideEffectExtensions($context);
+                $this->extensions->runSideEffectExtensions($context);
 
-                $returnType = $this->getReturnTypeFromMethodCallExtensions($context);
+                $returnType = $this->extensions->getReturnTypeFromMethodCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
@@ -254,9 +224,9 @@ class Scope
             if ($node instanceof Node\Expr\FuncCall) {
                 $context = new FuncCallContext(node: $node, scope: $this);
 
-                $this->runSideEffectExtensions($context);
+                $this->extensions->runSideEffectExtensions($context);
 
-                $returnType = $this->getReturnTypeFromFuncCallExtensions($context);
+                $returnType = $this->extensions->getReturnTypeFromFuncCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
@@ -290,9 +260,9 @@ class Scope
             if ($node instanceof Node\Expr\StaticCall) {
                 $context = new StaticCallContext(node: $node, scope: $this);
 
-                $this->runSideEffectExtensions($context);
+                $this->extensions->runSideEffectExtensions($context);
 
-                $returnType = $this->getReturnTypeFromStaticCallExtensions($context);
+                $returnType = $this->extensions->getReturnTypeFromStaticCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
@@ -311,7 +281,7 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Array_) {
-                return new PhpArray(scope: $this, node: $node)->resolveType();
+                return new ArrayTypeResolver(scope: $this, node: $node)->resolveType();
             }
 
             if ($node instanceof Node\ArrayItem || $node instanceof Node\Arg) {
@@ -324,7 +294,7 @@ class Scope
                 $getPropertyType = function (ObjectType $varType, string $propertyName) use ($node) {
                     if ($varType->className) {
                         $varClass = $this->getPhpClass($varType->className);
-                        $propertyType = $this->getPropertyTypeFromExtensions($varClass, $propertyName);
+                        $propertyType = $this->extensions->getPropertyTypeFromExtensions($varClass, $propertyName);
 
                         if ($propertyType) {
                             return $propertyType->unwrapType($this->config);
@@ -349,7 +319,7 @@ class Scope
 
                             if ($mixinTag) {
                                 $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
-                                $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
+                                $propertyType = $this->extensions->getPropertyTypeFromExtensions($mixinClass, $propertyName);
 
                                 if ($propertyType) {
                                     return $propertyType->unwrapType($this->config);
@@ -691,7 +661,7 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\BinaryOp\Pipe) {
-                return new PhpPipeOperator($node, $this)->resolveType();
+                return new PipeTypeResolver($node, $this)->resolveType();
             }
 
             if ($node instanceof Node\Expr\ArrowFunction
@@ -742,7 +712,7 @@ class Scope
         }
 
         if ($chainNode instanceof Node\Expr\Variable) {
-            $unresolvedVarType = $this->getVariableType($chainNode);
+            $unresolvedVarType = $this->variables->getType($chainNode);
 
             $varType = $unresolvedVarType instanceof UnresolvedVariableType
                 ? $unresolvedVarType->resolve($readPath)
@@ -789,7 +759,7 @@ class Scope
             return null;
         }
 
-        $unresolvedVarType = $this->getVariableType($chainNode);
+        $unresolvedVarType = $this->variables->getType($chainNode);
 
         if (! $unresolvedVarType instanceof UnresolvedVariableType) {
             return null;
@@ -988,39 +958,13 @@ class Scope
 
 
     /**
-     * Run $callback with extension side effects disabled, so a call resolved only
-     * to peek at its return type neither captures a request body nor mutates a
-     * variable from incompletely-resolved arguments.
-     *
      * @template TResult
      * @param (callable(): TResult) $callback
      * @return TResult
      */
     public function withoutSideEffects(callable $callback): mixed
     {
-        $initialValue = $this->suppressSideEffects;
-        $this->suppressSideEffects = true;
-
-        try {
-            return $callback();
-
-        } finally {
-            $this->suppressSideEffects = $initialValue;
-        }
-    }
-
-
-    /**
-     * Record a request body type from an extension side effect. Suppressed
-     * during return-type peeks so an incompletely-resolved call can't leak.
-     */
-    public function recordRequestBodyType(Type $type): void
-    {
-        if ($this->suppressSideEffects) {
-            return;
-        }
-
-        $this->route?->addRequestBodyType($type);
+        return $this->extensions->withoutSideEffects($callback);
     }
 
 
@@ -1048,7 +992,7 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\Variable) {
-            $varType = $this->getVariableType($node)?->unwrapType($this->config);
+            $varType = $this->variables->getType($node)?->unwrapType($this->config);
 
             if ($varType instanceof StringType
                 || $varType instanceof IntegerType
@@ -1096,9 +1040,9 @@ class Scope
             return null;
         }
 
-        $nameResolver = $this->getCurrentPhpClass()?->getNameResolver();
+        $classNameResolver = $this->getCurrentPhpClass()?->getClassNameResolver();
 
-        return $nameResolver?->getResolvedClassName($name);
+        return $classNameResolver?->getResolvedClassName($name);
     }
 
 

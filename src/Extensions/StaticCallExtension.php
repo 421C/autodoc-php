@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\StaticCallContext;
 use AutoDoc\DataTypes\Type;
 
 

@@ -1,7 +1,9 @@
 <?php declare(strict_types=1);
 
-namespace AutoDoc\Analyzer;
+namespace AutoDoc\Analyzer\Ast;
 
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\StringType;
@@ -13,7 +15,7 @@ use PhpParser\Comment;
 use PhpParser\Node;
 use Throwable;
 
-class PhpArray
+class ArrayTypeResolver
 {
     public function __construct(
         public Scope $scope,
