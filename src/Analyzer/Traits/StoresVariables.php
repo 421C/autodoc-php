@@ -59,10 +59,13 @@ trait StoresVariables
 
     /**
      * @param array<int|string, Type> $attributes
+     * @param list<int|string|null> $path
      */
     public function mutateVariable(
         Node\Expr\Variable $varNode,
         array $attributes,
+        array $path = [],
+        ?Type $dynamicAttribute = null,
     ): void {
 
         if (! is_string($varNode->name)) {
@@ -75,7 +78,7 @@ trait StoresVariables
         /** @var int */
         $endFilePos = $varNode->getAttribute('endFilePos');
 
-        $this->eventLog->mutate($varNode->name, $attributes, $startFilePos, $endFilePos);
+        $this->eventLog->mutate($varNode->name, $attributes, $startFilePos, $endFilePos, $path, $dynamicAttribute);
     }
 
 

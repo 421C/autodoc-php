@@ -11,7 +11,8 @@ use AutoDoc\DataTypes\Type;
  *     attributes?: array<int|string, Type>,
  *     narrowing?: Narrowing,
  *     narrowingPath?: list<int|string>,
- *     mutationPath?: list<int|string>,
+ *     mutationPath?: list<int|string|null>,
+ *     dynamicAttribute?: Type,
  * }
  */
 class ScopeEvent

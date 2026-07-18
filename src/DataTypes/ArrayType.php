@@ -142,11 +142,20 @@ class ArrayType extends Type
     public function addItemToArray(int|string|null $key, Type $itemType, Config $config): self
     {
         if ($key === null || is_int($key)) {
+            if ($key !== null && $this->shape !== [] && array_any(array_keys($this->shape), fn ($shapeKey) => is_string($shapeKey))) {
+                $this->shape[$key] = $itemType;
+
+                return $this;
+            }
+
             $this->convertShapeToTypePair($config);
             $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new IntegerType])))->unwrapType($config);
 
             if ($this->itemType === null) {
                 $this->itemType = $itemType;
+
+            } else {
+                $this->itemType = new UnionType([$this->itemType, $itemType])->unwrapType($config);
             }
 
         } else if ($this->shape || $this->itemType === null) {

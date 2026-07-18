@@ -9,6 +9,7 @@ use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
+use AutoDoc\Tests\TestProject\Entities\GroupHolder;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\Rocket;
@@ -3089,6 +3090,811 @@ final class ControlFlowAnalysisTest extends TestCase
                 ],
                 [
                     'type' => 'null',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnListArrayElementReachesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            // @phpstan-ignore property.notFound
+            $items[0]->flag = true;
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentWithPhpEquivalentNumericStringKeyReachesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            // @phpstan-ignore property.notFound
+            $items['0']->flag = true;
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnStringKeyedArrayElementReachesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = ['first' => new SimpleClass];
+
+            // @phpstan-ignore property.notFound
+            $items['first']->flag = true;
+
+            return $items['first'];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnNestedObjectPropertyReachesThePropertyType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (NestedPropertyRoot $holder): mixed {
+            // @phpstan-ignore property.notFound
+            $holder->b->flag = true;
+
+            return $holder->b;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'c' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'c',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function conditionalDirectPropertyAssignmentOnListArrayElementIsOptional(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            if (rand(0, 1) === 1) {
+                // @phpstan-ignore property.notFound
+                $items[0]->flag = true;
+            }
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnListArrayElementMakesItOptionalForWholeArray(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            // @phpstan-ignore property.notFound
+            $items[0]->flag = true;
+
+            return $items;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'flag' => [
+                        'type' => 'boolean',
+                    ],
+                    'n' => [
+                        'type' => [
+                            'integer',
+                            'null',
+                        ],
+                    ],
+                ],
+                'required' => [
+                    'n',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function autoVivifiedIntElementOnStringKeyedArrayReachesTheFlagObject(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = ['existing' => 'value'];
+
+            // @phpstan-ignore offsetAccess.nonOffsetAccessible
+            $data[0]['flag'] = true;
+
+            return $data[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function autoVivifiedIntElementOnStringKeyedArrayKeepsBothKeysRequired(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = ['existing' => 'value'];
+
+            // @phpstan-ignore offsetAccess.nonOffsetAccessible
+            $data[0]['flag'] = true;
+
+            return $data;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'existing' => [
+                    'type' => 'string',
+                    'const' => 'value',
+                ],
+                '0' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'flag' => [
+                            'type' => 'boolean',
+                        ],
+                    ],
+                    'required' => [
+                        'flag',
+                    ],
+                ],
+            ],
+            'required' => [
+                'existing',
+                '0',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnNestedArrayElementReachesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $groups = [[new SimpleClass, new SimpleClass], [new SimpleClass, new SimpleClass]];
+
+            // @phpstan-ignore property.notFound
+            $groups[0][1]->flag = true;
+
+            return $groups[0][1];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnNestedArrayElementIsOptionalForWholeArray(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $groups = [[new SimpleClass, new SimpleClass], [new SimpleClass, new SimpleClass]];
+
+            // @phpstan-ignore property.notFound
+            $groups[0][1]->flag = true;
+
+            return $groups;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'array',
+                'items' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                        'flag' => [
+                            'type' => 'boolean',
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentOnNestedArrayElementIsOptionalForDivergingIndex(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $groups = [[new SimpleClass, new SimpleClass], [new SimpleClass, new SimpleClass]];
+
+            // @phpstan-ignore property.notFound
+            $groups[0][1]->flag = true;
+
+            return $groups[1][0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentSurvivesListDestructuring(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            // @phpstan-ignore property.notFound
+            $items[0]->flag = true;
+
+            [$first] = $items;
+
+            return $first;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentSurvivesDestructuringOfListTypedArray(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = array_map(fn (int $i): SimpleClass => new SimpleClass, [1, 2]);
+
+            // @phpstan-ignore property.notFound
+            $items[0]->flag = true;
+
+            [$first] = $items;
+
+            return $first;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentSurvivesNestedListDestructuring(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $groups = [[new SimpleClass, new SimpleClass], [new SimpleClass, new SimpleClass]];
+
+            // @phpstan-ignore property.notFound
+            $groups[0][1]->flag = true;
+
+            [[, $second]] = $groups;
+
+            return $second;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentThroughObjectPropertyReachesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (GroupHolder $holder): mixed {
+            // @phpstan-ignore property.notFound
+            $holder->groups[0][1]->flag = true;
+
+            return $holder->groups[0][1];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function directPropertyAssignmentThroughObjectPropertyIsOptionalForDivergingIndex(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (GroupHolder $holder): mixed {
+            // @phpstan-ignore property.notFound
+            $holder->groups[0][1]->flag = true;
+
+            return $holder->groups[1][0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
+                    ],
+                ],
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function unconditionalListElementReassignmentReplacesTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            $items[0] = 'changed';
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'const' => 'changed',
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function conditionalListElementReassignmentUnionsWithTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            if (rand(0, 1) === 1) {
+                $items[0] = 'changed';
+            }
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+                [
+                    'type' => 'string',
+                    'const' => 'changed',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicKeyListElementReassignmentUnionsWithTheElementType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $i): mixed {
+            $items = [new SimpleClass, new SimpleClass];
+
+            $items[$i] = 'changed';
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'n' => [
+                            'type' => [
+                                'integer',
+                                'null',
+                            ],
+                        ],
+                    ],
+                    'required' => [
+                        'n',
+                    ],
+                ],
+                [
+                    'type' => 'string',
+                    'const' => 'changed',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicKeyReassignmentDoesNotDefinitelyReplaceAnExactListElement(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $i): mixed {
+            $items = ['first', 'second'];
+
+            $items[0] = 'changed';
+            $items[$i] = 42;
+
+            return $items[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'string',
+                    'const' => 'changed',
+                ],
+                [
+                    'type' => 'integer',
+                    'const' => 42,
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicKeyReassignmentCanTargetAnyExistingShapeElement(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $i): mixed {
+            $items = [1 => 'one', 'named' => 'keep'];
+
+            $items[$i] = 42;
+
+            return $items[1];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'string',
+                    'const' => 'one',
+                ],
+                [
+                    'type' => 'integer',
+                    'const' => 42,
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicKeyNestedAssignmentAddsOptionalAttributeToEveryElement(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $i): mixed {
+            $rows = [['name' => 'a'], ['name' => 'b']];
+
+            $rows[$i]['tag'] = 'x';
+
+            return $rows[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'name' => [
+                    'type' => 'string',
+                    'enum' => [
+                        'a',
+                        'b',
+                    ],
+                ],
+                'tag' => [
+                    'type' => 'string',
+                    'const' => 'x',
+                ],
+            ],
+            'required' => [
+                'name',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicKeyNestedAssignmentAddsOptionalAttributeToListItemType(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (int $i): mixed {
+            $rows = array_map(fn (int $n): array => ['name' => 'a'], [1, 2]);
+
+            $rows[$i]['tag'] = 'x';
+
+            return $rows;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'name' => [
+                        'type' => 'string',
+                        'const' => 'a',
+                    ],
+                    'tag' => [
+                        'type' => 'string',
+                        'const' => 'x',
+                    ],
+                ],
+                'required' => [
+                    'name',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicPropertyAssignmentUnionsIntoEveryProperty(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (SimpleClass $obj, string $name): mixed {
+            $obj->{$name} = true;
+
+            return $obj;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'boolean',
+                        'null',
+                    ],
+                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function nestedAssignmentAutoVivifiesAnExplicitNullValue(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = null;
+
+            // @phpstan-ignore offsetAccess.nonOffsetAccessible
+            $data[0]['flag'] = true;
+
+            return $data[0];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'flag' => [
+                    'type' => 'boolean',
+                ],
+            ],
+            'required' => [
+                'flag',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function conditionalNestedAssignmentPreservesTheExplicitNullBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $data = null;
+
+            if (rand(0, 1) === 1) {
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $data[0]['flag'] = true;
+            }
+
+            return $data;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => [
+                'array',
+                'null',
+            ],
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'flag' => [
+                        'type' => 'boolean',
+                    ],
+                ],
+                'required' => [
+                    'flag',
                 ],
             ],
         ], $schema, 'closure', 'return');

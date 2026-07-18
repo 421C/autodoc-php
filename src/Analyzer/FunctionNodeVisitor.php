@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Analyzer;
 
-use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -12,6 +11,7 @@ use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedParameterType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
+use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
 use Override;
 use PhpParser\Comment;
@@ -398,77 +398,59 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
         } else if ($varNode instanceof Node\Expr\ArrayDimFetch || $varNode instanceof Node\Expr\PropertyFetch) {
             $assignedItemKey = $this->getRawArrayKeyValue($varNode instanceof Node\Expr\ArrayDimFetch ? $varNode->dim : $varNode->name);
 
-            if ($assignedItemKey === null) {
-                $assignedItemKey = 0;
-            }
-
             if ($varNode->var instanceof Node\Expr\Variable) {
                 $this->scope->mutateVariable(
                     varNode: $varNode->var,
-                    attributes: [
-                        $assignedItemKey => $assignedType,
-                    ],
+                    attributes: $assignedItemKey === null ? [] : [$assignedItemKey => $assignedType],
+                    dynamicAttribute: $assignedItemKey === null ? $assignedType : null,
                 );
 
             } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch || $varNode->var instanceof Node\Expr\PropertyFetch) {
-                $nestedKeys = $this->getNestedAccessKeys($varNode);
-
-                $baseVariable = $nestedKeys['baseVariable'];
-                $keyPath = $nestedKeys['keyPath'];
-
-                if ($baseVariable instanceof Node\Expr\Variable) {
-                    /** @var array<int|string, Type> $attributes */
-                    $attributes = [];
-                    $lastKeyIndex = array_key_last($keyPath);
-
-                    /** @var array<int|string, Type> $currentLevel */
-                    $currentLevel = &$attributes;
-
-                    foreach ($keyPath as $keyIndex => $key) {
-                        if ($keyIndex === $lastKeyIndex) {
-                            if ($key === null) {
-                                $currentLevel[] = $assignedType;
-
-                            } else {
-                                $currentLevel[$key] = $assignedType;
-                            }
-
-                        } else if ($key === null) {
-                            $arrayType = new ArrayType;
-                            $currentLevel[] = $arrayType;
-
-                            /** @var array<int|string, Type> $currentLevel */
-                            $currentLevel = &$arrayType->shape;
-
-                        } else {
-                            if (! isset($currentLevel[$key]) || ! $currentLevel[$key] instanceof ArrayType) {
-                                $currentLevel[$key] = new ArrayType;
-                            }
-
-                            /** @var ArrayType $nestedArrayType */
-                            $nestedArrayType = $currentLevel[$key];
-
-                            /** @var array<int|string, Type> $currentLevel */
-                            $currentLevel = &$nestedArrayType->shape;
-                        }
-                    }
-
-                    $attributes = $this->normalizeNestedArrayTypes($attributes);
-
-                    $this->scope->mutateVariable(
-                        varNode: $baseVariable,
-                        attributes: $attributes,
-                    );
-                }
+                $this->handleNestedAttributeAssignment($varNode, $assignedType);
             }
 
         } else if ($varNode instanceof Node\Expr\List_ || $varNode instanceof Node\Expr\Array_) {
-            $this->handleDestructuring($varNode, $assignedType);
+            $sourceType = $assignedType;
+
+            if ($valueNode instanceof Node\Expr\Variable) {
+                $variableType = $this->scope->getVariableType($valueNode);
+
+                if ($variableType instanceof UnresolvedVariableType) {
+                    $sourceType = $variableType;
+                }
+            }
+
+            $this->handleDestructuring($varNode, $sourceType);
         }
     }
 
 
-    private function handleDestructuring(Node\Expr\List_|Node\Expr\Array_ $listNode, Type $sourceType): void
+    private function handleNestedAttributeAssignment(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $varNode, Type $assignedType): void
+    {
+        $nestedKeys = $this->getNestedAccessKeys($varNode);
+
+        $baseVariable = $nestedKeys['baseVariable'];
+        $keyPath = $nestedKeys['keyPath'];
+
+        if (! $baseVariable instanceof Node\Expr\Variable) {
+            return;
+        }
+
+        $lastKey = array_pop($keyPath);
+
+        $this->scope->mutateVariable(
+            varNode: $baseVariable,
+            attributes: $lastKey === null ? [] : [$lastKey => $assignedType],
+            path: $keyPath,
+            dynamicAttribute: $lastKey === null ? $assignedType : null,
+        );
+    }
+
+
+    /**
+     * @param list<int|string> $keyPrefix
+     */
+    private function handleDestructuring(Node\Expr\List_|Node\Expr\Array_ $listNode, Type $sourceType, array $keyPrefix = []): void
     {
         $position = 0;
 
@@ -486,36 +468,25 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
                 $key = $this->getRawArrayKeyValue($item->key);
             }
 
-            $this->handleAssignment(
-                varNode: $item->value,
-                valueNode: $key === null ? new UnknownType : new UnresolvedArrayDimType($sourceType, $key, $this->scope),
-            );
-        }
-    }
+            if ($key === null) {
+                $this->handleAssignment(varNode: $item->value, valueNode: new UnknownType);
 
-
-    /**
-     * @param array<int|string, Type> $attributes
-     * @return array<int|string, Type>
-     */
-    private function normalizeNestedArrayTypes(array $attributes): array
-    {
-        foreach ($attributes as $attributeKey => $attributeType) {
-            if ($attributeType instanceof ArrayType) {
-                if ($attributeType->shape) {
-                    $attributeType->shape = $this->normalizeNestedArrayTypes($attributeType->shape);
-                    $hasIntegerKeys = array_any(array_keys($attributeType->shape), fn ($shapeKey) => is_int($shapeKey));
-
-                    if ($hasIntegerKeys) {
-                        $attributeType->convertShapeToTypePair($this->scope->config);
-                    }
-                }
+                continue;
             }
 
-            $attributes[$attributeKey] = $attributeType;
-        }
+            $readPath = [...$keyPrefix, $key];
 
-        return $attributes;
+            if ($item->value instanceof Node\Expr\List_ || $item->value instanceof Node\Expr\Array_) {
+                $this->handleDestructuring($item->value, $sourceType, $readPath);
+
+                continue;
+            }
+
+            $this->handleAssignment(
+                varNode: $item->value,
+                valueNode: new UnresolvedArrayDimType($sourceType, $readPath, $this->scope),
+            );
+        }
     }
 
 
@@ -554,7 +525,11 @@ class FunctionNodeVisitor extends NodeVisitorAbstract
             return null;
         }
 
-        return $arrayKey;
+        if ($arrayKey === null) {
+            return null;
+        }
+
+        return $this->scope->normalizeArrayKey($arrayKey);
     }
 
 

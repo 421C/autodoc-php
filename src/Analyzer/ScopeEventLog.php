@@ -91,15 +91,28 @@ class ScopeEventLog
      * Add attributes to the variable's type or to the nested type at `$path`.
      *
      * @param array<int|string, Type> $attributes
-     * @param list<int|string> $path
+     * @param list<int|string|null> $path
      */
-    public function mutate(string $varName, array $attributes, int $startFilePos, int $endFilePos = 0, array $path = []): void
+    public function mutate(
+        string $varName,
+        array $attributes,
+        int $startFilePos,
+        int $endFilePos = 0,
+        array $path = [],
+        ?Type $dynamicAttribute = null,
+    ): void
     {
+        $changes = ['attributes' => $attributes, 'mutationPath' => $path];
+
+        if ($dynamicAttribute !== null) {
+            $changes['dynamicAttribute'] = $dynamicAttribute;
+        }
+
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Mutate,
             varName: $varName,
             branchPath: $this->getBranchPathAtPosition($startFilePos),
-            changes: ['attributes' => $attributes, 'mutationPath' => $path],
+            changes: $changes,
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
         );

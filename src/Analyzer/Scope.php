@@ -21,6 +21,7 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
+use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\Route;
@@ -393,46 +394,7 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\ArrayDimFetch && $node->dim) {
-                $varType = $this->resolveType($node->var);
-                $key = $this->getRawValueFromNode($node->dim);
-                $key = is_int($key) ? $key : (string) $key;
-
-                $getArrayItemType = function ($varType) use ($key) {
-                    $type = null;
-
-                    if ($varType instanceof ArrayType) {
-                        $type = $varType->shape[$key]
-                            ?? $varType->itemType
-                            ?? null;
-
-                    } else if ($varType instanceof ObjectType) {
-                        $displayType = $varType->typeToDisplay;
-
-                        if ($displayType instanceof ArrayType) {
-                            $type = $displayType->shape[$key]
-                                ?? $displayType->itemType
-                                ?? null;
-
-                        } else if ($displayType instanceof ObjectType) {
-                            $type = $displayType->properties[$key] ?? null;
-                        }
-                    }
-
-                    return $type?->unwrapType($this->config) ?? new UnknownType;
-                };
-
-                if ($varType instanceof UnionType) {
-                    /** @var list<Type> $types */
-                    $types = [];
-
-                    foreach ($varType->types as $type) {
-                        $types[] = $getArrayItemType($type);
-                    }
-
-                    return new UnionType($types)->unwrapType($this->config);
-                }
-
-                return $getArrayItemType($varType);
+                return $this->resolveArrayDimFetchChain($node);
             }
 
             if ($node instanceof Node\Scalar\String_) {
@@ -749,6 +711,144 @@ class Scope
     }
 
 
+    private function resolveArrayDimFetchChain(Node\Expr\ArrayDimFetch $node): Type
+    {
+        $exactType = $this->resolveExactAccessChain($node);
+
+        if ($exactType !== null) {
+            return $exactType;
+        }
+
+        $rawKeys = [];
+        $chainNode = $node;
+
+        while ($chainNode instanceof Node\Expr\ArrayDimFetch && $chainNode->dim) {
+            $rawKeys[] = $this->getRawValueFromNode($chainNode->dim);
+            $chainNode = $chainNode->var;
+        }
+
+        $rawKeys = array_reverse($rawKeys);
+        $readPath = [];
+
+        foreach ($rawKeys as $rawKey) {
+            if (is_int($rawKey) || is_string($rawKey)) {
+                $readPath[] = $this->normalizeArrayKey($rawKey);
+
+            } else {
+                break;
+            }
+        }
+
+        if ($chainNode instanceof Node\Expr\Variable) {
+            $unresolvedVarType = $this->getVariableType($chainNode);
+
+            $varType = $unresolvedVarType instanceof UnresolvedVariableType
+                ? $unresolvedVarType->resolve($readPath)
+                : $unresolvedVarType?->unwrapType($this->config) ?? new UnknownType;
+
+        } else {
+            $varType = $this->resolveType($chainNode);
+        }
+
+        foreach ($rawKeys as $rawKey) {
+            $varType = $this->getTypeAtKey($varType, is_int($rawKey) ? $rawKey : (string) $rawKey);
+        }
+
+        return $varType;
+    }
+
+
+    private function resolveExactAccessChain(Node\Expr\ArrayDimFetch $node): ?Type
+    {
+        $keys = [];
+        $chainNode = $node;
+
+        while ($chainNode instanceof Node\Expr\ArrayDimFetch || $chainNode instanceof Node\Expr\PropertyFetch) {
+            if ($chainNode instanceof Node\Expr\ArrayDimFetch) {
+                if ($chainNode->dim === null) {
+                    return null;
+                }
+
+                $rawKey = $this->getRawValueFromNode($chainNode->dim);
+
+            } else {
+                $rawKey = $this->getRawValueFromNode($chainNode->name);
+            }
+
+            if (! is_int($rawKey) && ! is_string($rawKey)) {
+                return null;
+            }
+
+            $keys[] = $this->normalizeArrayKey($rawKey);
+            $chainNode = $chainNode->var;
+        }
+
+        if (! $chainNode instanceof Node\Expr\Variable) {
+            return null;
+        }
+
+        $unresolvedVarType = $this->getVariableType($chainNode);
+
+        if (! $unresolvedVarType instanceof UnresolvedVariableType) {
+            return null;
+        }
+
+        $keys = array_reverse($keys);
+
+        $type = $unresolvedVarType->resolve($keys);
+
+        foreach ($keys as $key) {
+            $type = $this->getTypeAtKey($type, $key);
+        }
+
+        return $type instanceof UnknownType ? null : $type;
+    }
+
+
+    public function getTypeAtKey(Type $type, int|string $key): Type
+    {
+        if ($type instanceof ObjectType && $type->typeToDisplay) {
+            $type = $type->typeToDisplay;
+        }
+
+        if ($type instanceof UnionType) {
+            return new UnionType(
+                array_map(fn (Type $memberType): Type => $this->getTypeAtKey($memberType, $key), $type->types),
+            )->unwrapType($this->config);
+        }
+
+        if ($type instanceof ArrayType) {
+            return ($type->shape[$key] ?? $type->itemType)?->unwrapType($this->config) ?? new UnknownType;
+        }
+
+        if ($type instanceof ObjectType) {
+            return $this->getObjectPropertyType($type, $key) ?? new UnknownType;
+        }
+
+        return new UnknownType;
+    }
+
+
+    /**
+     * Fall back to class metadata when `max_depth` leaves properties
+     * unmaterialized, or nested mutations would be lost.
+     */
+    public function getObjectPropertyType(ObjectType $objectType, int|string $key): ?Type
+    {
+        $keyString = (string) $key;
+
+        if (isset($objectType->properties[$keyString])) {
+            return $objectType->properties[$keyString]->unwrapType($this->config);
+        }
+
+        if ($objectType->className !== null) {
+            return $this->getPhpClass($objectType->className)->getProperty($keyString)?->unwrapType($this->config);
+        }
+
+        return null;
+    }
+
+
     /**
      * @template TResult
      * @param (callable(): TResult) $callback
@@ -919,6 +1019,16 @@ class Scope
         }
 
         $this->route?->addRequestBodyType($type);
+    }
+
+
+    public function normalizeArrayKey(int|string $key): int|string
+    {
+        if (is_string($key) && (string) (int) $key === $key) {
+            return (int) $key;
+        }
+
+        return $key;
     }
 
 

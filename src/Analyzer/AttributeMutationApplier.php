@@ -3,6 +3,7 @@
 namespace AutoDoc\Analyzer;
 
 use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -17,50 +18,126 @@ final readonly class AttributeMutationApplier
     ) {}
 
     /**
-     * Merge attributes into `$baseType`, optionally at a literal `$path`.
-     * `$isCertain` makes the mutation unconditional and the attributes required.
+     * Merge attributes into `$baseType`, optionally at `$mutationPath`.
+     * Mutations to a shared `itemType` stay certain only when `$readPath`
+     * targets the same element.
      *
-     * @param list<int|string> $path
+     * @param list<int|string|null> $mutationPath
      * @param array<int|string, Type> $attributes
+     * @param list<int|string> $readPath
      */
-    public function apply(?Type $baseType, array $path, array $attributes, bool $isCertain): ?Type
-    {
-        if ($attributes === []) {
+    public function apply(
+        ?Type $baseType,
+        array $mutationPath,
+        array $attributes,
+        bool $isCertain,
+        array $readPath = [],
+        ?Type $dynamicAttribute = null,
+    ): ?Type {
+        if ($attributes === [] && $dynamicAttribute === null) {
             return $baseType;
         }
 
-        if ($path === []) {
+        if ($baseType === null) {
+            $baseType = new ArrayType;
+
+        } else {
+            $baseType = $baseType->unwrapType($this->scope->config);
+        }
+
+        if ($baseType instanceof NullType) {
+            $mutatedArrayType = $this->apply(
+                baseType: new ArrayType,
+                mutationPath: $mutationPath,
+                attributes: $attributes,
+                isCertain: true,
+                readPath: $readPath,
+                dynamicAttribute: $dynamicAttribute,
+            );
+
+            if ($mutatedArrayType === null) {
+                return $baseType;
+            }
+
+            if ($isCertain) {
+                return $mutatedArrayType;
+            }
+
+            return new UnionType([$mutatedArrayType, $baseType])->unwrapType($this->scope->config);
+        }
+
+        if ($mutationPath === [] && $dynamicAttribute === null) {
             foreach ($attributes as $key => $attributeType) {
-                $baseType = $this->mergeAttribute($baseType, $key, $attributeType, $isCertain);
+                $baseType = $this->mergeAttribute($baseType, $key, $attributeType, $isCertain, $readPath);
             }
 
             return $baseType;
         }
 
-        if ($baseType === null) {
-            return null;
-        }
-
-        $baseType = $baseType->unwrapType($this->scope->config);
-
         if ($baseType instanceof UnionType) {
             $baseType = clone $baseType;
 
             $baseType->types = array_map(
-                fn (Type $typeVariant): Type => $this->apply($typeVariant, $path, $attributes, $isCertain) ?? $typeVariant,
+                fn (Type $typeVariant): Type => $this->apply(
+                    baseType: $typeVariant,
+                    mutationPath: $mutationPath,
+                    attributes: $attributes,
+                    isCertain: $isCertain,
+                    readPath: $readPath,
+                    dynamicAttribute: $dynamicAttribute,
+                ) ?? $typeVariant,
                 $baseType->types,
             );
 
             return $baseType->unwrapType($this->scope->config);
         }
 
-        $pathKey = $path[0];
-        $remainingPath = array_slice($path, 1);
+        if ($mutationPath === []) {
+            foreach ($attributes as $key => $attributeType) {
+                $baseType = $this->mergeAttribute($baseType, $key, $attributeType, $isCertain, $readPath);
+            }
+
+            $baseType = $this->mergeDynamicAttribute($baseType, $dynamicAttribute, $isCertain);
+
+            return $baseType;
+        }
+
+        $pathKey = $mutationPath[0];
+        $remainingPath = array_slice($mutationPath, 1);
+
+        if ($pathKey === null) {
+            return $this->applyAtDynamicPath(
+                baseType: $baseType,
+                remainingPath: $remainingPath,
+                attributes: $attributes,
+                isCertain: $isCertain,
+                dynamicAttribute: $dynamicAttribute,
+            );
+        }
+
+        $readPathIsAligned = ($readPath[0] ?? null) === $pathKey;
+        $readPathTail = $readPathIsAligned ? array_slice($readPath, 1) : [];
 
         if ($baseType instanceof ObjectType) {
-            $propertyType = $this->resolveObjectPropertyType($baseType, $pathKey);
+            $propertyType = $this->scope->getObjectPropertyType($baseType, $pathKey);
 
             if ($propertyType === null) {
+                $createdPropertyType = $this->apply(
+                    baseType: new ArrayType,
+                    mutationPath: $remainingPath,
+                    attributes: $attributes,
+                    isCertain: $isCertain,
+                    readPath: $readPathTail,
+                    dynamicAttribute: $dynamicAttribute,
+                );
+
+                if ($createdPropertyType === null) {
+                    return $baseType;
+                }
+
+                $baseType = clone $baseType;
+                $baseType->properties[(string) $pathKey] = $createdPropertyType->setRequired($isCertain);
+
                 return $baseType;
             }
 
@@ -68,9 +145,11 @@ final readonly class AttributeMutationApplier
 
             $mergedPropertyType = $this->apply(
                 baseType: $propertyType,
-                path: $remainingPath,
+                mutationPath: $remainingPath,
                 attributes: $attributes,
                 isCertain: $isCertain,
+                readPath: $readPathTail,
+                dynamicAttribute: $dynamicAttribute,
             );
 
             if ($mergedPropertyType === null) {
@@ -87,16 +166,35 @@ final readonly class AttributeMutationApplier
             $elementType = $baseType->shape[$pathKey] ?? $baseType->itemType;
 
             if ($elementType === null) {
+                $createdElementType = $this->apply(
+                    baseType: new ArrayType,
+                    mutationPath: $remainingPath,
+                    attributes: $attributes,
+                    isCertain: $isCertain,
+                    readPath: $readPathTail,
+                    dynamicAttribute: $dynamicAttribute,
+                );
+
+                if ($createdElementType === null) {
+                    return $baseType;
+                }
+
+                $baseType = clone $baseType;
+                $baseType->addItemToArray($pathKey, $createdElementType->setRequired($isCertain), $this->scope->config);
+
                 return $baseType;
             }
 
+            $isSharedItemType = ! isset($baseType->shape[$pathKey]);
             $wasRequired = $elementType->required;
 
             $mergedElementType = $this->apply(
                 baseType: $elementType->unwrapType($this->scope->config),
-                path: $remainingPath,
+                mutationPath: $remainingPath,
                 attributes: $attributes,
-                isCertain: $isCertain,
+                isCertain: $isCertain && (! $isSharedItemType || $readPathIsAligned),
+                readPath: $readPathTail,
+                dynamicAttribute: $dynamicAttribute,
             );
 
             if ($mergedElementType === null) {
@@ -119,7 +217,137 @@ final readonly class AttributeMutationApplier
     }
 
 
-    private function mergeAttribute(?Type $baseType, int|string $key, Type $attributeType, bool $isCertain): Type
+    /**
+     * @param list<int|string|null> $remainingPath
+     * @param array<int|string, Type> $attributes
+     */
+    private function applyAtDynamicPath(
+        Type $baseType,
+        array $remainingPath,
+        array $attributes,
+        bool $isCertain,
+        ?Type $dynamicAttribute,
+    ): Type {
+        if ($baseType instanceof ArrayType || $baseType instanceof ObjectType) {
+            $baseType = $this->mapElements($baseType, fn (Type $elementType): ?Type => $this->apply(
+                baseType: $elementType,
+                mutationPath: $remainingPath,
+                attributes: $attributes,
+                isCertain: false,
+                dynamicAttribute: $dynamicAttribute,
+            ));
+
+            if ($baseType instanceof ArrayType && $baseType->shape === [] && $baseType->itemType === null) {
+                $createdElementType = $this->apply(
+                    baseType: null,
+                    mutationPath: $remainingPath,
+                    attributes: $attributes,
+                    isCertain: true,
+                    dynamicAttribute: $dynamicAttribute,
+                );
+
+                if ($createdElementType !== null) {
+                    $baseType->addItemToArray(null, $createdElementType->setRequired($isCertain), $this->scope->config);
+                }
+            }
+
+            return $baseType;
+        }
+
+        $createdType = $this->apply(
+            baseType: null,
+            mutationPath: $remainingPath,
+            attributes: $attributes,
+            isCertain: true,
+            dynamicAttribute: $dynamicAttribute,
+        );
+
+        if ($createdType === null || $isCertain) {
+            return $createdType ?? $baseType;
+        }
+
+        return new UnionType([$baseType, $createdType])->unwrapType($this->scope->config);
+    }
+
+
+    private function mergeDynamicAttribute(Type $baseType, Type $attributeType, bool $isCertain): Type
+    {
+        $attributeType = clone $attributeType;
+
+        if ($baseType instanceof ArrayType || $baseType instanceof ObjectType) {
+            $baseType = $this->mapElements($baseType, fn (Type $elementType): Type => new UnionType([
+                $elementType,
+                $attributeType,
+            ])->unwrapType($this->scope->config));
+
+            if ($baseType instanceof ArrayType && $baseType->shape === [] && $baseType->itemType === null) {
+                $baseType->addItemToArray(null, $attributeType->setRequired($isCertain), $this->scope->config);
+            }
+
+            return $baseType;
+        }
+
+        $arrayType = new ArrayType;
+        $arrayType->addItemToArray(null, $attributeType->setRequired($isCertain), $this->scope->config);
+
+        if ($isCertain) {
+            return $arrayType;
+        }
+
+        return new UnionType([$baseType, $arrayType])->unwrapType($this->scope->config);
+    }
+
+
+    /**
+     * Maps every element of the container through `$mapElement`, keeping each
+     * element's required flag. A `null` mapping keeps the element unchanged.
+     *
+     * @param callable(Type): ?Type $mapElement
+     */
+    private function mapElements(ArrayType|ObjectType $baseType, callable $mapElement): ArrayType|ObjectType
+    {
+        $baseType = clone $baseType;
+
+        if ($baseType instanceof ObjectType) {
+            foreach ($baseType->properties as $key => $propertyType) {
+                $baseType->properties[$key] = $this->mapElementPreservingRequired($propertyType, $mapElement);
+            }
+
+            return $baseType;
+        }
+
+        foreach ($baseType->shape as $key => $elementType) {
+            $baseType->shape[$key] = $this->mapElementPreservingRequired($elementType, $mapElement);
+        }
+
+        if ($baseType->itemType !== null) {
+            $baseType->itemType = $this->mapElementPreservingRequired($baseType->itemType, $mapElement);
+        }
+
+        return $baseType;
+    }
+
+
+    /**
+     * @param callable(Type): ?Type $mapElement
+     */
+    private function mapElementPreservingRequired(Type $elementType, callable $mapElement): Type
+    {
+        $wasRequired = $elementType->required;
+        $mappedType = $mapElement($elementType);
+
+        if ($mappedType === null) {
+            return $elementType;
+        }
+
+        return $mappedType->setRequired($wasRequired);
+    }
+
+
+    /**
+     * @param list<int|string> $readPath
+     */
+    private function mergeAttribute(?Type $baseType, int|string $key, Type $attributeType, bool $isCertain, array $readPath = []): Type
     {
         if ($isCertain) {
             $attributeType = $this->setNestedAttributeAsRequired($attributeType);
@@ -171,6 +399,11 @@ final readonly class AttributeMutationApplier
                         ])->unwrapType($this->scope->config);
                     }
 
+                } else if ($isCertain && ($readPath[0] ?? null) === $key) {
+                    // The shape entry shadows the shared itemType only for this exact-read
+                    // resolution, consumed immediately via getTypeAtKey.
+                    $potentialTypes[$i]->shape[$key] = $attributeType;
+
                 } else {
                     $potentialTypes[$i]->addItemToArray($key, $attributeType->setRequired($isCertain), $this->scope->config);
                 }
@@ -201,26 +434,6 @@ final readonly class AttributeMutationApplier
         }
 
         return $baseType;
-    }
-
-
-    /**
-     * Fall back to class metadata when `max_depth` leaves properties
-     * unmaterialized, or nested mutations would be lost.
-     */
-    private function resolveObjectPropertyType(ObjectType $objectType, int|string $key): ?Type
-    {
-        $keyString = (string) $key;
-
-        if (isset($objectType->properties[$keyString])) {
-            return $objectType->properties[$keyString]->unwrapType($this->scope->config);
-        }
-
-        if ($objectType->className !== null) {
-            return $this->scope->getPhpClass($objectType->className)->getProperty($keyString)?->unwrapType($this->scope->config);
-        }
-
-        return null;
     }
 
 

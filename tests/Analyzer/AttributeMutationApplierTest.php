@@ -34,6 +34,30 @@ final class AttributeMutationApplierTest extends TestCase
     }
 
     #[Test]
+    public function certainDynamicMutationDoesNotMutateTheDynamicAttributeInPlace(): void
+    {
+        $config = self::loadConfig();
+        $applier = new AttributeMutationApplier(new Scope($config));
+
+        $dynamicAttribute = new StringType('x');
+
+        $result = $applier->apply(
+            baseType: new ArrayType,
+            mutationPath: [],
+            attributes: [],
+            isCertain: true,
+            dynamicAttribute: $dynamicAttribute,
+        );
+
+        self::assertFalse(
+            $dynamicAttribute->required,
+            'the passed dynamic attribute Type must not be mutated in place',
+        );
+        self::assertInstanceOf(ArrayType::class, $result);
+        self::assertNotSame($dynamicAttribute, $result->itemType);
+    }
+
+    #[Test]
     public function keyedMutationOnGenericArrayKeepsItAnArray(): void
     {
         $config = self::loadConfig();

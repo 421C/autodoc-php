@@ -372,9 +372,31 @@ class PhpClass
             return null;
         }
 
-        $propertyPhpDoc = new PhpDoc($propertyDocComment, $this->scope);
+        $propertyPhpDoc = new PhpDoc($propertyDocComment, $this->getDeclaringClassScope($propertyReflection->getDeclaringClass()->name));
 
         return $propertyPhpDoc->resolvePropertyType($propertyName);
+    }
+
+
+    /**
+     * PHPDoc types must resolve against the declaring class's name-resolution
+     * context, regardless of which scope the cached PhpClass is bound to —
+     * the resolved property map is memoized globally.
+     *
+     * @param class-string $className
+     */
+    private function getDeclaringClassScope(string $className): Scope
+    {
+        if ($this->scope->className === $className) {
+            return $this->scope;
+        }
+
+        return new Scope(
+            config: $this->scope->config,
+            depth: $this->scope->depth,
+            route: $this->scope->route,
+            className: $className,
+        );
     }
 
 
@@ -403,7 +425,7 @@ class PhpClass
         $comment = $this->getReflection()->getDocComment();
 
         if ($comment) {
-            $this->docComment = new PhpDoc($comment, $this->scope);
+            $this->docComment = new PhpDoc($comment, $this->getDeclaringClassScope($this->className));
         }
 
         return $this->docComment;
@@ -418,7 +440,7 @@ class PhpClass
             return null;
         }
 
-        return new PhpDoc($propertyDocComment, $this->scope);
+        return new PhpDoc($propertyDocComment, $this->getDeclaringClassScope($propertyReflection->getDeclaringClass()->name));
     }
 
 

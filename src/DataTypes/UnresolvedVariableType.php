@@ -19,9 +19,16 @@ class UnresolvedVariableType extends UnresolvedType
         public ?string $description = null,
     ) {}
 
-    public function resolve(): Type
+    /**
+     * A non-empty `$readPath` resolves for a read of a single element along a
+     * literal key path, so mutations targeting exactly that element stay
+     * certain even when they were folded into a shared `itemType`.
+     *
+     * @param list<int|string> $readPath
+     */
+    public function resolve(array $readPath = []): Type
     {
-        $cacheKey = $this->varName . ':' . $this->varStartFilePos;
+        $cacheKey = $this->varName . ':' . $this->varStartFilePos . ($readPath === [] ? '' : ':' . json_encode($readPath));
 
         if (isset($this->scope->resolvedVariables[$cacheKey])) {
             return $this->scope->resolvedVariables[$cacheKey];
@@ -33,7 +40,11 @@ class UnresolvedVariableType extends UnresolvedType
             $this->readBranchPath,
         );
 
-        $resolvedType = $this->resolveFromEvents($events);
+        if ($readPath !== [] && ! $this->eventsContainMutation($events)) {
+            return $this->scope->resolvedVariables[$cacheKey] = $this->resolve();
+        }
+
+        $resolvedType = $this->resolveFromEvents($events, $readPath);
 
         if (! $resolvedType) {
             $resolvedType = new UnknownType;
@@ -52,7 +63,21 @@ class UnresolvedVariableType extends UnresolvedType
     /**
      * @param ScopeEvent[] $events
      */
-    private function resolveFromEvents(array $events): ?Type
+    private function eventsContainMutation(array $events): bool
+    {
+        return array_any(
+            $events,
+            fn (ScopeEvent $event) => $event->type === ScopeEventType::Mutate
+                && (! empty($event->changes['attributes']) || isset($event->changes['dynamicAttribute'])),
+        );
+    }
+
+
+    /**
+     * @param ScopeEvent[] $events
+     * @param list<int|string> $readPath
+     */
+    private function resolveFromEvents(array $events, array $readPath): ?Type
     {
         // Walk events forward, building up the type.
         // At each point, determine if the event is:
@@ -113,13 +138,17 @@ class UnresolvedVariableType extends UnresolvedType
                     ])))->unwrapType($this->scope->config);
                 }
 
-            } else if ($event->type === ScopeEventType::Mutate && ! empty($event->changes['attributes'])) {
-                $this->scope->withShapeMerging(function () use ($event, &$resolvedType, $isCertain, $mutationApplier) {
+            } else if ($event->type === ScopeEventType::Mutate
+                && (! empty($event->changes['attributes']) || isset($event->changes['dynamicAttribute']))
+            ) {
+                $this->scope->withShapeMerging(function () use ($event, &$resolvedType, $isCertain, $mutationApplier, $readPath) {
                     $resolvedType = $mutationApplier->apply(
-                        $resolvedType,
-                        $event->changes['mutationPath'] ?? [],
-                        $event->changes['attributes'],
-                        $isCertain,
+                        baseType: $resolvedType,
+                        mutationPath: $event->changes['mutationPath'] ?? [],
+                        attributes: $event->changes['attributes'] ?? [],
+                        isCertain: $isCertain,
+                        readPath: $readPath,
+                        dynamicAttribute: $event->changes['dynamicAttribute'] ?? null,
                     );
                 });
 

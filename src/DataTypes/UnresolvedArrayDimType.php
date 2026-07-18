@@ -9,7 +9,11 @@ class UnresolvedArrayDimType extends UnresolvedType
 {
     public function __construct(
         public Type $potentialArrayType,
-        public int|string $key,
+
+        /**
+         * @var non-empty-list<int|string>
+         */
+        public array $readPath,
         public Scope $scope,
     ) {}
 
@@ -17,39 +21,15 @@ class UnresolvedArrayDimType extends UnresolvedType
     public function resolve(): Type
     {
         $type = $this->scope->withPartialArraysResolvingAsShapes(
-            fn () => $this->potentialArrayType->unwrapType($this->scope->config),
+            fn () => $this->potentialArrayType instanceof UnresolvedVariableType
+                ? $this->potentialArrayType->resolve($this->readPath)
+                : $this->potentialArrayType->unwrapType($this->scope->config),
         );
 
-        if ($type instanceof UnionType) {
-            $memberTypes = [];
-
-            foreach ($type->types as $memberType) {
-                $memberTypes[] = $this->resolveMemberAtKey($memberType);
-            }
-
-            return new UnionType($memberTypes)->unwrapType($this->scope->config);
+        foreach ($this->readPath as $key) {
+            $type = $this->scope->getTypeAtKey($type, $key);
         }
 
-        return $this->resolveMemberAtKey($type);
-    }
-
-
-    private function resolveMemberAtKey(Type $type): Type
-    {
-        if ($type instanceof ObjectType && $type->typeToDisplay) {
-            $type = $type->typeToDisplay;
-        }
-
-        if ($type instanceof ArrayType) {
-            $memberType = $type->shape[$this->key] ?? $type->itemType;
-
-        } else if ($type instanceof ObjectType) {
-            $memberType = $type->properties[$this->key] ?? null;
-
-        } else {
-            $memberType = null;
-        }
-
-        return $memberType?->unwrapType($this->scope->config) ?? new UnknownType;
+        return $type;
     }
 }

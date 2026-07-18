@@ -4,6 +4,7 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Tests\TestProject\Entities\CallCountHolder;
 use AutoDoc\Tests\TestProject\Extensions\FuncCallCountingExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
@@ -75,6 +76,63 @@ final class CallResolutionCountTest extends TestCase
         $this->assertSame(1, $this->resolutionCount('callResolutionCountAbort'));
     }
 
+    // Each read position replays the events once; sharing replays across
+    // positions would require comparing the visible event sets first.
+    #[Test]
+    public function literalKeyReadsOfAnUnmutatedVariableReplayItsEventsOncePerReadPosition(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $items = \AutoDoc\Tests\Analyzer\callResolutionCountShape();
+
+            return ['first' => $items['a'], 'second' => $items['b']];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'first' => [
+                    'type' => 'integer',
+                    'const' => 1,
+                ],
+                'second' => [
+                    'type' => 'string',
+                    'const' => 'b',
+                ],
+            ],
+            'required' => [
+                'first',
+                'second',
+            ],
+        ], $schema, 'closure', 'return');
+
+        $this->assertSame(2, $this->resolutionCount('callResolutionCountShape'));
+    }
+
+    #[Test]
+    public function aFailedExactChainReadDoesNotReplayTheRootVariableTwice(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $holder = \AutoDoc\Tests\Analyzer\callResolutionCountHolder();
+
+            // @phpstan-ignore property.notFound, offsetAccess.nonOffsetAccessible
+            return ['value' => $holder->undeclared['x']];
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'value' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'value',
+            ],
+        ], $schema, 'closure', 'return');
+
+        $this->assertSame(1, $this->resolutionCount('callResolutionCountHolder'));
+    }
+
     /**
      * Counts resolutions regardless of whether the analyzer saw the
      * qualified or unqualified function name.
@@ -121,4 +179,17 @@ function callResolutionCountMarker(): void
 function callResolutionCountAbort(): never
 {
     throw new RuntimeException('abort');
+}
+
+/**
+ * @return array{a: 1, b: 'b'}
+ */
+function callResolutionCountShape(): array
+{
+    return ['a' => 1, 'b' => 'b'];
+}
+
+function callResolutionCountHolder(): CallCountHolder
+{
+    return new CallCountHolder;
 }
