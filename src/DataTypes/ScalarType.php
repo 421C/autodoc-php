@@ -27,6 +27,23 @@ abstract class ScalarType extends Type
     abstract public function setPossibleValues(array $values): void;
 
     /**
+     * Whether values can be emitted as JSON/OpenAPI/TypeScript literals.
+     * Non-finite floats prevent `const`/`enum` output.
+     *
+     * @param list<float|int|string> $values
+     */
+    public static function canRepresentLiteralValues(array $values): bool
+    {
+        foreach ($values as $value) {
+            if (is_float($value) && ! is_finite($value)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Append `const`/`enum` to a schema when literal values are present and either
      * this is an enum or the config opts into showing values for scalar types.
      *
@@ -42,7 +59,7 @@ abstract class ScalarType extends Type
 
         $possibleValues = $this->getPossibleValues();
 
-        if ($possibleValues) {
+        if ($possibleValues && self::canRepresentLiteralValues($possibleValues)) {
             if (count($possibleValues) === 1) {
                 $schema['const'] = $possibleValues[0];
 

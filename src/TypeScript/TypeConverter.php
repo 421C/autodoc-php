@@ -12,6 +12,7 @@ use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\DataTypes\ScalarType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -47,7 +48,7 @@ class TypeConverter
             if ($type->isEnum || $tsConfig['show_values_for_scalar_types']) {
                 $values = $type->getPossibleValues();
 
-                if ($values) {
+                if ($values && ScalarType::canRepresentLiteralValues($values)) {
                     return implode('|', array_map(fn ($value) => (string) $value, $values));
                 }
             }
@@ -63,7 +64,7 @@ class TypeConverter
             if ($type->isEnum || $tsConfig['show_values_for_scalar_types']) {
                 $values = $type->getPossibleValues();
 
-                if ($values) {
+                if ($values && ScalarType::canRepresentLiteralValues($values)) {
                     return implode('|', array_map(fn ($value) => (string) $value, $values));
                 }
             }
@@ -182,8 +183,7 @@ class TypeConverter
     private function toTsObject(
         array $properties,
         TypeScriptRenderContext $context,
-    ): string
-    {
+    ): string {
         $tsConfig = $context->config;
         $baseIndent = $context->baseIndent;
 

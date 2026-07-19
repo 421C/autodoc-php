@@ -8,9 +8,11 @@ use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\DataTypes\ScalarType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -471,7 +473,7 @@ trait WithMergeableTypes
         IntegerType|FloatType|NumberType|StringType $type2,
         Config $config,
         bool $mergeAsIntersection = false,
-    ): IntegerType|FloatType|NumberType|StringType|null {
+    ): IntegerType|FloatType|NumberType|StringType|NeverType|null {
         $t1IsNumber = $type1 instanceof IntegerType
             || $type1 instanceof FloatType
             || $type1 instanceof NumberType;
@@ -522,21 +524,33 @@ trait WithMergeableTypes
         $t1Values = $type1->getPossibleValues();
         $t2Values = $type2->getPossibleValues();
 
+        $canRepresentLiteralValues = ScalarType::canRepresentLiteralValues($t1Values ?? [])
+            && ScalarType::canRepresentLiteralValues($t2Values ?? []);
+
         if ($mergeAsIntersection) {
             $possibleValues = $this->intersectPossibleScalarValues($t1Values, $t2Values);
 
             if ($possibleValues === []) {
+                if (! $canRepresentLiteralValues) {
+                    return new NeverType(
+                        conflictingTypes: [$type1, $type2],
+                        required: $resultType->required,
+                    );
+                }
+
                 return null;
             }
 
-            if ($possibleValues !== null) {
+            if ($possibleValues !== null && ScalarType::canRepresentLiteralValues($possibleValues)) {
                 $resultType->setEnumValues($possibleValues);
                 $resultType->isEnum = $this->isEnum || $type1->isEnum || $type2->isEnum;
             }
 
         } else if ($this->isEnum || ($config->data['openapi']['show_values_for_scalar_types'] ?? false)) {
-            if (($t1Values && $t2Values) || ! ($config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)) {
-                $possibleValues = array_values(array_unique(array_merge($t1Values ?? [], $t2Values ?? [])));
+            if ($canRepresentLiteralValues
+                && (($t1Values && $t2Values) || ! ($config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true))
+            ) {
+                $possibleValues = $this->uniqueScalarValues(array_merge($t1Values ?? [], $t2Values ?? []));
 
                 $resultType->setEnumValues($possibleValues);
             }
@@ -545,6 +559,23 @@ trait WithMergeableTypes
         return $resultType;
     }
 
+
+    /**
+     * @param list<float|int|string> $values
+     * @return list<float|int|string>
+     */
+    private function uniqueScalarValues(array $values): array
+    {
+        $unique = [];
+
+        foreach ($values as $value) {
+            if (! array_any($unique, fn (float|int|string $uniqueValue) => $this->scalarValuesAreEquivalent($value, $uniqueValue))) {
+                $unique[] = $value;
+            }
+        }
+
+        return $unique;
+    }
 
     /**
      * @param list<float|int|string>|null $values1
@@ -567,8 +598,31 @@ trait WithMergeableTypes
 
         return array_values(array_filter(
             $values1,
-            fn (float|int|string $value) => in_array($value, $values2, true),
+            fn (float|int|string $value) => array_any(
+                $values2,
+                fn (float|int|string $otherValue) => $this->scalarValuesAreEquivalent($value, $otherValue),
+            ),
         ));
+    }
+
+
+    private function scalarValuesAreEquivalent(
+        float|int|string $value1,
+        float|int|string $value2,
+    ): bool {
+        if (is_string($value1) || is_string($value2)) {
+            return $value1 === $value2;
+        }
+
+        $value1IsNonFinite = is_float($value1) && ! is_finite($value1);
+        $value2IsNonFinite = is_float($value2) && ! is_finite($value2);
+
+        if ($value1IsNonFinite || $value2IsNonFinite) {
+            return (is_float($value1) && is_nan($value1) && is_float($value2) && is_nan($value2))
+                || $value1 === $value2;
+        }
+
+        return json_encode($value1) === json_encode($value2);
     }
 
     /**
