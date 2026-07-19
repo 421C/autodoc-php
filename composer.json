@@ -28,9 +28,7 @@
         }
     },
     "bin": [
-        "bin/openapi-export",
-        "bin/ts-sync",
-        "bin/autodoc-debug"
+        "bin/autodoc"
     ],
     "scripts": {
         "test": [

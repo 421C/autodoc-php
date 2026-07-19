@@ -1,7 +1,7 @@
 parameters:
     phpVersion: 80500
     paths:
-        - bin/autodoc-debug
+        - bin/autodoc
         - src
         - tests
     level: 10

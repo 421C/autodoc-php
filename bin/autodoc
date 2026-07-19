@@ -1,0 +1,28 @@
+#!/usr/bin/env php
+<?php declare(strict_types=1);
+
+use AutoDoc\Commands\CommandLine;
+
+$autoloadPaths = [
+    __DIR__ . '/../../../autoload.php',
+    __DIR__ . '/../vendor/autoload.php',
+];
+
+if (isset($_composer_autoload_path) && is_string($_composer_autoload_path)) {
+    array_unshift($autoloadPaths, $_composer_autoload_path);
+}
+
+foreach ($autoloadPaths as $file) {
+    if (file_exists($file)) {
+        require $file;
+        break;
+    }
+}
+
+$arguments = [];
+
+if (isset($argv)) {
+    $arguments = array_slice($argv, 1);
+}
+
+exit((new CommandLine)->run($arguments));
