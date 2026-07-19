@@ -53,4 +53,10 @@ class ExceptionsController
 
         return 'ok';
     }
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [])]
+    public function neverReturningAction(): never
+    {
+        throw new \RuntimeException('abort');
+    }
 }

@@ -39,7 +39,7 @@ class RouteLoader extends AbstractRouteLoader
         DynamicKeysController::class,
         DynamicMethodController::class,
         XmlRequestController::class,
-        PipeOperationController::class, // @phpstan-ignore class.notFound
+        PipeOperationController::class,
     ];
 
     public function getRoutes(): iterable
@@ -154,8 +154,6 @@ class RouteLoader extends AbstractRouteLoader
                  * @return int|float|null
                  */
                 #[ExpectedOperationSchema('showValuesForScalarTypes', [
-                    'summary' => '',
-                    'description' => '',
                     'responses' => [
                         200 => [
                             'content' => [
@@ -185,8 +183,6 @@ class RouteLoader extends AbstractRouteLoader
                  * }
                  */
                 #[ExpectedOperationSchema('showValuesForScalarTypes', [
-                    'summary' => '',
-                    'description' => '',
                     'responses' => [
                         200 => [
                             'content' => [
@@ -223,6 +219,186 @@ class RouteLoader extends AbstractRouteLoader
                         ],
                     ],
                 ])] function () {}
+            ),
+        );
+
+        // Closure routes without @return tags — body analysis via reflection
+        yield new Route(
+            uri: '/api/test/closure-body-analysis',
+            method: 'get',
+            closure: (
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
+                    'responses' => [
+                        200 => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'status' => [
+                                                'const' => 'ok',
+                                                'type' => 'string',
+                                            ],
+                                            'count' => [
+                                                'const' => 42,
+                                                'type' => 'integer',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'status',
+                                            'count',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'description' => '',
+                        ],
+                    ],
+                ])] function () {
+                    return [
+                        'status' => 'ok',
+                        'count' => 42,
+                    ];
+                }
+            ),
+        );
+
+        yield new Route(
+            uri: '/api/test/closure-body-with-variables',
+            method: 'get',
+            closure: (
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
+                    'responses' => [
+                        200 => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'name' => [
+                                                'const' => 'test',
+                                                'type' => 'string',
+                                            ],
+                                            'active' => [
+                                                'type' => 'boolean',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'name',
+                                            'active',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'description' => '',
+                        ],
+                    ],
+                ])] function () {
+                    $name = 'test';
+                    $active = true;
+
+                    return [
+                        'name' => $name,
+                        'active' => $active,
+                    ];
+                }
+            ),
+        );
+
+        yield new Route(
+            uri: '/api/test/closure-body-conditional',
+            method: 'get',
+            closure: (
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
+                    'responses' => [
+                        200 => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'result' => [
+                                                'enum' => [
+                                                    'yes',
+                                                    'no',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'result',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'description' => '',
+                        ],
+                    ],
+                ])] function () {
+                    if (rand(0, 1)) {
+                        return ['result' => 'yes'];
+                    }
+
+                    return ['result' => 'no'];
+                }
+            ),
+        );
+
+        yield new Route(
+            uri: '/api/test/closure-body-array-push',
+            method: 'get',
+            closure: (
+                #[ExpectedOperationSchema('showValuesForScalarTypes', [
+                    'responses' => [
+                        200 => [
+                            'content' => [
+                                'application/json' => [
+                                    'schema' => [
+                                        'type' => 'object',
+                                        'properties' => [
+                                            'items' => [
+                                                'type' => 'array',
+                                                'items' => [
+                                                    'type' => 'object',
+                                                    'properties' => [
+                                                        'id' => [
+                                                            'const' => 1,
+                                                            'type' => 'integer',
+                                                        ],
+                                                        'label' => [
+                                                            'const' => 'test',
+                                                            'type' => 'string',
+                                                        ],
+                                                    ],
+                                                    'required' => [
+                                                        'id',
+                                                        'label',
+                                                    ],
+                                                ],
+                                            ],
+                                            'total' => [
+                                                'type' => 'integer',
+                                            ],
+                                        ],
+                                        'required' => [
+                                            'items',
+                                            'total',
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'description' => '',
+                        ],
+                    ],
+                ])] function () {
+                    $items = [];
+                    $items[] = ['id' => 1, 'label' => 'test'];
+
+                    return [
+                        'items' => $items,
+                        'total' => count($items),
+                    ];
+                }
             ),
         );
     }

@@ -2,8 +2,9 @@
 
 namespace AutoDoc\Commands;
 
-use AutoDoc\Analyzer\ClassMethodNodeVisitor;
-use AutoDoc\Analyzer\NameResolver;
+use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\Ast\FunctionBodyVisitor;
+use AutoDoc\Analyzer\Ast\SymbolNameResolver;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
@@ -163,10 +164,11 @@ class ProcessAutoDocDebugTags
         }
 
         if ($scope->methodName) {
-            $methodNodeVisitor = new ClassMethodNodeVisitor(
-                methodName: $scope->methodName,
+            $methodNodeVisitor = new FunctionBodyVisitor(
                 scope: $scope,
                 analyzeReturnValue: false,
+                args: new ArgumentList($scope),
+                methodName: $scope->methodName,
             );
 
             $traverser = new NodeTraverser;
@@ -186,7 +188,7 @@ class ProcessAutoDocDebugTags
                 return $result;
             }
 
-            return $result->deepResolve();
+            return $result->deepResolve($scope->config);
         }
 
         return $result;
@@ -206,7 +208,7 @@ class ProcessAutoDocDebugTags
         $classMethodNodeVisitor = new class ($line) extends NodeVisitorAbstract
         {
             public function __construct(
-                private int $targetLine,
+                private readonly int $targetLine,
             ) {}
 
             public ?string $className = null;
@@ -253,12 +255,12 @@ class ProcessAutoDocDebugTags
 
         if ($classMethodNodeVisitor->className) {
             $traverser = new NodeTraverser;
-            $nameResolver = new NameResolver;
+            $symbolNameResolver = new SymbolNameResolver;
 
-            $traverser->addVisitor($nameResolver);
+            $traverser->addVisitor($symbolNameResolver);
             $traverser->traverse($ast);
 
-            $className = $nameResolver->getResolvedClassName($classMethodNodeVisitor->className);
+            $className = $symbolNameResolver->getResolvedClassName($classMethodNodeVisitor->className);
 
         } else {
             $className = null;

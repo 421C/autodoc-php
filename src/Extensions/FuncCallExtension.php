@@ -2,20 +2,17 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
-use PhpParser\Node\Expr\FuncCall;
 
 
 abstract class FuncCallExtension
 {
-    public function getReturnType(FuncCall $funcCall, Scope $scope): ?Type
+    public function getReturnType(FuncCallContext $context): ?Type
     {
         return null;
     }
 
-    public function getRequestType(FuncCall $funcCall, Scope $scope): ?Type
-    {
-        return null;
-    }
+    public function handleSideEffect(FuncCallContext $context): void {}
+
+    public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void {}
 }

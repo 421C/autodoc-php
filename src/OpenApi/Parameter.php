@@ -18,17 +18,13 @@ class Parameter implements JsonSerializable
          * @var 'path' | 'query' | 'header' | 'cookie'
          */
         public string $in,
+        public Config $config,
         public ?string $description = null,
         public ?bool $required = null,
         public ?bool $deprecated = null,
         public ?string $style = null,
         public ?bool $allowEmptyValue = null,
         public ?bool $allowReserved = null,
-
-        /**
-         * @var ?array<string, mixed>
-         */
-        public ?array $schema = null,
         public ?Type $type = null,
 
         /**
@@ -54,7 +50,7 @@ class Parameter implements JsonSerializable
             'style' => $this->style,
             'allowEmptyValue' => $this->allowEmptyValue ?: null,
             'allowReserved' => $this->allowReserved ?: null,
-            'schema' => $this->schema,
+            'schema' => $this->type?->toSchema($this->config),
             'content' => $this->content,
             'examples' => $this->examples,
             'example' => $this->example,
@@ -76,10 +72,10 @@ class Parameter implements JsonSerializable
         return new Parameter(
             name: $name,
             in: $in,
+            config: $config,
             description: $description,
             required: $type->required,
             deprecated: $deprecated,
-            schema: $type->toSchema($config),
             type: $type,
         );
     }

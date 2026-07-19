@@ -26,7 +26,7 @@ class ArrayType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         if ($this->shape) {
             return [
@@ -56,14 +56,7 @@ class ArrayType extends Type
         $this->itemType = $this->itemType?->unwrapType($config);
 
         $keyTypes = $this->keyType instanceof UnionType ? $this->keyType->types : array_filter([$this->keyType]);
-        $hasStringKeys = false;
-
-        foreach ($keyTypes as $keyType) {
-            if (! ($keyType instanceof IntegerType || $keyType instanceof NumberType)) {
-                $hasStringKeys = true;
-                break;
-            }
-        }
+        $hasStringKeys = array_any($keyTypes, fn ($keyType) => !$keyType instanceof IntegerType && !$keyType instanceof NumberType);
 
         if ($hasStringKeys) {
             return array_filter([
@@ -92,13 +85,13 @@ class ArrayType extends Type
     }
 
 
-    public function convertShapeToTypePair(?Config $config = null, bool $removePossibleItemValues = false): self
+    public function convertShapeToTypePair(Config $config, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
             $keyTypes = [];
             $itemTypes = [];
 
-            $showValuesForScalarTypes = $config?->data['openapi']['show_values_for_scalar_types'] ?? false;
+            $showValuesForScalarTypes = $config->data['openapi']['show_values_for_scalar_types'] ?? false;
 
             foreach ($this->shape as $key => $value) {
                 if (is_int($key)) {
@@ -111,8 +104,8 @@ class ArrayType extends Type
                 $itemTypes[] = $value->unwrapType($config);
             }
 
-            $this->keyType = (new UnionType($keyTypes))->unwrapType($config)->unwrapType($config);
-            $this->itemType = (new UnionType($itemTypes))->unwrapType($config)->unwrapType($config);
+            $this->keyType = new UnionType($keyTypes)->unwrapType($config);
+            $this->itemType = new UnionType($itemTypes)->unwrapType($config);
             $this->shape = [];
         }
 
@@ -146,22 +139,31 @@ class ArrayType extends Type
     }
 
 
-    public function addItemToArray(int|string|null $key, Type $itemType, ?Config $config = null): self
+    public function addItemToArray(int|string|null $key, Type $itemType, Config $config): self
     {
         if ($key === null || is_int($key)) {
+            if ($key !== null && $this->shape !== [] && array_any(array_keys($this->shape), fn ($shapeKey) => is_string($shapeKey))) {
+                $this->shape[$key] = $itemType;
+
+                return $this;
+            }
+
             $this->convertShapeToTypePair($config);
-            $this->keyType = (new UnionType(array_values(array_filter([$this->keyType, new IntegerType]))))->unwrapType($config);
+            $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new IntegerType])))->unwrapType($config);
 
             if ($this->itemType === null) {
                 $this->itemType = $itemType;
+
+            } else {
+                $this->itemType = new UnionType([$this->itemType, $itemType])->unwrapType($config);
             }
 
         } else if ($this->shape || $this->itemType === null) {
             $this->shape[$key] = $itemType;
 
         } else {
-            $this->keyType = (new UnionType(array_values(array_filter([$this->keyType, new StringType]))))->unwrapType($config);
-            $this->itemType = (new UnionType([$this->itemType, $itemType]))->unwrapType($config);
+            $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new StringType])))->unwrapType($config);
+            $this->itemType = new UnionType([$this->itemType, $itemType])->unwrapType($config);
         }
 
         return $this;

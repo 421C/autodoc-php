@@ -4,7 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Config;
 
-class NumberType extends Type
+class NumberType extends ScalarType
 {
     public function __construct(
         /**
@@ -31,7 +31,14 @@ class NumberType extends Type
     }
 
 
-    public function toSchema(?Config $config = null): array
+    public function setPossibleValues(array $values): void
+    {
+        /** @var list<int|float> $values */
+        $this->value = count($values) === 1 ? $values[0] : $values;
+    }
+
+
+    public function toSchema(Config $config): array
     {
         $schema = array_filter([
             'type' => 'number',
@@ -49,18 +56,7 @@ class NumberType extends Type
             $schema['maximum'] = $this->maximum;
         }
 
-        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
-            $possibleValues = $this->getPossibleValues();
-
-            if ($possibleValues) {
-                if (count($possibleValues) === 1) {
-                    $schema['const'] = $possibleValues[0];
-
-                } else {
-                    $schema['enum'] = $possibleValues;
-                }
-            }
-        }
+        $schema = $this->withScalarValues($schema, $config);
 
         if ($this->isString) {
             // OpenApi 3.1.0 string type does not support `minimum` and `maximum` properties,

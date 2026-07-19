@@ -2,7 +2,11 @@
 
 namespace AutoDoc\Analyzer;
 
-use AutoDoc\Analyzer\Traits\StoresVariables;
+use AutoDoc\Analyzer\Ast\ArrayTypeResolver;
+use AutoDoc\Analyzer\Ast\PipeTypeResolver;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\Flow\BranchBreakout;
+use AutoDoc\Analyzer\Flow\VariableStore;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
@@ -10,6 +14,8 @@ use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\IntersectionType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
@@ -18,19 +24,22 @@ use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
+use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
-use AutoDoc\ExtensionHandler;
+use AutoDoc\Extensions\ExtensionDispatcher;
+use AutoDoc\Extensions\FuncCallContext;
+use AutoDoc\Extensions\MethodCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\Route;
 use PhpParser\Comment;
 use PhpParser\Node;
+use ReflectionFunction;
 use Throwable;
 use WeakMap;
 
 class Scope
 {
-    use StoresVariables;
-
     public function __construct(
         public Config $config,
         public int $depth = 0,
@@ -46,42 +55,38 @@ class Scope
          * @var array<string, ?Type>
          */
         public array $constructorTemplateTypes = [],
-
-        /**
-         * @var array<PhpFunctionArgument>
-         */
-        public array $constructorArgs = [],
-
-        /**
-         * @var array<string, PhpVariable>
-         */
-        public array $variables = [],
     ) {
-        $this->objectsHandlingRequestBody = new WeakMap;
-        $this->resolvedVariables = new WeakMap;
+        $this->constructorArgs = new ArgumentList($this);
+        $this->variables = new VariableStore($this);
+        $this->extensions = new ExtensionDispatcher($this);
         $this->nodesBeingResolved = new WeakMap;
     }
+
+    public ArgumentList $constructorArgs;
+
+    public readonly VariableStore $variables;
+
+    public readonly ExtensionDispatcher $extensions;
 
 
     public ?Node $callerNode = null;
 
     /**
      * @internal
-     * @var WeakMap<object, true>
-     */
-    public WeakMap $objectsHandlingRequestBody;
-
-    /**
-     * @internal
-     * @var WeakMap<PhpVariable, array<int, Type>>
-     */
-    public WeakMap $resolvedVariables;
-
-    /**
-     * @internal
      * @var WeakMap<Node, true>
      */
     public WeakMap $nodesBeingResolved;
+
+    private ?BranchBreakout $branchBreakout = null;
+
+    /**
+     * Shared per scope so the body-entry breakout scan and every condition's
+     * exit check reuse one per-statement cache.
+     */
+    public function getBranchBreakout(): BranchBreakout
+    {
+        return $this->branchBreakout ??= new BranchBreakout($this);
+    }
 
     public function resolveType(Node $node, ?string $variableName = null, bool $isFinalResponse = false): Type
     {
@@ -137,33 +142,52 @@ class Scope
                     'callable' => new CallableType,
                     'null' => new NullType,
                     'void' => new VoidType,
+                    'never' => new NeverType,
                     default => new UnknownType,
                 };
             }
 
+            if ($node instanceof Node\NullableType) {
+                return new UnionType([
+                    $this->resolveType($node->type),
+                    new NullType,
+                ])->unwrapType($this->config);
+            }
+
+            if ($node instanceof Node\UnionType) {
+                return new UnionType(
+                    array_map($this->resolveType(...), $node->types),
+                )->unwrapType($this->config);
+            }
+
+            if ($node instanceof Node\IntersectionType) {
+                return new IntersectionType(
+                    array_map($this->resolveType(...), $node->types),
+                )->unwrapType($this->config);
+            }
+
             if ($node instanceof Node\Expr\Variable) {
-                return $this->getVariableType($node)?->unwrapType($this->config) ?? new UnknownType;
+                return $this->variables->getType($node)?->unwrapType($this->config) ?? new UnknownType;
             }
 
             if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {
-                if ($node instanceof Node\Expr\MethodCall) {
-                    $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new MethodCallContext(node: $node, scope: $this);
 
-                    if ($returnType !== null) {
-                        return $returnType->unwrapType($this->config);
-                    }
+                $this->extensions->runSideEffectExtensions($context);
+
+                $returnType = $this->extensions->getReturnTypeFromMethodCallExtensions($context);
+
+                if ($returnType !== null) {
+                    return $returnType->unwrapType($this->config);
                 }
 
-                $methodName = (string) $this->getRawValueFromNode($node->name);
-                $varType = $this->resolveType($node->var);
+                $varType = $context->getVarType();
 
-                $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($methodName, $node) {
+                $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($context) {
                     if (isset($varType->className)) {
-                        $className = $varType->className;
-
-                        $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
-                            name: $methodName,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
+                        $phpClassMethod = $this->getPhpClassInDeeperScope($varType->className)->getMethod(
+                            name: $context->methodName,
+                            args: $context->argTypes,
                         );
 
                         return $phpClassMethod->getReturnType()->unwrapType($this->config);
@@ -191,34 +215,36 @@ class Scope
                         }
                     }
 
-                    return (new UnionType($returnTypes))->unwrapType($this->config);
+                    return new UnionType($returnTypes)->unwrapType($this->config);
                 }
 
                 return new UnknownType;
             }
 
             if ($node instanceof Node\Expr\FuncCall) {
-                $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new FuncCallContext(node: $node, scope: $this);
+
+                $this->extensions->runSideEffectExtensions($context);
+
+                $returnType = $this->extensions->getReturnTypeFromFuncCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
                 }
 
-                if ($node->name instanceof Node\Name) {
+                if ($context->functionName !== null) {
                     try {
-                        $phpFunction = new PhpFunction(
-                            nameOrReflection: $node->name->name,
+                        $phpCallable = new PhpCallable(
                             scope: $this,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
+                            reflection: new ReflectionFunction($context->functionName),
+                            args: $context->argTypes,
                         );
 
-                        $phpDocReturnType = $phpFunction->getTypeFromPhpDocReturnTag()?->resolve();
-
-                        return $phpFunction->getReturnType(phpDocType: $phpDocReturnType)->unwrapType($this->config);
+                        return $phpCallable->getReturnType()->unwrapType($this->config);
 
                     } catch (Throwable $exception) {
                         if ($this->isDebugModeEnabled()) {
-                            throw new AutoDocException('Error resolving function "' . $node->name->name . '": ', $exception);
+                            throw new AutoDocException('Error resolving function "' . $context->functionName . '": ', $exception);
                         }
                     }
 
@@ -226,36 +252,36 @@ class Scope
                     $functionNodeType = $this->resolveType($node->name);
 
                     if ($functionNodeType instanceof CallableType) {
-                        return $functionNodeType->getReturnType(PhpFunctionArgument::list($node->args, scope: $this), $node);
+                        return $functionNodeType->getReturnType($context->argTypes, $node);
                     }
                 }
             }
 
             if ($node instanceof Node\Expr\StaticCall) {
-                $returnType = $this->getReturnTypeFromExtensions($node);
+                $context = new StaticCallContext(node: $node, scope: $this);
+
+                $this->extensions->runSideEffectExtensions($context);
+
+                $returnType = $this->extensions->getReturnTypeFromStaticCallExtensions($context);
 
                 if ($returnType !== null) {
                     return $returnType->unwrapType($this->config);
                 }
 
-                if ($node->class instanceof Node\Name && $node->name instanceof Node\Identifier) {
-                    $className = $this->getResolvedClassName($node->class);
+                if ($context->className && $node->name instanceof Node\Identifier) {
+                    $phpClassMethod = $this->getPhpClassInDeeperScope($context->className)->getMethod(
+                        name: $context->methodName,
+                        args: $context->argTypes,
+                    );
 
-                    if ($className) {
-                        $phpClassMethod = $this->getPhpClassInDeeperScope($className)->getMethod(
-                            name: $node->name->name,
-                            args: PhpFunctionArgument::list($node->args, scope: $this),
-                        );
-
-                        return $phpClassMethod->getReturnType()->unwrapType($this->config);
-                    }
+                    return $phpClassMethod->getReturnType()->unwrapType($this->config);
                 }
 
                 return new UnknownType;
             }
 
             if ($node instanceof Node\Expr\Array_) {
-                return (new PhpArray(scope: $this, node: $node))->resolveType();
+                return new ArrayTypeResolver(scope: $this, node: $node)->resolveType();
             }
 
             if ($node instanceof Node\ArrayItem || $node instanceof Node\Arg) {
@@ -268,7 +294,7 @@ class Scope
                 $getPropertyType = function (ObjectType $varType, string $propertyName) use ($node) {
                     if ($varType->className) {
                         $varClass = $this->getPhpClass($varType->className);
-                        $propertyType = $this->getPropertyTypeFromExtensions($varClass, $propertyName);
+                        $propertyType = $this->extensions->getPropertyTypeFromExtensions($varClass, $propertyName);
 
                         if ($propertyType) {
                             return $propertyType->unwrapType($this->config);
@@ -293,7 +319,7 @@ class Scope
 
                             if ($mixinTag) {
                                 $mixinClass = $this->getPhpClassInDeeperScope($mixinTag->className);
-                                $propertyType = $this->getPropertyTypeFromExtensions($mixinClass, $propertyName);
+                                $propertyType = $this->extensions->getPropertyTypeFromExtensions($mixinClass, $propertyName);
 
                                 if ($propertyType) {
                                     return $propertyType->unwrapType($this->config);
@@ -333,57 +359,22 @@ class Scope
                         }
                     }
 
-                    return (new UnionType($types))->unwrapType($this->config);
+                    return new UnionType($types)->unwrapType($this->config);
                 }
 
                 return new UnknownType;
             }
 
             if ($node instanceof Node\Expr\ArrayDimFetch && $node->dim) {
-                $varType = $this->resolveType($node->var);
-                $key = $this->getRawValueFromNode($node->dim);
-                $key = is_int($key) ? $key : (string) $key;
-
-                $getArrayItemType = function ($varType) use ($key) {
-                    $type = null;
-
-                    if ($varType instanceof ArrayType) {
-                        $type = $varType->shape[$key]
-                            ?? $varType->itemType
-                            ?? null;
-
-                    } else if ($varType instanceof ObjectType) {
-                        $displayType = $varType->typeToDisplay;
-
-                        if ($displayType instanceof ArrayType) {
-                            $type = $displayType->shape[$key]
-                                ?? $displayType->itemType
-                                ?? null;
-
-                        } else if ($displayType instanceof ObjectType) {
-                            $type = $displayType->properties[$key] ?? null;
-                        }
-                    }
-
-                    return $type?->unwrapType($this->config) ?? new UnknownType;
-                };
-
-                if ($varType instanceof UnionType) {
-                    /** @var list<Type> $types */
-                    $types = [];
-
-                    foreach ($varType->types as $type) {
-                        $types[] = $getArrayItemType($type);
-                    }
-
-                    return (new UnionType($types))->unwrapType($this->config);
-                }
-
-                return $getArrayItemType($varType);
+                return $this->resolveArrayDimFetchChain($node);
             }
 
             if ($node instanceof Node\Scalar\String_) {
                 return new StringType($node->value);
+            }
+
+            if ($node instanceof Node\Scalar\InterpolatedString) {
+                return new StringType;
             }
 
             if ($node instanceof Node\Scalar\Int_) {
@@ -394,30 +385,86 @@ class Scope
                 return new FloatType($node->value);
             }
 
+            // The negated literal is recomputed onto a fresh type so the operand
+            // is never mutated in place, and any description/examples it carried
+            // (which describe the original value) are dropped.
             if ($node instanceof Node\Expr\UnaryMinus) {
+                $numberType = $this->resolveType($node->expr);
+
+                if ($numberType instanceof IntegerType && is_int($numberType->value)) {
+                    return new IntegerType(-$numberType->value);
+                }
+
+                if ($numberType instanceof FloatType && is_float($numberType->value)) {
+                    return new FloatType(-$numberType->value);
+                }
+
+                if ($numberType instanceof NumberType
+                    && (is_int($numberType->value) || is_float($numberType->value))
+                ) {
+                    return new NumberType(-$numberType->value);
+                }
+
+                return new NumberType;
+            }
+
+            if ($node instanceof Node\Expr\UnaryPlus) {
                 $numberType = $this->resolveType($node->expr);
 
                 if ($numberType instanceof IntegerType
                     || $numberType instanceof NumberType
                     || $numberType instanceof FloatType
                 ) {
-                    if (! is_array($numberType->value)
-                        && ! is_null($numberType->value)
-                    ) {
-                        $numberType->value = -$numberType->value;
+                    return $numberType;
+                }
 
-                        return $numberType;
-                    }
+                return new NumberType;
+            }
+
+            // Inc/dec change the operand, so the literal value is dropped, but the
+            // numeric kind (int stays int, float stays float) is preserved.
+            if ($node instanceof Node\Expr\PreInc
+                || $node instanceof Node\Expr\PostInc
+                || $node instanceof Node\Expr\PreDec
+                || $node instanceof Node\Expr\PostDec
+            ) {
+                $numberType = $this->resolveType($node->var);
+
+                if ($numberType instanceof IntegerType) {
+                    return new IntegerType;
+                }
+
+                if ($numberType instanceof FloatType) {
+                    return new FloatType;
                 }
 
                 return new NumberType;
             }
 
             if ($node instanceof Node\Expr\Ternary) {
+                // Short ternary (`$a ?: $b`) yields the left operand only when it is truthy,
+                // so null can't leak through it.
+                if ($node->if === null) {
+                    return new UnionType([
+                        $this->resolveType($node->cond)->removeNull($this->config),
+                        $this->resolveType($node->else),
+                    ]);
+                }
+
                 return new UnionType([
-                    $this->resolveType($node->if ?? $node->cond),
+                    $this->resolveType($node->if),
                     $this->resolveType($node->else),
                 ]);
+            }
+
+            if ($node instanceof Node\Expr\Match_) {
+                $armTypes = [];
+
+                foreach ($node->arms as $arm) {
+                    $armTypes[] = $this->resolveType($arm->body);
+                }
+
+                return new UnionType($armTypes)->unwrapType($this->config);
             }
 
             if ($node instanceof Node\Expr\ConstFetch) {
@@ -429,6 +476,12 @@ class Scope
 
                 if ($keyword === 'true' || $keyword === 'false') {
                     return new BoolType($keyword === 'true');
+                }
+
+                $constantName = $this->getResolvedConstantName($node->name);
+
+                if (defined($constantName)) {
+                    return Type::fromValue(constant($constantName));
                 }
             }
 
@@ -469,16 +522,13 @@ class Scope
                 $phpClass = $this->getPhpClassInDeeperScope($className);
 
                 $phpClass->isFinalResponse = $isFinalResponse;
-                $phpClass->scope->constructorArgs = PhpFunctionArgument::list($node->args, scope: $this);
+                $phpClass->scope->constructorArgs = ArgumentList::fromArgNodes($node->args, $this);
 
                 $templateTypes = $phpClass->getPhpDoc()?->getTemplateTypes();
 
                 if ($templateTypes) {
-                    $constructor = $phpClass->getMethod('__construct', $phpClass->scope->constructorArgs)->getPhpFunction();
-
-                    if ($constructor) {
-                        $phpClass->scope->constructorTemplateTypes = $constructor->fillTemplateTypesFromParameters();
-                    }
+                    $constructor = $phpClass->getMethod('__construct', $phpClass->scope->constructorArgs);
+                    $phpClass->scope->constructorTemplateTypes = $constructor->fillTemplateTypesFromParameters();
                 }
 
                 return $phpClass->resolveType();
@@ -489,6 +539,10 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Cast\Bool_) {
+                return new BoolType;
+            }
+
+            if ($node instanceof Node\Expr\BooleanNot) {
                 return new BoolType;
             }
 
@@ -505,7 +559,7 @@ class Scope
             }
 
             if ($node instanceof Node\Expr\Cast\Object_) {
-                if ($node->expr instanceof Node\Expr\Array_) {
+                if ($node->expr instanceof Node\Expr\Array_ && $node->expr->items) {
                     return new ObjectType(typeToDisplay: new UnresolvedParserNodeType($node->expr, $this));
                 }
 
@@ -544,17 +598,85 @@ class Scope
                 return new NumberType;
             }
 
+            if ($node instanceof Node\Expr\BinaryOp\Equal
+                || $node instanceof Node\Expr\BinaryOp\NotEqual
+                || $node instanceof Node\Expr\BinaryOp\Identical
+                || $node instanceof Node\Expr\BinaryOp\NotIdentical
+                || $node instanceof Node\Expr\BinaryOp\Greater
+                || $node instanceof Node\Expr\BinaryOp\GreaterOrEqual
+                || $node instanceof Node\Expr\BinaryOp\Smaller
+                || $node instanceof Node\Expr\BinaryOp\SmallerOrEqual
+                || $node instanceof Node\Expr\BinaryOp\BooleanAnd
+                || $node instanceof Node\Expr\BinaryOp\BooleanOr
+                || $node instanceof Node\Expr\BinaryOp\LogicalAnd
+                || $node instanceof Node\Expr\BinaryOp\LogicalOr
+                || $node instanceof Node\Expr\BinaryOp\LogicalXor
+                || $node instanceof Node\Expr\Instanceof_
+                || $node instanceof Node\Expr\Isset_
+                || $node instanceof Node\Expr\Empty_
+            ) {
+                return new BoolType;
+            }
+
+            if ($node instanceof Node\Expr\BinaryOp\Spaceship
+                || $node instanceof Node\Expr\BinaryOp\BitwiseAnd
+                || $node instanceof Node\Expr\BinaryOp\BitwiseOr
+                || $node instanceof Node\Expr\BinaryOp\BitwiseXor
+                || $node instanceof Node\Expr\BinaryOp\ShiftLeft
+                || $node instanceof Node\Expr\BinaryOp\ShiftRight
+            ) {
+                return new IntegerType;
+            }
+
+            if ($node instanceof Node\Expr\Assign
+                || $node instanceof Node\Expr\ErrorSuppress
+                || $node instanceof Node\Expr\Clone_
+            ) {
+                return $this->resolveType($node->expr);
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\Concat) {
+                return new StringType;
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\Plus
+                || $node instanceof Node\Expr\AssignOp\Minus
+                || $node instanceof Node\Expr\AssignOp\Mul
+                || $node instanceof Node\Expr\AssignOp\Div
+                || $node instanceof Node\Expr\AssignOp\Mod
+                || $node instanceof Node\Expr\AssignOp\Pow
+            ) {
+                return new NumberType;
+            }
+
+            if ($node instanceof Node\Expr\AssignOp\BitwiseAnd
+                || $node instanceof Node\Expr\AssignOp\BitwiseOr
+                || $node instanceof Node\Expr\AssignOp\BitwiseXor
+                || $node instanceof Node\Expr\AssignOp\ShiftLeft
+                || $node instanceof Node\Expr\AssignOp\ShiftRight
+            ) {
+                return new IntegerType;
+            }
+
+            // `$x ??= y` keeps the existing non-null value of `$x`, else `y`.
+            if ($node instanceof Node\Expr\AssignOp\Coalesce) {
+                return new UnionType([
+                    $this->resolveType($node->var)->removeNull($this->config),
+                    $this->resolveType($node->expr),
+                ]);
+            }
+
             if ($node instanceof Node\Expr\BinaryOp\Pipe) {
-                return (new PhpPipeOperator($node, $this))->resolveType();
+                return new PipeTypeResolver($node, $this)->resolveType();
             }
 
             if ($node instanceof Node\Expr\ArrowFunction
                 || $node instanceof Node\Expr\Closure
             ) {
                 return new CallableType(
-                    anonymousFunction: new PhpAnonymousFunction(
-                        node: $node,
+                    phpCallable: new PhpCallable(
                         scope: $this,
+                        node: $node,
                     ),
                 );
             }
@@ -564,6 +686,144 @@ class Scope
         } finally {
             unset($this->nodesBeingResolved[$node]);
         }
+    }
+
+
+    private function resolveArrayDimFetchChain(Node\Expr\ArrayDimFetch $node): Type
+    {
+        $exactType = $this->resolveExactAccessChain($node);
+
+        if ($exactType !== null) {
+            return $exactType;
+        }
+
+        $rawKeys = [];
+        $chainNode = $node;
+
+        while ($chainNode instanceof Node\Expr\ArrayDimFetch && $chainNode->dim) {
+            $rawKeys[] = $this->getRawValueFromNode($chainNode->dim);
+            $chainNode = $chainNode->var;
+        }
+
+        $rawKeys = array_reverse($rawKeys);
+        $readPath = [];
+
+        foreach ($rawKeys as $rawKey) {
+            if (is_int($rawKey) || is_string($rawKey)) {
+                $readPath[] = $this->normalizeArrayKey($rawKey);
+
+            } else {
+                break;
+            }
+        }
+
+        if ($chainNode instanceof Node\Expr\Variable) {
+            $unresolvedVarType = $this->variables->getType($chainNode);
+
+            $varType = $unresolvedVarType instanceof UnresolvedVariableType
+                ? $unresolvedVarType->resolve($readPath)
+                : $unresolvedVarType?->unwrapType($this->config) ?? new UnknownType;
+
+        } else {
+            $varType = $this->resolveType($chainNode);
+        }
+
+        foreach ($rawKeys as $rawKey) {
+            $varType = $this->getTypeAtKey($varType, is_int($rawKey) ? $rawKey : (string) $rawKey);
+        }
+
+        return $varType;
+    }
+
+
+    private function resolveExactAccessChain(Node\Expr\ArrayDimFetch $node): ?Type
+    {
+        $keys = [];
+        $chainNode = $node;
+
+        while ($chainNode instanceof Node\Expr\ArrayDimFetch || $chainNode instanceof Node\Expr\PropertyFetch) {
+            if ($chainNode instanceof Node\Expr\ArrayDimFetch) {
+                if ($chainNode->dim === null) {
+                    return null;
+                }
+
+                $rawKey = $this->getRawValueFromNode($chainNode->dim);
+
+            } else {
+                $rawKey = $this->getRawValueFromNode($chainNode->name);
+            }
+
+            if (! is_int($rawKey) && ! is_string($rawKey)) {
+                return null;
+            }
+
+            $keys[] = $this->normalizeArrayKey($rawKey);
+            $chainNode = $chainNode->var;
+        }
+
+        if (! $chainNode instanceof Node\Expr\Variable) {
+            return null;
+        }
+
+        $unresolvedVarType = $this->variables->getType($chainNode);
+
+        if (! $unresolvedVarType instanceof UnresolvedVariableType) {
+            return null;
+        }
+
+        $keys = array_reverse($keys);
+
+        $type = $unresolvedVarType->resolve($keys);
+
+        foreach ($keys as $key) {
+            $type = $this->getTypeAtKey($type, $key);
+        }
+
+        return $type instanceof UnknownType ? null : $type;
+    }
+
+
+    public function getTypeAtKey(Type $type, int|string $key): Type
+    {
+        if ($type instanceof ObjectType && $type->typeToDisplay) {
+            $type = $type->typeToDisplay;
+        }
+
+        if ($type instanceof UnionType) {
+            return new UnionType(
+                array_map(fn (Type $memberType): Type => $this->getTypeAtKey($memberType, $key), $type->types),
+            )->unwrapType($this->config);
+        }
+
+        if ($type instanceof ArrayType) {
+            return ($type->shape[$key] ?? $type->itemType)?->unwrapType($this->config) ?? new UnknownType;
+        }
+
+        if ($type instanceof ObjectType) {
+            return $this->getObjectPropertyType($type, $key) ?? new UnknownType;
+        }
+
+        return new UnknownType;
+    }
+
+
+    /**
+     * Fall back to class metadata when `max_depth` leaves properties
+     * unmaterialized, or nested mutations would be lost.
+     */
+    public function getObjectPropertyType(ObjectType $objectType, int|string $key): ?Type
+    {
+        $keyString = (string) $key;
+
+        if (isset($objectType->properties[$keyString])) {
+            return $objectType->properties[$keyString]->unwrapType($this->config);
+        }
+
+        if ($objectType->className !== null) {
+            return $this->getPhpClass($objectType->className)->getProperty($keyString)?->unwrapType($this->config);
+        }
+
+        return null;
     }
 
 
@@ -582,12 +842,13 @@ class Scope
         $this->config->data['openapi']['show_values_for_scalar_types'] = true;
         $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = false;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
-        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
-
-        return $returnValue;
+        } finally {
+            $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+            $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+        }
     }
 
 
@@ -606,12 +867,13 @@ class Scope
         $this->config->data['openapi']['show_values_for_scalar_types'] = false;
         $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
-        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
-
-        return $returnValue;
+        } finally {
+            $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+            $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+        }
     }
 
 
@@ -626,11 +888,12 @@ class Scope
 
         $this->config->data['arrays']['resolve_partial_shapes'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['resolve_partial_shapes'] = $initialValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['arrays']['resolve_partial_shapes'] = $initialValue;
+        }
     }
 
 
@@ -645,11 +908,12 @@ class Scope
 
         $this->config->data['arrays']['deep_shape_inference'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['deep_shape_inference'] = $initialValue;
-
-        return $returnValue;
+        } finally {
+            $this->config->data['arrays']['deep_shape_inference'] = $initialValue;
+        }
     }
 
 
@@ -666,12 +930,57 @@ class Scope
         $this->config->data['arrays']['merge_shapes_in_type_unions'] = true;
         $this->config->data['objects']['merge_shapes_in_type_unions'] = true;
 
-        $returnValue = $callback();
+        try {
+            return $callback();
 
-        $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialArrayValue;
-        $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
+        } finally {
+            $this->config->data['arrays']['merge_shapes_in_type_unions'] = $initialArrayValue;
+            $this->config->data['objects']['merge_shapes_in_type_unions'] = $initialObjectValue;
+        }
+    }
 
-        return $returnValue;
+
+    /**
+     * Run $callback using validation semantics for scalar intersections, so
+     * `string&number` narrows to numeric-string instead of `never`.
+     *
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withCoerciveScalarOverlap(callable $callback): mixed
+    {
+        $initialValue = $this->config->data['intersections']['coercive_scalar_overlap'] ?? false;
+
+        $this->config->data['intersections']['coercive_scalar_overlap'] = true;
+
+        try {
+            return $callback();
+
+        } finally {
+            $this->config->data['intersections']['coercive_scalar_overlap'] = $initialValue;
+        }
+    }
+
+
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
+    public function withoutSideEffects(callable $callback): mixed
+    {
+        return $this->extensions->withoutSideEffects($callback);
+    }
+
+
+    public function normalizeArrayKey(int|string $key): int|string
+    {
+        if (is_string($key) && (string) (int) $key === $key) {
+            return (int) $key;
+        }
+
+        return $key;
     }
 
 
@@ -689,7 +998,7 @@ class Scope
         }
 
         if ($node instanceof Node\Expr\Variable) {
-            $varType = $this->getVariableType($node)?->unwrapType($this->config);
+            $varType = $this->variables->getType($node)?->unwrapType($this->config);
 
             if ($varType instanceof StringType
                 || $varType instanceof IntegerType
@@ -737,9 +1046,53 @@ class Scope
             return null;
         }
 
-        $nameResolver = $this->getCurrentPhpClass()?->getNameResolver();
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
 
-        return $nameResolver?->getResolvedClassName($name);
+        return $symbolNameResolver?->getResolvedClassName($name);
+    }
+
+
+    public function getResolvedFunctionName(Node\Name $name): string
+    {
+        if ($name instanceof Node\Name\FullyQualified) {
+            return PhpClass::removeLeadingBackslash($name->name);
+        }
+
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
+
+        if ($symbolNameResolver) {
+            return $symbolNameResolver->getResolvedFunctionName($name->name);
+        }
+
+        $namespacedName = $name->getAttribute('namespacedName');
+
+        if ($namespacedName instanceof Node\Name && function_exists($namespacedName->name)) {
+            return $namespacedName->name;
+        }
+
+        return $name->name;
+    }
+
+
+    public function getResolvedConstantName(Node\Name $name): string
+    {
+        if ($name instanceof Node\Name\FullyQualified) {
+            return PhpClass::removeLeadingBackslash($name->name);
+        }
+
+        $symbolNameResolver = $this->getCurrentPhpClass()?->getSymbolNameResolver();
+
+        if ($symbolNameResolver) {
+            return $symbolNameResolver->getResolvedConstantName($name->name);
+        }
+
+        $namespacedName = $name->getAttribute('namespacedName');
+
+        if ($namespacedName instanceof Node\Name && defined($namespacedName->name)) {
+            return $namespacedName->name;
+        }
+
+        return $name->name;
     }
 
 
@@ -818,36 +1171,6 @@ class Scope
         }
 
         return $this->getPhpClass($this->className);
-    }
-
-
-    public function handleThrowExtensions(Node\Expr $expr): ?Type
-    {
-        return (new ExtensionHandler($this))->handleThrowExtensions($expr);
-    }
-
-    /**
-     * @param Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass<object> $classOrExpr
-     */
-    public function handleExpectedRequestTypeFromExtensions(Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass $classOrExpr): void
-    {
-        (new ExtensionHandler($this))->handleTypeExtensions($classOrExpr, getReturnType: false);
-    }
-
-    /**
-     * @param Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass<object> $classOrExpr
-     */
-    public function getReturnTypeFromExtensions(Node\Expr\MethodCall|Node\Expr\FuncCall|Node\Expr\StaticCall|PhpClass $classOrExpr): ?Type
-    {
-        return (new ExtensionHandler($this))->handleTypeExtensions($classOrExpr);
-    }
-
-    /**
-     * @param PhpClass<object> $phpClass
-     */
-    public function getPropertyTypeFromExtensions(PhpClass $phpClass, string $propertyName): ?Type
-    {
-        return (new ExtensionHandler($this))->handlePropertyTypeExtensions($phpClass, $propertyName);
     }
 
 

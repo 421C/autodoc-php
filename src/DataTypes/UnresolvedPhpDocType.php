@@ -2,7 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 
@@ -34,10 +34,6 @@ class UnresolvedPhpDocType extends UnresolvedType
         $resolvedType->addDescription($this->description);
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
-
-        if ($resolvedType instanceof ObjectType && $resolvedType->typeToDisplay) {
-            $resolvedType->typeToDisplay->addDescription($this->description);
-        }
 
         return $resolvedType;
     }

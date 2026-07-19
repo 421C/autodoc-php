@@ -4,7 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Config;
 
-class StringType extends Type
+class StringType extends ScalarType
 {
     public function __construct(
         /**
@@ -24,7 +24,7 @@ class StringType extends Type
      */
     public function getPossibleValues(): ?array
     {
-        if (! isset($this->value)) {
+        if ($this->value === null) {
             return null;
         }
 
@@ -32,7 +32,14 @@ class StringType extends Type
     }
 
 
-    public function toSchema(?Config $config = null): array
+    public function setPossibleValues(array $values): void
+    {
+        /** @var list<string> $values */
+        $this->value = count($values) === 1 ? $values[0] : $values;
+    }
+
+
+    public function toSchema(Config $config): array
     {
         $schema = array_filter([
             'type' => 'string',
@@ -46,19 +53,6 @@ class StringType extends Type
             'x-deprecated-description' => $this->deprecatedDescription,
         ]);
 
-        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
-            $possibleValues = $this->getPossibleValues();
-
-            if ($possibleValues) {
-                if (count($possibleValues) === 1) {
-                    $schema['const'] = $possibleValues[0];
-
-                } else {
-                    $schema['enum'] = $possibleValues;
-                }
-            }
-        }
-
-        return $schema;
+        return $this->withScalarValues($schema, $config);
     }
 }

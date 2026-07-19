@@ -2,12 +2,13 @@
 
 namespace AutoDoc;
 
-use AutoDoc\Analyzer\PhpClosure;
+use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Path;
 use Exception;
+use ReflectionFunction;
 use Throwable;
 
 
@@ -52,11 +53,6 @@ abstract class AbstractRouteLoader
             $operation = $this->routeToOperation($route);
 
             if ($operation) {
-                if ($this->config->data['openapi']['show_routes_as_titles'] ?? false) {
-                    $operation->description = trim($operation->summary . PHP_EOL . PHP_EOL . $operation->description);
-                    $operation->summary = trim($route->uri, '/');
-                }
-
                 $paths[$route->uri] ??= new Path;
 
                 $paths[$route->uri]->operations[$route->method] = $operation;
@@ -99,9 +95,12 @@ abstract class AbstractRouteLoader
                     route: $route,
                 );
 
-                $phpClosure = new PhpClosure($route->closure, $scope);
+                $phpCallable = new PhpCallable(
+                    scope: $scope,
+                    reflection: new ReflectionFunction($route->closure),
+                );
 
-                $operation = $phpClosure->toOperation();
+                $operation = $phpCallable->toOperation();
             }
 
         } catch (Throwable $exception) {
@@ -114,7 +113,7 @@ abstract class AbstractRouteLoader
             return null;
         }
 
-        return (new ExtensionHandler($scope))->handleOperationExtensions($operation, $route, $scope);
+        return $scope->extensions->handleOperationExtensions($operation, $route);
     }
 
 

@@ -2,20 +2,17 @@
 
 namespace AutoDoc\Extensions;
 
-use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
-use PhpParser\Node\Expr\StaticCall;
 
 
 abstract class StaticCallExtension
 {
-    public function getReturnType(StaticCall $methodCall, Scope $scope): ?Type
+    public function getReturnType(StaticCallContext $context): ?Type
     {
         return null;
     }
 
-    public function getRequestType(StaticCall $methodCall, Scope $scope): ?Type
-    {
-        return null;
-    }
+    public function handleSideEffect(StaticCallContext $context): void {}
+
+    public function narrowTypeFromCondition(StaticCallContext $context, bool $negated): void {}
 }

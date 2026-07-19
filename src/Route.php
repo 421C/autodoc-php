@@ -2,8 +2,9 @@
 
 namespace AutoDoc;
 
+use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\Type;
-use AutoDoc\DataTypes\UnionType;
 use Closure;
 
 class Route
@@ -67,15 +68,18 @@ class Route
         $this->requestBodyTypes[] = $type;
     }
 
-    public function getRequestBodyType(?Config $config = null): ?Type
+    public function getRequestBodyType(Scope $scope): ?Type
     {
-        $unwrappedType = (new UnionType($this->requestBodyTypes))->unwrapType($config);
+        // Recorded bodies are conjunctive validation rules, so combine them as an
+        // intersection under coercive scalar semantics (e.g. `string` + `numeric`
+        // is a numeric string).
+        return $scope->withShapeMerging(fn () => $scope->withCoerciveScalarOverlap(function () use ($scope): Type {
+            $config = $scope->config;
 
-        if ($unwrappedType instanceof UnionType) {
-            return $unwrappedType->mergeObjectsAndArrayShapes($config)->unwrapType($config);
-        }
-
-        return $unwrappedType;
+            return new IntersectionType($this->requestBodyTypes)
+                ->unwrapType($config)
+                ->deepResolve($config);
+        }));
     }
 
 

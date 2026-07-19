@@ -9,14 +9,14 @@ use Exception;
 class Workspace
 {
     public function __construct(
-        private Config $config,
+        private readonly Config $config,
         public int|string|null $key = null,
     ) {}
 
 
     public static function getDefault(Config $config): ?Workspace
     {
-        foreach ($config->data['workspaces'] as $key => $workspaceConfig) {
+        foreach ($config->getWorkspaces() as $key => $workspaceConfig) {
             if (empty($workspaceConfig['access_token'])) {
                 return new Workspace($config, $key);
             }
@@ -27,7 +27,7 @@ class Workspace
 
     public static function findUsingToken(string $accessToken, Config $config): ?Workspace
     {
-        foreach ($config->data['workspaces'] as $key => $workspaceConfig) {
+        foreach ($config->getWorkspaces() as $key => $workspaceConfig) {
             if (isset($workspaceConfig['access_token']) && $workspaceConfig['access_token'] === $accessToken) {
                 return new Workspace($config, $key);
             }
@@ -38,7 +38,7 @@ class Workspace
 
     public static function findUsingKey(string $key, Config $config): ?Workspace
     {
-        $workspaceConfig = $config->data['workspaces'][$key] ?? null;
+        $workspaceConfig = $config->getWorkspace($key);
 
         if (! $workspaceConfig) {
             throw new Exception('Workspace `' . $key . '` not found.');
@@ -63,7 +63,7 @@ class Workspace
             throw new Exception('Workspace key is NULL.');
         }
 
-        $this->config->selectedWorkspace = $this->config->data['workspaces'][$this->config->selectedWorkspaceKey] ?? null;
+        $this->config->selectedWorkspace = $this->config->getWorkspace($this->config->selectedWorkspaceKey);
 
         if (! $this->config->selectedWorkspace) {
             throw new Exception('Workspace not found (using key "' . $this->config->selectedWorkspaceKey . '").');

@@ -4,7 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Config;
 
-class FloatType extends Type
+class FloatType extends ScalarType
 {
     public function __construct(
         /**
@@ -30,7 +30,14 @@ class FloatType extends Type
     }
 
 
-    public function toSchema(?Config $config = null): array
+    public function setPossibleValues(array $values): void
+    {
+        /** @var list<float> $values */
+        $this->value = count($values) === 1 ? $values[0] : $values;
+    }
+
+
+    public function toSchema(Config $config): array
     {
         $schema = array_filter([
             'type' => 'number',
@@ -49,19 +56,6 @@ class FloatType extends Type
             $schema['maximum'] = $this->maximum;
         }
 
-        if ($this->isEnum || ($config?->data['openapi']['show_values_for_scalar_types'] ?? false)) {
-            $possibleValues = $this->getPossibleValues();
-
-            if ($possibleValues) {
-                if (count($possibleValues) === 1) {
-                    $schema['const'] = $possibleValues[0];
-
-                } else {
-                    $schema['enum'] = $possibleValues;
-                }
-            }
-        }
-
-        return $schema;
+        return $this->withScalarValues($schema, $config);
     }
 }

@@ -14,6 +14,9 @@ return [
     /**
      * List of workspaces and their configuration.
      * Each workspace can contain multiple routes and will be exported as a separate OpenApi schema.
+     *
+     * A workspace may also carry a `ui` block (same shape as the top-level `ui` below) that
+     * overrides the global UI per key for that client — e.g. its own `wiki_pages` or `logo`.
      */
     'workspaces' => [
         'your-api-name' => [
@@ -24,13 +27,21 @@ return [
     ],
 
     /**
+     * Optional directory of per-workspace `<key>.json` files.
+     * Useful when many workspaces are managed externally (e.g. a UI).
+     * On key conflict the inline `workspaces` array above wins.
+     */
+    // 'workspaces_json_dir' => '/path/to/workspaces',
+
+    /**
      * Documentation page UI settings.
      */
     'ui' => [
         /**
-         * Documentation page theme - light / dark.
+         * Documentation page theme - 'system' (follow OS preference), 'light' or 'dark'.
+         * This is the initial default only; the user's toggle persists and wins on reload.
          */
-        'theme' => 'light',
+        'theme' => 'system',
 
         /**
          * Logo URL to show in documentation page.
@@ -38,17 +49,50 @@ return [
         'logo' => '',
 
         /**
-         * Hide "Try it" panel in the documentation UI.
+         * Optional wiki pages shown in the sidebar. Markdown is fetched lazily when opened.
+         * Each entry has an `id`, a `title`, and one source:
+         *   - `url`  => fetched directly by the browser, e.g. '/wiki/intro.md' (no access control).
+         *   - `path` => an absolute server file streamed by the docs route at `wiki/<id>`, scoped to
+         *               the selected workspace — a client only reaches pages in its own set.
+         * Example: ['id' => 'intro', 'title' => 'Intro', 'path' => '/var/app/docs/intro.md'].
          */
-        'hide_try_it' => false,
+        'wiki_pages' => [],
+
+        /**
+         * Optional sidebar route groups. `routes` are path prefixes (leading slash optional);
+         * `exact_routes` match only the literal path. First matching group wins; unmatched
+         * routes render flat below. Each entry:
+         * ['title' => 'Admin', 'routes' => ['admin'], 'exact_routes' => ['/'], 'collapsed' => true].
+         */
+        'route_groups' => [],
+
+        /**
+         * Sidebar display options.
+         */
+        'sidebar' => [
+            'routes' => [
+                'show_path' => true,
+                'show_title' => false,
+                'show_method' => true,
+                'show_path_above_title' => true,
+            ],
+        ],
+
+        /**
+         * "Try it" panel options.
+         */
+        'try_it' => [
+            'enabled' => true,
+
+            /**
+             * Optional CORS proxy. When set, Try It requests go to `{proxy_url}/{server}{path}`.
+             * Same-origin production deployments don't need this.
+             */
+            'proxy_url' => '',
+        ],
     ],
 
     'openapi' => [
-        /**
-         * When enabled, will show routes instead of operation names in sidebar and title.
-         */
-        'show_routes_as_titles' => true,
-
         /**
          * When enabled, will attempt to read possible values for returned scalar types.
          * It is not guaranteed that all possible values will be detected, so depending on
@@ -136,6 +180,14 @@ return [
          * When enabled, object shapes will be merged in type unions.
          */
         'merge_shapes_in_type_unions' => false,
+    ],
+
+    'intersections' => [
+        /**
+         * Render `never` type as `unknown` (OpenAPI `{ type: string }`, TypeScript `unknown`)
+         * instead of its literal form (OpenAPI `{ enum: [] }`, TypeScript `never`).
+         */
+        'render_empty_as_unknown' => true,
     ],
 
     /**
@@ -241,6 +293,7 @@ return [
          *     '@/exported-types/document-requests-and-responses.ts' => [
          *         'routes' => ['/api/document'],
          *         'request_methods' => ['get', 'post', 'put', 'patch', 'delete'],
+         *         'include_requests_without_body' => true,
          *     ],
          * ]
          */

@@ -14,8 +14,6 @@ class IntersectionUnionController
      * @phpstan-ignore return.missing
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'description' => '',
@@ -53,8 +51,6 @@ class IntersectionUnionController
      * @phpstan-ignore return.missing, return.unresolvableType
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'description' => '',
@@ -99,8 +95,6 @@ class IntersectionUnionController
      * @phpstan-ignore return.missing, return.unresolvableType
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
-        'summary' => '',
-        'description' => '',
         'responses' => [
             200 => [
                 'description' => '',

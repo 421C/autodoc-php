@@ -2,8 +2,8 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpAnonymousFunction;
-use AutoDoc\Analyzer\PhpFunctionArgument;
+use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Config;
 use PhpParser\Node;
 
@@ -11,18 +11,28 @@ class CallableType extends Type
 {
     public function __construct(
         public ?string $description = null,
-        private ?PhpAnonymousFunction $anonymousFunction = null,
+        private readonly ?PhpCallable $phpCallable = null,
     ) {}
 
-    /**
-     * @param PhpFunctionArgument[] $args
-     */
-    public function getReturnType(array $args = [], ?Node $callerNode = null): Type
+    public function getReturnType(ArgumentList $args, ?Node $callerNode = null): Type
     {
-        return $this->anonymousFunction?->resolveReturnType($args, $callerNode) ?? new UnknownType;
+        return $this->phpCallable?->resolveReturnType($args, $callerNode) ?? new UnknownType;
     }
 
-    public function toSchema(?Config $config = null): array
+    /**
+     * Resolve the parameter's type after the call, including changes to its properties or array keys.
+     */
+    public function resolveParameterTypeAfterInvocation(int $parameterIndex, ArgumentList $args, ?Node $callerNode = null): ?Type
+    {
+        return $this->phpCallable?->resolveParameterTypeAfterInvocation($parameterIndex, $args, $callerNode);
+    }
+
+    public function narrowArgumentTypeFromTruthyReturn(int $argumentIndex, Type $argumentType, ?Node $callerNode = null): ?Type
+    {
+        return $this->phpCallable?->narrowArgumentTypeFromTruthyReturn($argumentIndex, $argumentType, $callerNode);
+    }
+
+    public function toSchema(Config $config): array
     {
         return array_filter([
             'type' => 'string',

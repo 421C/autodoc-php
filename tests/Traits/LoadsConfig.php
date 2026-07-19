@@ -33,6 +33,12 @@ trait LoadsConfig
                 'exact_routes' => ['/api/test/basicresponses/array-shape-from-return-tag'],
                 'request_methods' => ['get', 'post'],
             ],
+            '@/requests-and-responses-with-empty.ts' => [
+                'routes' => ['/api/test/requestparams/query-param-array-of-strings', 'api/test/requestparams/headers-and-request-body', 'api/test/arrayoperations/array-values-on-assoc-array'],
+                'exact_routes' => ['/api/test/basicresponses/array-shape-from-return-tag'],
+                'request_methods' => ['get', 'post'],
+                'include_requests_without_body' => true,
+            ],
         ];
 
         return $config;

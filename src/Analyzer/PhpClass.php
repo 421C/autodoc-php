@@ -2,6 +2,8 @@
 
 namespace AutoDoc\Analyzer;
 
+use AutoDoc\Analyzer\Ast\SymbolNameResolver;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
@@ -39,7 +41,7 @@ class PhpClass
         public Scope $scope,
     ) {}
 
-    public ?NameResolver $nameResolver = null;
+    public ?SymbolNameResolver $symbolNameResolver = null;
 
     public ?Type $typeToDisplay = null;
 
@@ -50,10 +52,14 @@ class PhpClass
      */
     private array $publicProperties;
 
+    private int $publicPropertiesDepthBudget;
+
     /**
      * @var array<string, Type>
      */
     private array $privateAndProtectedProperties;
+
+    private int $privateAndProtectedPropertiesDepthBudget;
 
     /**
      * @var ReflectionClass<TClass>
@@ -61,6 +67,8 @@ class PhpClass
     private ReflectionClass $classReflection;
 
     private ?PhpDoc $docComment = null;
+
+    private int $docCommentDepthBudget;
 
     /**
      * @var Node\Stmt[]
@@ -71,9 +79,10 @@ class PhpClass
     public function resolveType(bool $useExtensions = true): ObjectType
     {
         $objectType = new ObjectType(className: $this->className);
+        $objectType->constructorArgs = $this->scope->constructorArgs;
 
         if ($useExtensions) {
-            $returnType = $this->scope->getReturnTypeFromExtensions($this);
+            $returnType = $this->scope->extensions->getReturnTypeFromClassExtensions($this);
 
             if ($returnType !== null) {
                 $returnType = $returnType->unwrapType($this->scope->config);
@@ -92,7 +101,7 @@ class PhpClass
             $objectType->typeToDisplay = $this->typeToDisplay->unwrapType($this->scope->config);
 
         } else if ($this->getReflection()->isEnum()) {
-            $objectType->typeToDisplay = (new PhpEnum($this))->resolveType();
+            $objectType->typeToDisplay = new PhpEnum($this)->resolveType();
 
         } else if (is_a($this->className, DateTimeInterface::class, true)) {
             $objectType->typeToDisplay = new StringType(format: 'date-time');
@@ -139,14 +148,12 @@ class PhpClass
 
         $objectType->properties = $this->getProperties();
 
-        $objectType->constructorArgs = $this->scope->constructorArgs;
-
         return $objectType;
     }
 
 
     /**
-     * @return ReflectionClass<TClass>
+     * @return ReflectionClass<covariant TClass>
      */
     public function getReflection(): ReflectionClass
     {
@@ -165,13 +172,25 @@ class PhpClass
      */
     private function getProperties(bool $onlyPublic = true): array
     {
+        $depthBudget = $this->getRemainingDepthBudget();
+
         if ($this->scopeAllowsUsingCache()) {
             if ($onlyPublic) {
-                if (isset($this->publicProperties)) {
+                if (isset($this->publicProperties, $this->publicPropertiesDepthBudget)
+                    && $this->publicPropertiesDepthBudget >= $depthBudget
+                ) {
                     return $this->publicProperties;
                 }
 
-            } else if (isset($this->publicProperties, $this->privateAndProtectedProperties)) {
+            } else if (isset(
+                $this->publicProperties,
+                $this->publicPropertiesDepthBudget,
+                $this->privateAndProtectedProperties,
+                $this->privateAndProtectedPropertiesDepthBudget,
+            )
+                && $this->publicPropertiesDepthBudget >= $depthBudget
+                && $this->privateAndProtectedPropertiesDepthBudget >= $depthBudget
+            ) {
                 return array_merge($this->publicProperties, $this->privateAndProtectedProperties);
             }
         }
@@ -217,7 +236,7 @@ class PhpClass
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
 
                 $deprecations = $propertyPhpDoc->getDeprecatedTags();
-                $propertyType->deprecated = !! $deprecations;
+                $propertyType->deprecated = (bool) $deprecations;
 
                 foreach ($deprecations as $deprecation) {
                     $propertyType->addDeprecatedDescription($deprecation['description']);
@@ -241,12 +260,19 @@ class PhpClass
         }
 
         if ($this->scopeAllowsUsingCache() && $propertyScopeAllowsUsingCache) {
-            if ($onlyPublic) {
+            if (! isset($this->publicPropertiesDepthBudget)
+                || $depthBudget >= $this->publicPropertiesDepthBudget
+            ) {
                 $this->publicProperties = $publicProperties;
+                $this->publicPropertiesDepthBudget = $depthBudget;
+            }
 
-            } else {
-                $this->publicProperties = $publicProperties;
+            if (! $onlyPublic
+                && (! isset($this->privateAndProtectedPropertiesDepthBudget)
+                    || $depthBudget >= $this->privateAndProtectedPropertiesDepthBudget)
+            ) {
                 $this->privateAndProtectedProperties = $privateAndProtectedProperties;
+                $this->privateAndProtectedPropertiesDepthBudget = $depthBudget;
             }
         }
 
@@ -310,10 +336,22 @@ class PhpClass
     }
 
 
+    private function getRemainingDepthBudget(): int
+    {
+        return $this->scope->config->data['max_depth'] - $this->scope->depth;
+    }
+
+
     public function resolveConstantType(string $name): Type
     {
         if ($this->getReflection()->isEnum()) {
-            return (new PhpEnum($this))->resolveType();
+            $constant = $this->getReflection()->getReflectionConstant($name);
+
+            // The enum object type keeps `->name`/`->value` and method calls
+            // resolvable; a plain constant is handled like on any class.
+            if ($constant === false || $constant->isEnumCase()) {
+                return $this->resolveType();
+            }
         }
 
         $classConstants = $this->getReflection()->getConstants();
@@ -367,9 +405,27 @@ class PhpClass
             return null;
         }
 
-        $propertyPhpDoc = new PhpDoc($propertyDocComment, $this->scope);
+        $propertyPhpDoc = new PhpDoc($propertyDocComment, $this->getDeclaringClassScope($propertyReflection->getDeclaringClass()->name));
 
         return $propertyPhpDoc->resolvePropertyType($propertyName);
+    }
+
+
+    /**
+     * @param class-string $className
+     */
+    private function getDeclaringClassScope(string $className): Scope
+    {
+        if ($this->scope->className === $className) {
+            return $this->scope;
+        }
+
+        return new Scope(
+            config: $this->scope->config,
+            depth: $this->scope->depth,
+            route: $this->scope->route,
+            className: $className,
+        );
     }
 
 
@@ -391,14 +447,20 @@ class PhpClass
 
     public function getPhpDoc(): ?PhpDoc
     {
-        if (isset($this->docComment)) {
+        $depthBudget = $this->getRemainingDepthBudget();
+
+        if ($this->docComment !== null
+            && isset($this->docCommentDepthBudget)
+            && $this->docCommentDepthBudget >= $depthBudget
+        ) {
             return $this->docComment;
         }
 
         $comment = $this->getReflection()->getDocComment();
 
         if ($comment) {
-            $this->docComment = new PhpDoc($comment, $this->scope);
+            $this->docComment = new PhpDoc($comment, $this->getDeclaringClassScope($this->className));
+            $this->docCommentDepthBudget = $depthBudget;
         }
 
         return $this->docComment;
@@ -413,22 +475,19 @@ class PhpClass
             return null;
         }
 
-        return new PhpDoc($propertyDocComment, $this->scope);
+        return new PhpDoc($propertyDocComment, $this->getDeclaringClassScope($propertyReflection->getDeclaringClass()->name));
     }
 
 
-    /**
-     * @param PhpFunctionArgument[] $args
-     *
-     * @return PhpClassMethod<TClass>
-     */
-    public function getMethod(string $name, array $args = []): PhpClassMethod
+    public function getMethod(string $name, ?ArgumentList $args = null): PhpCallable
     {
-        return new PhpClassMethod(
+        $childScope = $this->scope->createChildScope(className: $this->className, methodName: $name);
+
+        return new PhpCallable(
+            scope: $childScope,
+            args: $args ?? new ArgumentList($childScope),
             phpClass: $this,
             methodName: $name,
-            scope: $this->scope->createChildScope(className: $this->className, methodName: $name),
-            args: $args,
         );
     }
 
@@ -491,25 +550,25 @@ class PhpClass
     }
 
 
-    public function getNameResolver(): ?NameResolver
+    public function getSymbolNameResolver(): ?SymbolNameResolver
     {
-        if (! isset($this->nameResolver)) {
-            $nameResolver = new NameResolver;
+        if ($this->symbolNameResolver === null) {
+            $symbolNameResolver = new SymbolNameResolver;
 
-            $traversed = $this->traverse($nameResolver);
+            $traversed = $this->traverse($symbolNameResolver);
 
             if ($traversed) {
                 // Add name aliases from traits since some PHPDoc comments might be
                 // defined in traits but resolved in class context.
                 foreach ($this->getTraits() as $traitName) {
-                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($nameResolver);
+                    $this->scope->getPhpClassInDeeperScope($traitName)->traverse($symbolNameResolver);
                 }
 
-                $this->nameResolver = $nameResolver;
+                $this->symbolNameResolver = $symbolNameResolver;
             }
         }
 
-        return $this->nameResolver;
+        return $this->symbolNameResolver;
     }
 
 
@@ -517,11 +576,7 @@ class PhpClass
     {
         $className = PhpClass::addLeadingBackslash($this->className);
 
-        if (class_exists($className) || interface_exists($className)) {
-            return true;
-        }
-
-        return false;
+        return class_exists($className) || interface_exists($className);
     }
 
 

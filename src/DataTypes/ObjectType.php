@@ -2,8 +2,9 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\PhpFunctionArgument;
+use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Config;
+use Override;
 
 class ObjectType extends Type
 {
@@ -21,9 +22,11 @@ class ObjectType extends Type
         public ?Type $typeToDisplay = null,
 
         /**
-         * @var array<PhpFunctionArgument>
+         * Arguments passed to the constructor when this type was created from
+         * a `new X(...)` expression (or attached by an extension). Lazily
+         * resolved and scope-aware; null when unknown.
          */
-        public array $constructorArgs = [],
+        public ?ArgumentList $constructorArgs = null,
 
         /**
          * Properties that do not appear in the generated documentation
@@ -35,7 +38,35 @@ class ObjectType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function __clone(): void
+    {
+        if ($this->typeToDisplay) {
+            $this->typeToDisplay = clone $this->typeToDisplay;
+        }
+    }
+
+
+    /**
+     * Contextual descriptions (array item comments, PHPDoc param descriptions)
+     * must reach the displayed schema; the class docblock is assigned to
+     * `$description` directly and intentionally stays off the display type.
+     */
+    #[Override]
+    public function addDescription(?string $description, bool $prepend = false): self
+    {
+        if ($this->typeToDisplay) {
+            $this->typeToDisplay->addDescription($description, $prepend);
+
+            return $this;
+        }
+
+        parent::addDescription($description, $prepend);
+
+        return $this;
+    }
+
+
+    public function toSchema(Config $config): array
     {
         if ($this->typeToDisplay) {
             $this->typeToDisplay->required = $this->typeToDisplay->required || $this->required;

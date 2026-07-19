@@ -9,7 +9,7 @@ class AutoDocException extends Exception
 {
     public function __construct(string $message, Throwable $previousException)
     {
-        $message = $message . $previousException->getMessage();
+        $message .= $previousException->getMessage();
 
         if ($previousException instanceof AutoDocException) {
             $previousException = $previousException->getPrevious();

@@ -1,14 +1,9 @@
 parameters:
-    phpVersion: 80100
+    phpVersion: 80500
     paths:
-        - bin/autodoc-debug
+        - bin/autodoc
         - src
         - tests
     level: 10
     excludePaths:
         - vendor
-        - tests/TestProject/Controllers/PipeOperationController.php
-    ignoreErrors:
-        -
-            identifier: class.notFound
-            path: tests/TestProject/RouteLoader.php

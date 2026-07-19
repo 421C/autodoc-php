@@ -2,6 +2,16 @@
 
 namespace AutoDoc;
 
+use AutoDoc\Extensions\BuiltIn\ArrayFuncCall;
+use AutoDoc\Extensions\BuiltIn\EnumStaticCall;
+use AutoDoc\Extensions\BuiltIn\TypeCheckFuncCall;
+use AutoDoc\Extensions\ClassExtension;
+use AutoDoc\Extensions\FuncCallExtension;
+use AutoDoc\Extensions\MethodCallExtension;
+use AutoDoc\Extensions\OperationExtension;
+use AutoDoc\Extensions\StaticCallExtension;
+use AutoDoc\Extensions\ThrowExtension;
+use AutoDoc\Extensions\TypeScriptExportExtension;
 use Exception;
 
 /**
@@ -14,6 +24,27 @@ use Exception;
  *     generate_description_from_cases?: bool,
  * }
  *
+ * @phpstan-type WikiPageConfig array{id: string, title: string, url?: string, path?: string}
+ *
+ * @phpstan-type UiConfig array{
+ *     theme?: 'system'|'light'|'dark',
+ *     logo?: string,
+ *     wiki_pages?: list<WikiPageConfig>,
+ *     route_groups?: list<array{title: string, routes?: list<string>, exact_routes?: list<string>, collapsed?: bool}>,
+ *     sidebar?: array{
+ *         routes?: array{
+ *             show_path?: bool,
+ *             show_title?: bool,
+ *             show_method?: bool,
+ *             show_path_above_title?: bool,
+ *         },
+ *     },
+ *     try_it?: array{
+ *         enabled?: bool,
+ *         proxy_url?: string,
+ *     },
+ * }
+ *
  * @phpstan-type WorkspaceConfig array{
  *     routes?: string[],
  *     exact_routes?: string[],
@@ -22,6 +53,14 @@ use Exception;
  *     export_filename?: string,
  *     access_token?: string,
  *     request_methods?: string[],
+ *     ui?: UiConfig,
+ * }
+ *
+ * @phpstan-type TypeScriptRouteExportConfig array{
+ *     routes?: string[],
+ *     exact_routes?: string[],
+ *     request_methods?: string[],
+ *     include_requests_without_body?: bool,
  * }
  *
  * @phpstan-type TypeScriptConfigRaw array{
@@ -35,11 +74,7 @@ use Exception;
  *     modes?: array<string, array<string, mixed>>,
  *     path_prefixes?: class-string<object&callable(Config $config): iterable<string, string>>|callable(Config $config): iterable<string, string>,
  *     tsconfig_path?: string,
- *     export_http_requests_and_responses?: array<string, array{
- *         routes?: string[],
- *         exact_routes?: string[],
- *         request_methods?: string[],
- *     }>,
+ *     export_http_requests_and_responses?: array<string, TypeScriptRouteExportConfig>,
  * }
  *
  * @phpstan-type TypeScriptConfig array{
@@ -53,11 +88,7 @@ use Exception;
  *     modes: array<string, array<string, mixed>>,
  *     path_prefixes: iterable<string, string>,
  *     tsconfig_path?: string,
- *     export_http_requests_and_responses?: array<string, array{
- *         routes?: string[],
- *         exact_routes?: string[],
- *         request_methods?: string[],
- *     }>,
+ *     export_http_requests_and_responses?: array<string, TypeScriptRouteExportConfig>,
  * }
  *
  * @phpstan-type ConfigArray array{
@@ -68,13 +99,9 @@ use Exception;
  *         domain?: string,
  *     },
  *     workspaces: WorkspaceConfig[],
- *     ui: array{
- *         theme?: 'light'|'dark',
- *         logo?: string,
- *         hide_try_it?: bool,
- *     },
+ *     workspaces_json_dir?: string,
+ *     ui: UiConfig,
  *     openapi: array{
- *         show_routes_as_titles?: bool,
  *         show_values_for_scalar_types?: bool,
  *         use_pattern_for_numeric_strings?: bool,
  *         json_pretty_print?: bool,
@@ -93,9 +120,13 @@ use Exception;
  *     objects?: array{
  *         merge_shapes_in_type_unions?: bool,
  *     },
+ *     intersections?: array{
+ *         coercive_scalar_overlap?: bool,
+ *         render_empty_as_unknown?: bool,
+ *     },
  *     openapi_export_dir: string,
  *     route_loader: class-string<AbstractRouteLoader>,
- *     extensions: array<class-string>,
+ *     extensions?: array<class-string>,
  *     use_cache: bool,
  *     memory_limit: ?string,
  *     max_depth: int,
@@ -121,6 +152,82 @@ class Config
         public ?array $selectedWorkspace = null,
         public int|string|null $selectedWorkspaceKey = null,
     ) {}
+
+    /**
+     * @var ?array<class-string, list<class-string>>
+     */
+    private ?array $extensionsByType = null;
+
+    /**
+     * Merged workspaces (JSON dir + inline), cached after first resolution.
+     *
+     * @var ?array<int|string, WorkspaceConfig>
+     */
+    private ?array $workspaces = null;
+
+    /**
+     * Resolved TypeScript config per mode ('' = no mode).
+     *
+     * @var array<string, TypeScriptConfig>
+     */
+    private array $typeScriptConfigByMode = [];
+
+
+    /**
+     * @return array<int|string, WorkspaceConfig>
+     */
+    public function getWorkspaces(): array
+    {
+        if ($this->workspaces !== null) {
+            return $this->workspaces;
+        }
+
+        $this->workspaces = array_merge($this->loadJsonWorkspaces(), $this->data['workspaces']);
+
+        return $this->workspaces;
+    }
+
+
+    /**
+     * @return ?WorkspaceConfig
+     */
+    public function getWorkspace(int|string $key): ?array
+    {
+        return $this->getWorkspaces()[$key] ?? null;
+    }
+
+
+    /**
+     * @return array<int|string, WorkspaceConfig>
+     */
+    private function loadJsonWorkspaces(): array
+    {
+        $dir = $this->data['workspaces_json_dir'] ?? null;
+
+        if (! $dir) {
+            return [];
+        }
+
+        if (! is_dir($dir)) {
+            throw new Exception("Autodoc `workspaces_json_dir` is not a directory: '$dir'.");
+        }
+
+        $workspaces = [];
+
+        foreach (glob(rtrim($dir, '/\\') . DIRECTORY_SEPARATOR . '*.json') ?: [] as $file) {
+            $contents = file_get_contents($file);
+            $decoded = $contents === false ? null : json_decode($contents, true);
+
+            if (! is_array($decoded)) {
+                throw new Exception("Autodoc workspace file is not valid JSON: '$file'.");
+            }
+
+            /** @var WorkspaceConfig $decoded */
+            $workspaces[basename($file, '.json')] = $decoded;
+        }
+
+        return $workspaces;
+    }
 
 
     /**
@@ -173,6 +280,14 @@ class Config
      */
     public function getTypeScriptConfig(?string $mode = null): array
     {
+        return $this->typeScriptConfigByMode[$mode ?? ''] ??= $this->resolveTypeScriptConfig($mode);
+    }
+
+    /**
+     * @return TypeScriptConfig
+     */
+    private function resolveTypeScriptConfig(?string $mode): array
+    {
         $defaults = [
             'file_extensions' => ['ts', 'tsx', 'vue'],
             'indent' => '    ',
@@ -208,7 +323,7 @@ class Config
                 throw new Exception('Error: path_prefixes in autodoc config must return an iterable.');
             }
 
-            $tsConfig['path_prefixes'] = $prefixes;
+            $tsConfig['path_prefixes'] = is_array($prefixes) ? $prefixes : iterator_to_array($prefixes);
 
         } else {
             $type = gettype($pathPrefixesLoader);
@@ -227,6 +342,50 @@ class Config
         }
 
         return new $this->data['route_loader']($this);
+    }
+
+
+    /**
+     * @return array<class-string, list<class-string>>
+     */
+    public function getExtensions(): array
+    {
+        if ($this->extensionsByType !== null) {
+            return $this->extensionsByType;
+        }
+
+        $this->extensionsByType = [];
+
+        foreach ($this->data['extensions'] ?? [] as $extensionClass) {
+            if (is_subclass_of($extensionClass, MethodCallExtension::class)) {
+                $this->extensionsByType[MethodCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, FuncCallExtension::class)) {
+                $this->extensionsByType[FuncCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, StaticCallExtension::class)) {
+                $this->extensionsByType[StaticCallExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, ClassExtension::class)) {
+                $this->extensionsByType[ClassExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, OperationExtension::class)) {
+                $this->extensionsByType[OperationExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, ThrowExtension::class)) {
+                $this->extensionsByType[ThrowExtension::class][] = $extensionClass;
+
+            } else if (is_subclass_of($extensionClass, TypeScriptExportExtension::class)) {
+                $this->extensionsByType[TypeScriptExportExtension::class][] = $extensionClass;
+            }
+        }
+
+        // Built-ins run after configured extensions so consumers can override them.
+        $this->extensionsByType[FuncCallExtension::class][] = ArrayFuncCall::class;
+        $this->extensionsByType[FuncCallExtension::class][] = TypeCheckFuncCall::class;
+        $this->extensionsByType[StaticCallExtension::class][] = EnumStaticCall::class;
+
+        return $this->extensionsByType;
     }
 
 

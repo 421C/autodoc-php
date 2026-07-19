@@ -20,7 +20,7 @@ class UnionType extends Type
     ) {}
 
 
-    public function toSchema(?Config $config = null): array
+    public function toSchema(Config $config): array
     {
         $type = $this->unwrapType($config);
 
@@ -39,6 +39,8 @@ class UnionType extends Type
             }
 
             if ($nullableType) {
+                $nullableType = clone $nullableType;
+
                 $nullableType->addDescription($this->description);
 
                 $nullableType->examples = $nullableType->examples ?: $this->examples;
@@ -162,7 +164,7 @@ class UnionType extends Type
      */
     private function deepUnique(array $array): array
     {
-        $serialized = array_map('serialize', $array);
+        $serialized = array_map(serialize(...), $array);
         $unique = array_unique($serialized);
 
         return array_intersect_key($array, $unique);

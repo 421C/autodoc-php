@@ -35,7 +35,6 @@ class PipeOperationController
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'summary' => 'Pipe with arrow function.',
-        'description' => '',
         'responses' => [
             200 => [
                 'content' => [
@@ -112,6 +111,9 @@ class PipeOperationController
         return 145 |> GenericClass::from(...) |> (fn ($enum) => $enum->data);
     }
 
+    /**
+     * @phpstan-ignore missingType.iterableValue
+     */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [
