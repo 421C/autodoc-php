@@ -178,6 +178,16 @@ trait WithMergeableTypes
             return null;
         }
 
+        // Intersecting UnknownType with anything only leaves the other operand.
+        if ($mergeAsIntersection && ($type1 instanceof UnknownType || $type2 instanceof UnknownType)) {
+            $unknown = $type1 instanceof UnknownType ? $type1 : $type2;
+            $other = $type1 instanceof UnknownType ? $type2 : $type1;
+
+            return (clone $other)
+                ->addDescription($unknown->description)
+                ->setRequired($this->required || $type1->required || $type2->required);
+        }
+
         // Converting UnknownType to StringType to prevent `string or string`
         // when there is an union of StringType and UnknownType.
         if ($type1 instanceof UnknownType && $type2 instanceof StringType) {

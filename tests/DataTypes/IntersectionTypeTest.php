@@ -15,6 +15,7 @@ use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
+use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
@@ -178,6 +179,65 @@ final class IntersectionTypeTest extends TestCase
         $schema = (new IntersectionType([new StringType, new BoolType]))->toSchema($config);
 
         $this->assertSchemaArraysMatch(['type' => 'string'], $schema, 'type', 'schema');
+    }
+
+    #[Test]
+    public function unknownIntersectedWithAnotherTypeCollapsesToThatType(): void
+    {
+        foreach ([[new UnknownType, new NullType], [new NullType, new UnknownType]] as [$a, $b]) {
+            $type = (new IntersectionType([$a, $b]))->unwrapType($this->configWithScalarValues());
+
+            self::assertInstanceOf(NullType::class, $type);
+        }
+    }
+
+    #[Test]
+    public function unknownIntersectedWithUnionKeepsEveryUnionMember(): void
+    {
+        $union = fn () => new UnionType([new StringType, new NullType]);
+
+        foreach ([[new UnknownType, $union()], [$union(), new UnknownType]] as [$a, $b]) {
+            $type = (new IntersectionType([$a, $b]))->unwrapType($this->configWithScalarValues());
+
+            self::assertInstanceOf(UnionType::class, $type);
+            self::assertSame(
+                [StringType::class, NullType::class],
+                array_map(fn (Type $member) => $member::class, $type->types),
+            );
+        }
+    }
+
+    #[Test]
+    public function unknownIntersectedWithNullableStringStaysNullableInSchema(): void
+    {
+        $schema = (new IntersectionType([
+            new UnknownType,
+            new UnionType([new StringType, new NullType]),
+        ]))->toSchema($this->configWithScalarValues());
+
+        $this->assertSchemaArraysMatch(['type' => ['string', 'null']], $schema, 'type', 'schema');
+    }
+
+    #[Test]
+    public function unknownIntersectedWithAnotherTypeKeepsRequired(): void
+    {
+        $type = (new IntersectionType([new UnknownType, (new NullType)->setRequired(true)]))
+            ->unwrapType($this->configWithScalarValues());
+
+        self::assertInstanceOf(NullType::class, $type);
+        self::assertTrue($type->required);
+    }
+
+    #[Test]
+    public function unknownIntersectionDoesNotMutateTheSurvivingMember(): void
+    {
+        $shared = (new StringType)->setRequired(false);
+
+        (new IntersectionType([new UnknownType, $shared]))
+            ->setRequired(true)
+            ->unwrapType($this->configWithScalarValues());
+
+        self::assertFalse($shared->required);
     }
 
     #[Test]
