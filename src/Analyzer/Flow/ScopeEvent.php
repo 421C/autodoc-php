@@ -38,7 +38,6 @@ class ScopeEvent
          * Null for Assign/Mutate events.
          */
         public readonly ?PhpCondition $condition = null,
-
         public readonly bool $isTypeAnnotation = false,
     ) {}
 }

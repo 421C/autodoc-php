@@ -2,16 +2,16 @@
 
 namespace AutoDoc;
 
-final class DocViewerResponse
+final readonly class DocViewerResponse
 {
     /**
      * @param array<string, string> $headers
      */
     private function __construct(
-        public readonly int $status,
-        public readonly array $headers,
-        public readonly ?string $body,
-        public readonly ?string $filePath,
+        public int $status,
+        public array $headers,
+        public ?string $body,
+        public ?string $filePath,
     ) {}
 
     /**

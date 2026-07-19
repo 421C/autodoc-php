@@ -2,13 +2,13 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\AttributeMutationApplier;
+use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\ScopeEvent;
 use AutoDoc\Analyzer\Flow\ScopeEventType;
 use AutoDoc\Analyzer\Flow\ScopeEventVisibility;
-use AutoDoc\Analyzer\Scope;
 use AutoDoc\Analyzer\Narrowing\TypeNarrowingApplier;
+use AutoDoc\Analyzer\Scope;
 
 class UnresolvedVariableType extends UnresolvedType
 {

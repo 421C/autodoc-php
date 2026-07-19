@@ -4,6 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Config;
+use Override;
 
 class ObjectType extends Type
 {
@@ -50,6 +51,7 @@ class ObjectType extends Type
      * must reach the displayed schema; the class docblock is assigned to
      * `$description` directly and intentionally stays off the display type.
      */
+    #[Override]
     public function addDescription(?string $description, bool $prepend = false): self
     {
         if ($this->typeToDisplay) {

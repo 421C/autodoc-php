@@ -34,13 +34,7 @@ abstract class ScalarType extends Type
      */
     public static function canRepresentLiteralValues(array $values): bool
     {
-        foreach ($values as $value) {
-            if (is_float($value) && ! is_finite($value)) {
-                return false;
-            }
-        }
-
-        return true;
+        return array_all($values, fn ($value) => !is_float($value) || is_finite($value));
     }
 
     /**

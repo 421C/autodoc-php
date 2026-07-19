@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Analyzer\DocBlock;
 
-use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;

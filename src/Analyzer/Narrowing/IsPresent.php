@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer\Narrowing;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
+use Override;
 
 /**
  * Asserts that an attribute path is present — e.g. the true side of
@@ -19,7 +20,7 @@ final class IsPresent extends Narrowing
         return $base;
     }
 
-    #[\Override]
+    #[Override]
     public function assertsPresence(): bool
     {
         return true;

@@ -60,7 +60,7 @@ final class CommandLine
         $workingDirectory = $this->extractPositionalArgument($arguments);
         $hasErrors = false;
 
-        foreach ((new UpdateTypeScriptStructures($config))->run($workingDirectory) as $message) {
+        foreach (new UpdateTypeScriptStructures($config)->run($workingDirectory) as $message) {
             if (isset($message['processedTags'])) {
                 $tags = $message['processedTags'] . ' tag' . ($message['processedTags'] === 1 ? '' : 's');
 

@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Extensions\BuiltIn;
 
-use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotNull;
@@ -15,6 +14,7 @@ use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
+use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Extensions\FuncCallExtension;
 use PhpParser\Node;
 

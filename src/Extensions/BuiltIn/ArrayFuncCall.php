@@ -3,7 +3,6 @@
 namespace AutoDoc\Extensions\BuiltIn;
 
 use AutoDoc\Analyzer\ArgumentList;
-use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
 use AutoDoc\Analyzer\Narrowing\IsFalsey;
@@ -24,6 +23,7 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Extensions\FuncCallExtension;
 use PhpParser\Node;
 use PhpParser\Node\Expr\FuncCall;

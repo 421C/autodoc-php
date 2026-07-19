@@ -81,8 +81,7 @@ class ScopeEventLog
         int $startFilePos,
         int $endFilePos = 0,
         bool $isTypeAnnotation = false,
-    ): void
-    {
+    ): void {
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Assign,
             varName: $varName,
@@ -107,8 +106,7 @@ class ScopeEventLog
         int $endFilePos = 0,
         array $path = [],
         ?Type $dynamicAttribute = null,
-    ): void
-    {
+    ): void {
         $changes = ['attributes' => $attributes, 'mutationPath' => $path];
 
         if ($dynamicAttribute !== null) {

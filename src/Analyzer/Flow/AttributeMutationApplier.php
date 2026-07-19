@@ -39,12 +39,7 @@ final readonly class AttributeMutationApplier
             return $baseType;
         }
 
-        if ($baseType === null) {
-            $baseType = new ArrayType;
-
-        } else {
-            $baseType = $baseType->unwrapType($this->scope->config);
-        }
+        $baseType = $baseType === null ? new ArrayType : $baseType->unwrapType($this->scope->config);
 
         if ($baseType instanceof NullType) {
             $mutatedArrayType = $this->apply(

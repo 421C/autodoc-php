@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer\Narrowing;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\Type;
+use Override;
 
 final class AllOf extends Narrowing
 {
@@ -23,7 +24,7 @@ final class AllOf extends Narrowing
         return $base;
     }
 
-    #[\Override]
+    #[Override]
     public function assertsPresence(): bool
     {
         return array_any($this->narrowings, fn (Narrowing $narrowing) => $narrowing->assertsPresence());

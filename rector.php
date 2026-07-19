@@ -8,8 +8,10 @@ use Rector\CodeQuality\Rector\ClassMethod\LocallyCalledStaticMethodToNonStaticRe
 use Rector\CodeQuality\Rector\Empty_\SimplifyEmptyCheckOnEmptyArrayRector;
 use Rector\CodeQuality\Rector\FuncCall\SimplifyRegexPatternRector;
 use Rector\CodeQuality\Rector\Identical\FlipTypeControlToUseExclusiveTypeRector;
+use Rector\CodeQuality\Rector\If_\ArrayExplicitBoolCompareRector;
 use Rector\CodeQuality\Rector\If_\CombineIfRector;
 use Rector\CodeQuality\Rector\If_\ExplicitBoolCompareRector;
+use Rector\CodeQuality\Rector\If_\ObjectExplicitBoolCompareRector;
 use Rector\CodeQuality\Rector\If_\ShortenElseIfRector;
 use Rector\Config\RectorConfig;
 use Rector\EarlyReturn\Rector\Foreach_\ChangeNestedForeachIfsToEarlyContinueRector;
@@ -41,6 +43,8 @@ return RectorConfig::configure()
         SimplifyEmptyCheckOnEmptyArrayRector::class,
         SimplifyRegexPatternRector::class,
         ShortenElseIfRector::class,
+        ArrayExplicitBoolCompareRector::class,
+        ObjectExplicitBoolCompareRector::class,
     ])
     ->withPreparedSets(
         codeQuality: true,

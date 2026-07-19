@@ -8,8 +8,8 @@ use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\CallerParameterBindingAnalysis;
 use AutoDoc\Analyzer\Flow\CallerParameterTypeResolver;
-use AutoDoc\Analyzer\Narrowing\Target;
 use AutoDoc\Analyzer\Narrowing\ConditionTypeNarrower;
+use AutoDoc\Analyzer\Narrowing\Target;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\NeverType;
@@ -879,7 +879,7 @@ class PhpCallable
 
             if ($this->scope->route
                 && !($requestBodyType instanceof UnknownType)
-                && !($requestBodyType instanceof ObjectType && empty($requestBodyType->properties))
+                && (!$requestBodyType instanceof ObjectType || !empty($requestBodyType->properties))
             ) {
                 if ($this->scope->route->hasMethod('GET') || $this->scope->route->hasMethod('HEAD')) {
                     if ($requestBodyType instanceof ObjectType) {
@@ -962,6 +962,13 @@ class PhpCallable
         foreach ($this->scope->route->responses ?? [] as $response) {
             $type = $response['body'] ?? new UnknownType;
             $httpStatusCode = $response['status'] ?? $type->getHttpStatusCode();
+
+            if ($type instanceof UnknownType) {
+                $operation->responses[$httpStatusCode] = new Response;
+
+                continue;
+            }
+
             $contentType = $response['contentType'] ?? $type->getContentType();
 
             $operation->responses[$httpStatusCode] = new Response(

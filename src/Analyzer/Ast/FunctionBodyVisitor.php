@@ -3,14 +3,11 @@
 namespace AutoDoc\Analyzer\Ast;
 
 use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\PhpCondition;
-use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Narrowing\BranchNarrowingEmitter;
 use AutoDoc\Analyzer\Scope;
-use AutoDoc\Extensions\FuncCallContext;
-use AutoDoc\Extensions\MethodCallContext;
-use AutoDoc\Extensions\StaticCallContext;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -22,6 +19,9 @@ use AutoDoc\DataTypes\UnresolvedParameterType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
+use AutoDoc\Extensions\FuncCallContext;
+use AutoDoc\Extensions\MethodCallContext;
+use AutoDoc\Extensions\StaticCallContext;
 use Override;
 use PhpParser\Comment;
 use PhpParser\Node;
@@ -485,12 +485,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
                 continue;
             }
 
-            if ($item->key === null) {
-                $key = $position++;
-
-            } else {
-                $key = $this->getRawArrayKeyValue($item->key);
-            }
+            $key = $item->key === null ? $position++ : $this->getRawArrayKeyValue($item->key);
 
             if ($key === null) {
                 $this->handleAssignment(varNode: $item->value, valueNode: new UnknownType);

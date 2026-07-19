@@ -2,8 +2,8 @@
 
 namespace AutoDoc\Debugger;
 
-use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Flow\ScopeEventLog;
+use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\Type;
 use PhpParser\Node;

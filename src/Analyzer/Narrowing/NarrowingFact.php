@@ -2,7 +2,6 @@
 
 namespace AutoDoc\Analyzer\Narrowing;
 
-
 final readonly class NarrowingFact
 {
     public function __construct(

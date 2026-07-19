@@ -2,8 +2,8 @@
 
 namespace AutoDoc\TypeScript;
 
-use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;

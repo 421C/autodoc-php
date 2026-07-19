@@ -25,8 +25,7 @@ enum CallerParameterReassignmentState
 
     public function restrictEventVisibility(
         ScopeEventVisibility $eventVisibility,
-    ): ScopeEventVisibility
-    {
+    ): ScopeEventVisibility {
         return match ($this) {
             self::NotReassigned => $eventVisibility,
             self::PossiblyReassigned => $eventVisibility === ScopeEventVisibility::Hidden

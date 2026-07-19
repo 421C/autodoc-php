@@ -232,7 +232,7 @@ class TypeConverter
         }
 
         if (isset($options['omit'])) {
-            $properties = array_filter($properties, fn ($name) => ! in_array($name, $options['omit']), ARRAY_FILTER_USE_KEY);
+            return array_filter($properties, fn ($name) => ! in_array($name, $options['omit']), ARRAY_FILTER_USE_KEY);
         }
 
         return $properties;
