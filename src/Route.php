@@ -2,8 +2,8 @@
 
 namespace AutoDoc;
 
+use AutoDoc\Analyzer\PayloadTypeFinalizer;
 use AutoDoc\Analyzer\Scope;
-use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\Type;
 use Closure;
 
@@ -49,7 +49,7 @@ class Route
     /** @var array<string, Type> */
     public array $requestCookies = [];
 
-    /** @var Type[] */
+    /** @var list<Type> */
     private array $requestBodyTypes = [];
 
 
@@ -70,16 +70,9 @@ class Route
 
     public function getRequestBodyType(Scope $scope): ?Type
     {
-        // Recorded bodies are conjunctive validation rules, so combine them as an
-        // intersection under coercive scalar semantics (e.g. `string` + `numeric`
-        // is a numeric string).
-        return $scope->withShapeMerging(fn () => $scope->withCoerciveScalarOverlap(function () use ($scope): Type {
-            $config = $scope->config;
-
-            return new IntersectionType($this->requestBodyTypes)
-                ->unwrapType($config)
-                ->deepResolve($config);
-        }));
+        return new PayloadTypeFinalizer(scope: $scope)->finalizeRequestBodyTypes(
+            types: $this->requestBodyTypes,
+        );
     }
 
 

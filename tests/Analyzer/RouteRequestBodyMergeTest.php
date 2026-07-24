@@ -4,6 +4,9 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\Route;
 use AutoDoc\Tests\Traits\LoadsConfig;
@@ -12,11 +15,9 @@ use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
 
 /**
- * `Route::getRequestBodyType()` merges the accumulated body types by mutating
- * them in place, so every extra merge compounds the structure — re-merging on
- * each body analysis grew geometrically and hung schema serialization on real
- * projects. Only the operation entrypoint consumes the merge, so only it may
- * trigger one.
+ * Only the operation entrypoint finalizes accumulated request-body types. The
+ * finalizer owns its result, so repeated reads cannot compound the recorded
+ * shapes or mutate types retained by extensions and analyzer caches.
  */
 final class RouteRequestBodyMergeTest extends TestCase
 {
@@ -52,6 +53,31 @@ final class RouteRequestBodyMergeTest extends TestCase
         )->toOperation();
 
         $this->assertSame(1, $route->mergeCount);
+    }
+
+    #[Test]
+    public function repeatedFinalizationIsStableAndDoesNotMutateRecordedShapes(): void
+    {
+        $route = new Route('/api/test/request-body-merge', 'post');
+        $scope = new Scope(self::loadConfig(), route: $route);
+        $leftPayload = (new ObjectType(
+            properties: ['left' => (new StringType)->setRequired(true)],
+        ))->setRequired(true);
+        $rightPayload = (new ObjectType(
+            properties: ['right' => (new IntegerType)->setRequired(true)],
+        ))->setRequired(true);
+
+        $route->addRequestBodyType(new ObjectType(properties: ['payload' => $leftPayload]));
+        $route->addRequestBodyType(new ObjectType(properties: ['payload' => $rightPayload]));
+
+        $first = $route->getRequestBodyType($scope);
+        $second = $route->getRequestBodyType($scope);
+
+        $this->assertNotNull($first);
+        $this->assertNotNull($second);
+        $this->assertSame($first->toSchema($scope->config), $second->toSchema($scope->config));
+        $this->assertArrayNotHasKey('right', $leftPayload->properties);
+        $this->assertArrayNotHasKey('left', $rightPayload->properties);
     }
 }
 

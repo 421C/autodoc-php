@@ -802,6 +802,7 @@ class PhpCallable
     public function toOperation(): Operation
     {
         $operation = new Operation;
+        $payloadTypeFinalizer = new PayloadTypeFinalizer(scope: $this->scope);
 
         $requestBodyType = null;
         $responseBodyType = null;
@@ -841,7 +842,9 @@ class PhpCallable
 
         $bodyAnalysis = $this->analyzeBody(analyzeReturnValue: $responseBodyType === null, isOperationEntrypoint: true);
 
-        $requestBodyType ??= $bodyAnalysis['requestBodyType'];
+        $requestBodyType = $requestBodyType === null
+            ? $bodyAnalysis['requestBodyType']
+            : $payloadTypeFinalizer->finalizeRequestBodyTypes(types: [$requestBodyType]);
         $analyzedReturnType = $bodyAnalysis['analyzedReturnType'];
 
         // Collect existing parameter names to avoid duplicates
@@ -875,8 +878,6 @@ class PhpCallable
         }
 
         if ($requestBodyType) {
-            $requestBodyType = $requestBodyType->unwrapType($this->scope->config);
-
             if ($this->scope->route
                 && !($requestBodyType instanceof UnknownType)
                 && (!$requestBodyType instanceof ObjectType || !empty($requestBodyType->properties))
@@ -932,7 +933,7 @@ class PhpCallable
                 ? $responseBodyType->types
                 : [$responseBodyType];
 
-            /** @var array<int, Type[]> */
+            /** @var array<int, list<Type>> */
             $typesByStatusCode = [];
 
             foreach ($responseTypes as $type) {
@@ -941,9 +942,9 @@ class PhpCallable
             }
 
             foreach ($typesByStatusCode as $httpStatusCode => $types) {
-                $responseType = count($types) === 1
-                    ? $types[0]
-                    : new UnionType($types)->unwrapType($this->scope->config);
+                $responseType = $payloadTypeFinalizer->finalizeResponseTypes(
+                    types: $types,
+                );
 
                 $contentType = $responseType->getContentType();
 
@@ -969,6 +970,7 @@ class PhpCallable
                 continue;
             }
 
+            $type = $payloadTypeFinalizer->finalizeResponseTypes(types: [$type]);
             $contentType = $response['contentType'] ?? $type->getContentType();
 
             $operation->responses[$httpStatusCode] = new Response(

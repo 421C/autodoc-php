@@ -565,25 +565,137 @@ abstract class Type
     }
 
 
+    /**
+     * Resolves lazy types and deep-clones their results before recursive unwrapping can mutate them.
+     */
     public function deepResolve(Config $config): Type
     {
-        if (is_a($this, UnionType::class) || is_a($this, IntersectionType::class)) {
-            $this->types = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->types);
+        return $this->deepResolveType(config: $config, combineRequired: true);
+    }
 
-        } else if (is_a($this, UnresolvedType::class)) {
-            return $this->resolve()->deepResolve($config);
 
-        } else if (is_a($this, ObjectType::class)) {
-            $this->properties = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->properties);
-            $this->typeToDisplay = $this->typeToDisplay?->unwrapType($config)->deepResolve($config);
+    private function deepResolveType(Config $config, bool $combineRequired): Type
+    {
+        if ($this instanceof UnresolvedType) {
+            $required = $this->required;
+            $resolvedType = $this->resolve();
 
-        } else if (is_a($this, ArrayType::class)) {
-            $this->keyType = $this->keyType?->unwrapType($config)->deepResolve($config);
-            $this->itemType = $this->itemType?->unwrapType($config)->deepResolve($config);
-            $this->shape = array_map(fn (Type $type) => $type->unwrapType($config)->deepResolve($config), $this->shape);
+            if ($resolvedType === $this) {
+                return $this;
+            }
+
+            $resolvedType = $resolvedType->deepClone();
+            $resolvedType->required = $combineRequired
+                ? $resolvedType->required || $required
+                : $required;
+
+            return $resolvedType->deepResolveType(
+                config: $config,
+                combineRequired: $combineRequired,
+            );
+        }
+
+        if ($this instanceof UnionType || $this instanceof IntersectionType) {
+            $this->types = array_map(
+                callback: fn (Type $type): Type => $type
+                    ->deepResolveType(config: $config, combineRequired: true)
+                    ->unwrapType($config),
+                array: $this->types,
+            );
+
+        } else if ($this instanceof ObjectType) {
+            $this->properties = array_map(
+                callback: fn (Type $type): Type => $type
+                    ->deepResolveType(config: $config, combineRequired: false)
+                    ->unwrapType($config),
+                array: $this->properties,
+            );
+            $this->typeToDisplay = $this->typeToDisplay
+                ?->deepResolveType(config: $config, combineRequired: false)
+                ->unwrapType($config);
+
+        } else if ($this instanceof ArrayType) {
+            $this->keyType = $this->keyType
+                ?->deepResolveType(config: $config, combineRequired: false)
+                ->unwrapType($config);
+            $this->itemType = $this->itemType
+                ?->deepResolveType(config: $config, combineRequired: false)
+                ->unwrapType($config);
+            $this->shape = array_map(
+                callback: fn (Type $type): Type => $type
+                    ->deepResolveType(config: $config, combineRequired: false)
+                    ->unwrapType($config),
+                array: $this->shape,
+            );
         }
 
         return $this;
+    }
+
+
+    /**
+     * Clone this type and its nested types so the copy can be safely mutated.
+     *
+     * Resolver context and AST dependencies remain shared.
+     */
+    public function deepClone(): static
+    {
+        $type = clone $this;
+
+        if ($type instanceof UnionType || $type instanceof IntersectionType) {
+            $type->types = array_map(
+                callback: fn (Type $member): Type => $member->deepClone(),
+                array: $type->types,
+            );
+
+        } else if ($type instanceof ObjectType) {
+            $type->properties = array_map(
+                callback: fn (Type $property): Type => $property->deepClone(),
+                array: $type->properties,
+            );
+            $type->hiddenProperties = array_map(
+                callback: fn (Type $property): Type => $property->deepClone(),
+                array: $type->hiddenProperties,
+            );
+            $type->typeToDisplay = $type->typeToDisplay?->deepClone();
+
+        } else if ($type instanceof ArrayType) {
+            $type->keyType = $type->keyType?->deepClone();
+            $type->itemType = $type->itemType?->deepClone();
+            $type->shape = array_map(
+                callback: fn (Type $item): Type => $item->deepClone(),
+                array: $type->shape,
+            );
+
+        } else if ($type instanceof NeverType) {
+            $type->conflictingTypes = array_map(
+                callback: fn (Type $conflictingType): Type => $conflictingType->deepClone(),
+                array: $type->conflictingTypes,
+            );
+
+        } else if ($type instanceof ClassStringType) {
+            $type->classTemplateType = $type->classTemplateType?->deepClone();
+
+        } else if ($type instanceof UnresolvedArrayDimType
+            || $type instanceof UnresolvedArrayItemType
+            || $type instanceof UnresolvedArrayKeyType
+        ) {
+            $type->potentialArrayType = $type->potentialArrayType->deepClone();
+
+        } else if ($type instanceof UnresolvedParameterType) {
+            $type->argumentType = $type->argumentType->deepClone();
+
+        } else if ($type instanceof UnresolvedClassType) {
+            $type->templateTypeValues = array_map(
+                callback: fn (?UnresolvedType $templateType): ?UnresolvedType => $templateType?->deepClone(),
+                array: $type->templateTypeValues,
+            );
+
+        } else if ($type instanceof UnresolvedPhpDocType) {
+            $type->fallbackType = $type->fallbackType?->deepClone();
+        }
+
+        return $type;
     }
 
 
