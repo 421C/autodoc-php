@@ -29,6 +29,7 @@ use Closure;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
+use RuntimeException;
 
 final class PayloadTypeFinalizationTest extends TestCase
 {
@@ -249,6 +250,54 @@ final class PayloadTypeFinalizationTest extends TestCase
         );
 
         $this->assertSame(1, CloneCountingType::$cloneCount);
+    }
+
+    #[Test]
+    public function scalarDisplayObjectDoesNotResolveItsRepresentationGraph(): void
+    {
+        $displayType = new StringType;
+        $responseType = (new ObjectType(
+            properties: ['dead' => new FailingTypeResolver],
+            className: SimpleClass::class,
+            description: 'Displayed response',
+            typeToDisplay: $displayType,
+            hiddenProperties: ['hidden' => new FailingTypeResolver],
+        ))->setRequired(true);
+        $responseType->deprecated = true;
+        $responseType->deprecatedDescription = 'Use another response';
+        $responseType->examples = ['example'];
+
+        $finalizedType = $this->finalizer()->finalizeResponseTypes(types: [$responseType]);
+
+        $this->assertInstanceOf(ObjectType::class, $finalizedType);
+        $this->assertSame(SimpleClass::class, $finalizedType->className);
+        $this->assertSame('Displayed response', $finalizedType->description);
+        $this->assertTrue($finalizedType->required);
+        $this->assertTrue($finalizedType->deprecated);
+        $this->assertSame('Use another response', $finalizedType->deprecatedDescription);
+        $this->assertSame(['example'], $finalizedType->examples);
+        $this->assertSame([], $finalizedType->properties);
+        $this->assertSame([], $finalizedType->hiddenProperties);
+        $this->assertInstanceOf(StringType::class, $finalizedType->typeToDisplay);
+        $this->assertNotSame($displayType, $finalizedType->typeToDisplay);
+    }
+
+    #[Test]
+    public function scalarDisplayResolverDoesNotCloneItsRepresentationGraph(): void
+    {
+        $responseType = new ObjectType(
+            properties: ['dead' => new CloneCountingType],
+            className: SimpleClass::class,
+            typeToDisplay: new StringType,
+        );
+
+        $finalizedType = $this->finalizer()->finalizeResponseTypes(
+            types: [new SharedTypeResolver($responseType)],
+        );
+
+        $this->assertInstanceOf(ObjectType::class, $finalizedType);
+        $this->assertSame([], $finalizedType->properties);
+        $this->assertSame(0, CloneCountingType::$cloneCount);
     }
 
     #[Test]
@@ -579,5 +628,13 @@ final class SharedTypeResolver extends UnresolvedType
     public function resolve(): Type
     {
         return $this->resolvedType;
+    }
+}
+
+final class FailingTypeResolver extends UnresolvedType
+{
+    public function resolve(): Type
+    {
+        throw new RuntimeException('A scalar display object must not resolve its representation graph.');
     }
 }

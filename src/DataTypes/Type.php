@@ -584,6 +584,25 @@ abstract class Type
                 return $this;
             }
 
+            $resolvedProjection = null;
+
+            if ($resolvedType instanceof ObjectType
+                && ($resolvedType->typeToDisplay instanceof ScalarType
+                    || $resolvedType->typeToDisplay instanceof BoolType)
+            ) {
+                $resolvedProjection = $resolvedType->getScalarDisplayProjection(
+                    typeToDisplay: $resolvedType->deepResolveTypeToDisplay($config),
+                );
+            }
+
+            if ($resolvedProjection !== null) {
+                $resolvedProjection->required = $combineRequired
+                    ? $resolvedProjection->required || $required
+                    : $required;
+
+                return $resolvedProjection;
+            }
+
             $resolvedType = $resolvedType->deepClone();
             $resolvedType->required = $combineRequired
                 ? $resolvedType->required || $required
@@ -604,15 +623,20 @@ abstract class Type
             );
 
         } else if ($this instanceof ObjectType) {
+            $resolvedTypeToDisplay = $this->deepResolveTypeToDisplay($config);
+            $projection = $this->getScalarDisplayProjection($resolvedTypeToDisplay);
+
+            if ($projection !== null) {
+                return $projection;
+            }
+
             $this->properties = array_map(
                 callback: fn (Type $type): Type => $type
                     ->deepResolveType(config: $config, combineRequired: false)
                     ->unwrapType($config),
                 array: $this->properties,
             );
-            $this->typeToDisplay = $this->typeToDisplay
-                ?->deepResolveType(config: $config, combineRequired: false)
-                ->unwrapType($config);
+            $this->typeToDisplay = $resolvedTypeToDisplay;
 
         } else if ($this instanceof ArrayType) {
             $this->keyType = $this->keyType
@@ -630,6 +654,39 @@ abstract class Type
         }
 
         return $this;
+    }
+
+
+    private function deepResolveTypeToDisplay(Config $config): ?Type
+    {
+        if (! $this instanceof ObjectType || $this->typeToDisplay === null) {
+            return null;
+        }
+
+        return $this->typeToDisplay
+            ->deepClone()
+            ->deepResolveType(config: $config, combineRequired: false)
+            ->unwrapType($config);
+    }
+
+
+    private function getScalarDisplayProjection(?Type $typeToDisplay): ?ObjectType
+    {
+        if (! $this instanceof ObjectType) {
+            return null;
+        }
+
+        if (! $typeToDisplay instanceof ScalarType && ! $typeToDisplay instanceof BoolType) {
+            return null;
+        }
+
+        $projection = clone $this;
+        $projection->properties = [];
+        $projection->hiddenProperties = [];
+        $projection->typeToDisplay = $typeToDisplay;
+        $projection->constructorArgs = null;
+
+        return $projection;
     }
 
 
