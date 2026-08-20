@@ -3,6 +3,7 @@
 namespace AutoDoc\Analyzer\DocBlock;
 
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\ClassStringType;
@@ -49,6 +50,7 @@ use PHPStan\PhpDocParser\Parser\TokenIterator;
 use PHPStan\PhpDocParser\Parser\TypeParser;
 use PHPStan\PhpDocParser\ParserConfig;
 use Throwable;
+use WeakMap;
 
 class PhpDoc
 {
@@ -76,9 +78,23 @@ class PhpDoc
      */
     private array $parameters;
 
+    /**
+     * Parsed nodes are shared only while their Config is reachable and must remain read-only.
+     *
+     * @var ?WeakMap<Config, array<string, PhpDocNode>>
+     */
+    private static ?WeakMap $parsedNodesByConfig = null;
+
 
     private function parse(): PhpDocNode
     {
+        self::$parsedNodesByConfig ??= new WeakMap;
+        $parsedNodes = self::$parsedNodesByConfig[$this->scope->config] ?? [];
+
+        if (isset($parsedNodes[$this->docComment])) {
+            return $parsedNodes[$this->docComment];
+        }
+
         /** @var PhpDocParser|null */
         static $phpDocParser = null;
 
@@ -95,7 +111,11 @@ class PhpDoc
 
         $tokens = new TokenIterator($lexer->tokenize($this->docComment));
 
-        return $phpDocParser->parse($tokens);
+        $parsedNode = $phpDocParser->parse($tokens);
+        $parsedNodes[$this->docComment] = $parsedNode;
+        self::$parsedNodesByConfig[$this->scope->config] = $parsedNodes;
+
+        return $parsedNode;
     }
 
 

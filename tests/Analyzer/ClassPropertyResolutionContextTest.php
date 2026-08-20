@@ -6,6 +6,7 @@ use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\Tests\TestProject\Entities\DocumentedResultServiceConsumer;
 use AutoDoc\Tests\TestProject\Entities\GroupHolder;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
@@ -79,6 +80,30 @@ final class ClassPropertyResolutionContextTest extends TestCase
                 'flag',
             ],
         ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function methodReturnPhpDocResolvesThroughAPrivateTypedProperty(): void
+    {
+        $config = self::loadConfig();
+        $scope = new Scope($config);
+
+        $type = $scope
+            ->getPhpClass(DocumentedResultServiceConsumer::class)
+            ->getMethod('result')
+            ->getReturnType(usePhpDocIfAvailable: false);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'message' => [
+                    'type' => 'string',
+                ],
+            ],
+            'required' => [
+                'message',
+            ],
+        ], $type->toSchema($config), 'method', 'return');
     }
 
     /**

@@ -310,9 +310,12 @@ class Scope
                     $propertyType = $propertyType?->unwrapType($this->config) ?? new UnknownType;
 
                     if ($propertyType instanceof UnknownType && isset($varClass)) {
-                        $allowPrivateAndProtected = $node->var instanceof Node\Expr\Variable && $node->var->name === 'this';
+                        $onlyPublic = ! ($node->var instanceof Node\Expr\Variable && $node->var->name === 'this');
 
-                        $propertyType = $varClass->getProperty($propertyName, $allowPrivateAndProtected)?->unwrapType($this->config) ?? new UnknownType;
+                        $propertyType = $varClass->getProperty(
+                            name: $propertyName,
+                            onlyPublic: $onlyPublic,
+                        )?->unwrapType($this->config) ?? new UnknownType;
 
                         if ($propertyType instanceof UnknownType) {
                             $mixinTag = $varClass->getPhpDoc()?->getMixinTag();
