@@ -12,6 +12,7 @@ use AutoDoc\Tests\TestProject\Controllers\ControlFlowController;
 use AutoDoc\Tests\TestProject\Controllers\DynamicKeysController;
 use AutoDoc\Tests\TestProject\Controllers\DynamicMethodController;
 use AutoDoc\Tests\TestProject\Controllers\ExceptionsController;
+use AutoDoc\Tests\TestProject\Controllers\FluentReturnTypesController;
 use AutoDoc\Tests\TestProject\Controllers\GenericTypesController;
 use AutoDoc\Tests\TestProject\Controllers\IntersectionUnionController;
 use AutoDoc\Tests\TestProject\Controllers\PipeOperationController;
@@ -38,6 +39,7 @@ class RouteLoader extends AbstractRouteLoader
         TraitMethodsController::class,
         DynamicKeysController::class,
         DynamicMethodController::class,
+        FluentReturnTypesController::class,
         XmlRequestController::class,
         PipeOperationController::class,
     ];

@@ -12,6 +12,7 @@ use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
+use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedType;
 use DateTimeInterface;
@@ -387,6 +388,27 @@ class PhpClass
         }
 
         return new UnknownType;
+    }
+
+
+    public function resolveConstantTypeByWildcard(string $namePattern): Type
+    {
+        $types = [];
+
+        foreach (array_keys($this->getReflection()->getConstants()) as $name) {
+            if (fnmatch($namePattern, $name, FNM_NOESCAPE)) {
+                $types[] = $this->resolveConstantType($name);
+            }
+        }
+
+        if (! $types) {
+            return new UnknownType;
+        }
+
+        $unionType = new UnionType($types);
+        $unionType->isEnum = true;
+
+        return $unionType->unwrapType($this->scope->config);
     }
 
 

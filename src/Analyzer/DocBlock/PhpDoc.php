@@ -18,6 +18,8 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\DataTypes\UnresolvedArrayItemType;
+use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\VoidType;
@@ -35,12 +37,14 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayShapeNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeForParameterNode;
+use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConstTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IntersectionTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ObjectShapeNode;
+use PHPStan\PhpDocParser\Ast\Type\ThisTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
@@ -151,6 +155,14 @@ class PhpDoc
                 }
             }
 
+            /**
+             * int<0, 100> / int<min, 50> / int<1, self::LIMIT>
+             */
+            if ($type instanceof IntegerType && count($node->genericTypes) === 2) {
+                $type->minimum = $this->resolveIntegerRangeBound($node->genericTypes[0]);
+                $type->maximum = $this->resolveIntegerRangeBound($node->genericTypes[1]);
+            }
+
             return $type;
         }
 
@@ -193,6 +205,13 @@ class PhpDoc
         }
 
         /**
+         * $this
+         */
+        if ($node instanceof ThisTypeNode) {
+            return $this->resolveTypeFromIdentifier('static');
+        }
+
+        /**
          * ?type
          */
         if ($node instanceof NullableTypeNode) {
@@ -205,7 +224,7 @@ class PhpDoc
         }
 
         /**
-         * 'str' / 420 / 0.5
+         * 'str' / 420 / 0.5 / CONSTANT / Foo::BAR / Foo::BAR_* / Foo::class
          */
         if ($node instanceof ConstTypeNode) {
             if ($node->constExpr instanceof ConstExprStringNode) {
@@ -218,6 +237,10 @@ class PhpDoc
 
             if ($node->constExpr instanceof ConstExprFloatNode) {
                 return new FloatType((float) $node->constExpr->value);
+            }
+
+            if ($node->constExpr instanceof ConstFetchNode) {
+                return $this->resolveTypeFromConstFetch($node->constExpr);
             }
 
             return null;
@@ -252,9 +275,9 @@ class PhpDoc
         }
 
         /**
-         * (if $param is $node->targetType ? $node->if : $node->else)
+         * ($param is targetType ? if : else) / (subjectType is targetType ? if : else)
          */
-        if ($node instanceof ConditionalTypeForParameterNode) {
+        if ($node instanceof ConditionalTypeForParameterNode || $node instanceof ConditionalTypeNode) {
             $type = new UnionType([
                 $this->resolveTypeFromNode($node->if) ?? new UnknownType,
                 $this->resolveTypeFromNode($node->else) ?? new UnknownType,
@@ -304,8 +327,10 @@ class PhpDoc
             'true' => new BoolType(true),
             'false' => new BoolType(false),
             'bool', 'boolean' => new BoolType,
-            'array', 'list', 'iterable' => new ArrayType,
-            'non-empty-array', 'non-empty-list' => new ArrayType(minItems: 1),
+            'array', 'iterable' => new ArrayType,
+            'list' => new ArrayType(keyType: new IntegerType),
+            'non-empty-array' => new ArrayType(minItems: 1),
+            'non-empty-list' => new ArrayType(keyType: new IntegerType, minItems: 1),
             'associative-array' => new ObjectType,
             'object' => new ObjectType,
             'scalar' => new UnionType([
@@ -319,6 +344,12 @@ class PhpDoc
                 new FloatType,
                 new NumberType(isString: false),
             ]),
+            'array-key' => new UnionType([
+                new IntegerType,
+                new StringType,
+            ]),
+            'key-of' => isset($genericTypeValues[0]) ? new UnresolvedArrayKeyType($genericTypeValues[0], $this->scope) : null,
+            'value-of' => isset($genericTypeValues[0]) ? $this->resolveValueOfType($genericTypeValues[0]) : null,
             'null' => new NullType,
             'void' => new VoidType,
             'never' => new NeverType,
@@ -369,8 +400,82 @@ class PhpDoc
 
         $className = $this->scope->getResolvedClassName($identifier);
 
+        if ($className) {
+            $phpClass = $this->scope->getPhpClassInDeeperScope($className);
+
+            if ($phpClass->exists()) {
+                $phpClass->setTemplateTypeValues($genericTypeValues);
+
+                return $phpClass->resolveType();
+            }
+        }
+
+        return $this->resolveTypeFromConstantName($identifier);
+    }
+
+
+    /**
+     * `value-of<T>` is the item type of an array, or the backing type of an enum.
+     */
+    private function resolveValueOfType(UnresolvedPhpDocType $genericTypeValue): Type
+    {
+        $identifier = $genericTypeValue->getIdentifier();
+        $className = $identifier === null ? null : $this->scope->getResolvedClassName($identifier);
+
+        if ($className !== null) {
+            $phpClass = $this->scope->getPhpClassInDeeperScope($className);
+
+            if ($phpClass->exists() && $phpClass->getReflection()->isEnum()) {
+                $enumType = $phpClass->resolveType();
+
+                return $enumType->typeToDisplay ?? $enumType;
+            }
+        }
+
+        return new UnresolvedArrayItemType($genericTypeValue, $this->scope);
+    }
+
+
+    /**
+     * A bound is either an integer literal, a constant that holds one,
+     * or the `min`/`max` keyword, which leaves that end unbounded.
+     */
+    private function resolveIntegerRangeBound(TypeNode $node): ?int
+    {
+        $boundType = $this->resolveTypeFromNode($node);
+
+        return $boundType instanceof IntegerType && is_int($boundType->value)
+            ? $boundType->value
+            : null;
+    }
+
+
+    private function resolveTypeFromConstantName(string $name): ?Type
+    {
+        $constantName = $this->scope->getResolvedConstantName($name);
+
+        if (! defined($constantName)) {
+            return null;
+        }
+
+        return Type::fromValue(constant($constantName));
+    }
+
+
+    private function resolveTypeFromConstFetch(ConstFetchNode $node): ?Type
+    {
+        if ($node->className === '') {
+            return $this->resolveTypeFromConstantName($node->name);
+        }
+
+        $className = $this->scope->getResolvedClassName($node->className);
+
         if (! $className) {
             return null;
+        }
+
+        if ($node->name === 'class') {
+            return new ClassStringType(className: $className);
         }
 
         $phpClass = $this->scope->getPhpClassInDeeperScope($className);
@@ -379,9 +484,11 @@ class PhpDoc
             return null;
         }
 
-        $phpClass->setTemplateTypeValues($genericTypeValues);
+        if (str_contains($node->name, '*')) {
+            return $phpClass->resolveConstantTypeByWildcard($node->name);
+        }
 
-        return $phpClass->resolveType();
+        return $phpClass->resolveConstantType($node->name);
     }
 
 

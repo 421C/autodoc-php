@@ -381,4 +381,67 @@ class BasicResponsesController
     {
         return PermissionEnum::None;
     }
+
+
+    /**
+     * Array key doc type
+     *
+     * `array-key` is `int|string`, so as a key it puts the array on the object branch.
+     *
+     * @return array{
+     *     key: array-key,
+     *     nullableKey: ?array-key,
+     *     keyed: array<array-key, string>,
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Array key doc type',
+        'description' => '`array-key` is `int|string`, so as a key it puts the array on the object branch.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'key' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                    ],
+                                ],
+                                'nullableKey' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                        'null',
+                                    ],
+                                ],
+                                'keyed' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'key',
+                                'nullableKey',
+                                'keyed',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function arrayKeyDocType(): array
+    {
+        return [
+            'key' => 'id',
+            'nullableKey' => null,
+            'keyed' => ['id' => 'first'],
+        ];
+    }
 }
