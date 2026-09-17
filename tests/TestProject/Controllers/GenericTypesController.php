@@ -7,6 +7,7 @@ use AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
+use AutoDoc\Tests\TestProject\Entities\StateEnum;
 
 /**
  * Tests for generic types, class-string, templates.
@@ -349,6 +350,105 @@ class GenericTypesController
     {
         return new $className;
     }
+
+
+    /**
+     * Key of and value of
+     *
+     * `value-of` over an enum yields its backing type, over an array its item type.
+     *
+     * @return array{
+     *     shapeKeys: key-of<array{id: int, label: string}>,
+     *     shapeValues: value-of<array{id: int, label: string}>,
+     *     listKeys: key-of<list<string>>,
+     *     listValues: value-of<list<string>>,
+     *     mapKeys: key-of<array<string, int>>,
+     *     mapValues: value-of<array<string, int>>,
+     *     untypedKeys: key-of<array<string>>,
+     *     enumValues: value-of<StateEnum>,
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Key of and value of',
+        'description' => '`value-of` over an enum yields its backing type, over an array its item type.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'shapeKeys' => [
+                                    'type' => 'string',
+                                    'enum' => [
+                                        'id',
+                                        'label',
+                                    ],
+                                ],
+                                'shapeValues' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                    ],
+                                ],
+                                'listKeys' => [
+                                    'type' => 'integer',
+                                ],
+                                'listValues' => [
+                                    'type' => 'string',
+                                ],
+                                'mapKeys' => [
+                                    'type' => 'string',
+                                ],
+                                'mapValues' => [
+                                    'type' => 'integer',
+                                ],
+                                'untypedKeys' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                    ],
+                                ],
+                                'enumValues' => [
+                                    'type' => 'integer',
+                                    'description' => '[StateEnum](#/schemas/StateEnum)',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'shapeKeys',
+                                'shapeValues',
+                                'listKeys',
+                                'listValues',
+                                'mapKeys',
+                                'mapValues',
+                                'untypedKeys',
+                                'enumValues',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function keyOfAndValueOf(): array
+    {
+        return [
+            'shapeKeys' => 'id',
+            'shapeValues' => 1,
+            'listKeys' => 0,
+            'listValues' => 'first',
+            'mapKeys' => 'id',
+            'mapValues' => 1,
+            'untypedKeys' => 'id',
+            'enumValues' => StateEnum::One->value,
+        ];
+    }
+
 
     /**
      * @template TClass of GenericClass

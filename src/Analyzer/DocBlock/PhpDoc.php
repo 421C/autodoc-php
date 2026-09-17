@@ -18,6 +18,8 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\DataTypes\UnresolvedArrayItemType;
+use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\VoidType;
@@ -324,8 +326,10 @@ class PhpDoc
             'true' => new BoolType(true),
             'false' => new BoolType(false),
             'bool', 'boolean' => new BoolType,
-            'array', 'list', 'iterable' => new ArrayType,
-            'non-empty-array', 'non-empty-list' => new ArrayType(minItems: 1),
+            'array', 'iterable' => new ArrayType,
+            'list' => new ArrayType(keyType: new IntegerType),
+            'non-empty-array' => new ArrayType(minItems: 1),
+            'non-empty-list' => new ArrayType(keyType: new IntegerType, minItems: 1),
             'associative-array' => new ObjectType,
             'object' => new ObjectType,
             'scalar' => new UnionType([
@@ -339,6 +343,12 @@ class PhpDoc
                 new FloatType,
                 new NumberType(isString: false),
             ]),
+            'array-key' => new UnionType([
+                new IntegerType,
+                new StringType,
+            ]),
+            'key-of' => isset($genericTypeValues[0]) ? new UnresolvedArrayKeyType($genericTypeValues[0], $this->scope) : null,
+            'value-of' => isset($genericTypeValues[0]) ? $this->resolveValueOfType($genericTypeValues[0]) : null,
             'null' => new NullType,
             'void' => new VoidType,
             'never' => new NeverType,
@@ -400,6 +410,28 @@ class PhpDoc
         }
 
         return $this->resolveTypeFromConstantName($identifier);
+    }
+
+
+    /**
+     * `value-of<T>` is the item type of an array, or the backing type of an enum.
+     */
+    private function resolveValueOfType(UnresolvedPhpDocType $genericTypeValue): Type
+    {
+        $identifier = $genericTypeValue->getIdentifier();
+        $className = $identifier === null ? null : $this->scope->getResolvedClassName($identifier);
+
+        if ($className !== null) {
+            $phpClass = $this->scope->getPhpClassInDeeperScope($className);
+
+            if ($phpClass->exists() && $phpClass->getReflection()->isEnum()) {
+                $enumType = $phpClass->resolveType();
+
+                return $enumType->typeToDisplay ?? $enumType;
+            }
+        }
+
+        return new UnresolvedArrayItemType($genericTypeValue, $this->scope);
     }
 
 
