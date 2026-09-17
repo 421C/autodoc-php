@@ -742,6 +742,9 @@ abstract class Type
         } else if ($type instanceof ClassStringType) {
             $type->classTemplateType = $type->classTemplateType?->deepClone();
 
+        } else if ($type instanceof CallableType) {
+            $type->declaredReturnType = $type->declaredReturnType?->deepClone();
+
         } else if ($type instanceof UnresolvedArrayDimType
             || $type instanceof UnresolvedArrayItemType
             || $type instanceof UnresolvedArrayKeyType

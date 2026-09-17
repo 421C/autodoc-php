@@ -33,6 +33,7 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayShapeNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\CallableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeForParameterNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConstTypeNode;
@@ -199,6 +200,15 @@ class PhpDoc
          */
         if ($node instanceof IdentifierTypeNode) {
             return $this->resolveTypeFromIdentifier($node->name);
+        }
+
+        /**
+         * callable(paramTypes): returnType
+         */
+        if ($node instanceof CallableTypeNode) {
+            return new CallableType(
+                declaredReturnType: $this->resolveTypeFromNode($node->returnType) ?? new UnknownType,
+            );
         }
 
         /**
