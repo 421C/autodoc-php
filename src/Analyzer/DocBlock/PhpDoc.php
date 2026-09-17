@@ -37,6 +37,7 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayShapeNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeForParameterNode;
+use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConstTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
@@ -274,9 +275,9 @@ class PhpDoc
         }
 
         /**
-         * (if $param is $node->targetType ? $node->if : $node->else)
+         * ($param is targetType ? if : else) / (subjectType is targetType ? if : else)
          */
-        if ($node instanceof ConditionalTypeForParameterNode) {
+        if ($node instanceof ConditionalTypeForParameterNode || $node instanceof ConditionalTypeNode) {
             $type = new UnionType([
                 $this->resolveTypeFromNode($node->if) ?? new UnknownType,
                 $this->resolveTypeFromNode($node->else) ?? new UnknownType,

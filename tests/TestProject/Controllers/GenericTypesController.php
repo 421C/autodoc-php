@@ -451,6 +451,107 @@ class GenericTypesController
 
 
     /**
+     * Conditional types
+     *
+     * Nothing decides the condition here, so both branches are documented.
+     *
+     * @template TValue
+     *
+     * @param TValue $value
+     *
+     * @return array{
+     *     templateSubject: (TValue is string ? int : bool),
+     *     negatedSubject: (TValue is not string ? int : bool),
+     *     thisSubject: ($this is GenericTypesController ? string : int),
+     *     nullableBranch: (TValue is string ? int : null),
+     *     parameterSubject: ($value is string ? int : bool),
+     *     nested: array{value: (TValue is int ? string : bool)},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Conditional types',
+        'description' => 'Nothing decides the condition here, so both branches are documented.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'templateSubject' => [
+                                    'type' => [
+                                        'integer',
+                                        'boolean',
+                                    ],
+                                ],
+                                'negatedSubject' => [
+                                    'type' => [
+                                        'integer',
+                                        'boolean',
+                                    ],
+                                ],
+                                'thisSubject' => [
+                                    'type' => [
+                                        'string',
+                                        'integer',
+                                    ],
+                                ],
+                                'nullableBranch' => [
+                                    'type' => [
+                                        'integer',
+                                        'null',
+                                    ],
+                                ],
+                                'parameterSubject' => [
+                                    'type' => [
+                                        'integer',
+                                        'boolean',
+                                    ],
+                                ],
+                                'nested' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'value' => [
+                                            'type' => [
+                                                'string',
+                                                'boolean',
+                                            ],
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'value',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'templateSubject',
+                                'negatedSubject',
+                                'thisSubject',
+                                'nullableBranch',
+                                'parameterSubject',
+                                'nested',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function conditionalTypes(mixed $value): array
+    {
+        return [
+            'templateSubject' => 1,
+            'negatedSubject' => 1,
+            'thisSubject' => 'value',
+            'nullableBranch' => null,
+            'parameterSubject' => 1,
+            'nested' => ['value' => 'value'],
+        ];
+    }
+
+
+    /**
      * @template TClass of GenericClass
      * @template TParam
      *
