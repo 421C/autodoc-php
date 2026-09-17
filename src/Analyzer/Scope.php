@@ -15,7 +15,6 @@ use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
-use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
@@ -25,7 +24,6 @@ use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\DataTypes\UnresolvedVariableType;
-use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
 use AutoDoc\Extensions\ExtensionDispatcher;
 use AutoDoc\Extensions\FuncCallContext;
@@ -130,21 +128,7 @@ class Scope
             }
 
             if ($node instanceof Node\Identifier) {
-                return match ($node->name) {
-                    'int' => new IntegerType,
-                    'float' => new FloatType,
-                    'string' => new StringType,
-                    'true' => new BoolType(true),
-                    'false' => new BoolType(false),
-                    'bool', 'boolean' => new BoolType,
-                    'array', 'iterable' => new ArrayType,
-                    'object' => new ObjectType,
-                    'callable' => new CallableType,
-                    'null' => new NullType,
-                    'void' => new VoidType,
-                    'never' => new NeverType,
-                    default => new UnknownType,
-                };
+                return Type::fromKeyword($node->name) ?? new UnknownType;
             }
 
             if ($node instanceof Node\NullableType) {
