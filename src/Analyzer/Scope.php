@@ -1077,8 +1077,16 @@ class Scope
     }
 
 
-    public function getResolvedConstantName(Node\Name $name): string
+    public function getResolvedConstantName(string|Node\Name $name): string
     {
+        if (is_string($name)) {
+            if (str_starts_with($name, '\\')) {
+                return PhpClass::removeLeadingBackslash($name);
+            }
+
+            return $this->getCurrentPhpClass()?->getSymbolNameResolver()?->getResolvedConstantName($name) ?? $name;
+        }
+
         if ($name instanceof Node\Name\FullyQualified) {
             return PhpClass::removeLeadingBackslash($name->name);
         }

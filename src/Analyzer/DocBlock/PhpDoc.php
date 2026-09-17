@@ -205,7 +205,7 @@ class PhpDoc
         }
 
         /**
-         * 'str' / 420 / 0.5
+         * 'str' / 420 / 0.5 / CONSTANT / Foo::BAR / Foo::BAR_* / Foo::class
          */
         if ($node instanceof ConstTypeNode) {
             if ($node->constExpr instanceof ConstExprStringNode) {
@@ -218,6 +218,10 @@ class PhpDoc
 
             if ($node->constExpr instanceof ConstExprFloatNode) {
                 return new FloatType((float) $node->constExpr->value);
+            }
+
+            if ($node->constExpr instanceof ConstFetchNode) {
+                return $this->resolveTypeFromConstFetch($node->constExpr);
             }
 
             return null;
@@ -369,8 +373,46 @@ class PhpDoc
 
         $className = $this->scope->getResolvedClassName($identifier);
 
+        if ($className) {
+            $phpClass = $this->scope->getPhpClassInDeeperScope($className);
+
+            if ($phpClass->exists()) {
+                $phpClass->setTemplateTypeValues($genericTypeValues);
+
+                return $phpClass->resolveType();
+            }
+        }
+
+        return $this->resolveTypeFromConstantName($identifier);
+    }
+
+
+    private function resolveTypeFromConstantName(string $name): ?Type
+    {
+        $constantName = $this->scope->getResolvedConstantName($name);
+
+        if (! defined($constantName)) {
+            return null;
+        }
+
+        return Type::fromValue(constant($constantName));
+    }
+
+
+    private function resolveTypeFromConstFetch(ConstFetchNode $node): ?Type
+    {
+        if ($node->className === '') {
+            return $this->resolveTypeFromConstantName($node->name);
+        }
+
+        $className = $this->scope->getResolvedClassName($node->className);
+
         if (! $className) {
             return null;
+        }
+
+        if ($node->name === 'class') {
+            return new ClassStringType(className: $className);
         }
 
         $phpClass = $this->scope->getPhpClassInDeeperScope($className);
@@ -379,9 +421,11 @@ class PhpDoc
             return null;
         }
 
-        $phpClass->setTemplateTypeValues($genericTypeValues);
+        if (str_contains($node->name, '*')) {
+            return $phpClass->resolveConstantTypeByWildcard($node->name);
+        }
 
-        return $phpClass->resolveType();
+        return $phpClass->resolveConstantType($node->name);
     }
 
 
