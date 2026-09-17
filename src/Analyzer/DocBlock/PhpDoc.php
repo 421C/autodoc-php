@@ -41,6 +41,7 @@ use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IntersectionTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ObjectShapeNode;
+use PHPStan\PhpDocParser\Ast\Type\ThisTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
 use PHPStan\PhpDocParser\Lexer\Lexer;
@@ -190,6 +191,13 @@ class PhpDoc
          */
         if ($node instanceof IdentifierTypeNode) {
             return $this->resolveTypeFromIdentifier($node->name);
+        }
+
+        /**
+         * $this
+         */
+        if ($node instanceof ThisTypeNode) {
+            return $this->resolveTypeFromIdentifier('static');
         }
 
         /**

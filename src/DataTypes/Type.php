@@ -208,6 +208,15 @@ abstract class Type
         }
 
         if ($type->isSubTypeOf($this, $config)) {
+            if ($this instanceof ObjectType
+                && $type instanceof ObjectType
+                && $type->className !== null
+                && ! $type->hasResolvedShape()
+                && $this->hasResolvedShape()
+            ) {
+                return $this;
+            }
+
             return $type;
         }
 
@@ -772,6 +781,10 @@ abstract class Type
                 'never' => new NeverType,
                 default => new UnknownType,
             };
+
+            if ($type instanceof UnknownType && $typeName === 'static' && isset($scope)) {
+                $typeName = $scope->getResolvedClassName($typeName) ?? $typeName;
+            }
 
             if ($type instanceof UnknownType && class_exists($typeName)) {
                 if (isset($scope)) {

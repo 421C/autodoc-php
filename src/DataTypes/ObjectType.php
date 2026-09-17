@@ -46,11 +46,6 @@ class ObjectType extends Type
     }
 
 
-    /**
-     * Contextual descriptions (array item comments, PHPDoc param descriptions)
-     * must reach the displayed schema; the class docblock is assigned to
-     * `$description` directly and intentionally stays off the display type.
-     */
     #[Override]
     public function addDescription(?string $description, bool $prepend = false): self
     {
@@ -63,6 +58,14 @@ class ObjectType extends Type
         parent::addDescription($description, $prepend);
 
         return $this;
+    }
+
+
+    public function hasResolvedShape(): bool
+    {
+        return $this->properties !== []
+            || $this->hiddenProperties !== []
+            || $this->typeToDisplay !== null;
     }
 
 
