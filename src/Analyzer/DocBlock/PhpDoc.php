@@ -152,6 +152,14 @@ class PhpDoc
                 }
             }
 
+            /**
+             * int<0, 100> / int<min, 50> / int<1, self::LIMIT>
+             */
+            if ($type instanceof IntegerType && count($node->genericTypes) === 2) {
+                $type->minimum = $this->resolveIntegerRangeBound($node->genericTypes[0]);
+                $type->maximum = $this->resolveIntegerRangeBound($node->genericTypes[1]);
+            }
+
             return $type;
         }
 
@@ -392,6 +400,20 @@ class PhpDoc
         }
 
         return $this->resolveTypeFromConstantName($identifier);
+    }
+
+
+    /**
+     * A bound is either an integer literal, a constant that holds one,
+     * or the `min`/`max` keyword, which leaves that end unbounded.
+     */
+    private function resolveIntegerRangeBound(TypeNode $node): ?int
+    {
+        $boundType = $this->resolveTypeFromNode($node);
+
+        return $boundType instanceof IntegerType && is_int($boundType->value)
+            ? $boundType->value
+            : null;
     }
 
 
