@@ -21,6 +21,7 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\UnresolvedReflectionType;
+use AutoDoc\DataTypes\VoidType;
 use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Parameter;
@@ -928,7 +929,10 @@ class PhpCallable
         }
 
         // Create responses from analyzed return type
-        if (! ($responseBodyType instanceof UnknownType) && ! ($responseBodyType instanceof NeverType)) {
+        if (! ($responseBodyType instanceof UnknownType)
+            && ! ($responseBodyType instanceof NeverType)
+            && ! ($responseBodyType instanceof VoidType)
+        ) {
             $responseTypes = $responseBodyType instanceof UnionType
                 ? $responseBodyType->types
                 : [$responseBodyType];
