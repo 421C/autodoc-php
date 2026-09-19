@@ -16,6 +16,7 @@ class Operation implements JsonSerializable
         public ?RequestBody $requestBody = null,
         public ?ExternalDocumentationObject $externalDocs = null,
         public ?bool $deprecated = null,
+        public ?string $deprecatedDescription = null,
 
         /** @var ?array<int|string, Response|ReferenceObject> */
         public ?array $responses = null,
@@ -37,6 +38,7 @@ class Operation implements JsonSerializable
             'responses' => $this->responses,
             'externalDocs' => $this->externalDocs,
             'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
             'servers' => $this->servers,
             'parameters' => $this->parameters,
         ], fn ($value) => $value !== null);

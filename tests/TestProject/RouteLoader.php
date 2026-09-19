@@ -10,6 +10,7 @@ use AutoDoc\Tests\TestProject\Controllers\BasicResponsesController;
 use AutoDoc\Tests\TestProject\Controllers\CallableTypesController;
 use AutoDoc\Tests\TestProject\Controllers\ClosuresController;
 use AutoDoc\Tests\TestProject\Controllers\ControlFlowController;
+use AutoDoc\Tests\TestProject\Controllers\DeprecationController;
 use AutoDoc\Tests\TestProject\Controllers\DynamicKeysController;
 use AutoDoc\Tests\TestProject\Controllers\DynamicMethodController;
 use AutoDoc\Tests\TestProject\Controllers\ExceptionsController;
@@ -44,6 +45,7 @@ class RouteLoader extends AbstractRouteLoader
         XmlRequestController::class,
         PipeOperationController::class,
         CallableTypesController::class,
+        DeprecationController::class,
     ];
 
     public function getRoutes(): iterable
