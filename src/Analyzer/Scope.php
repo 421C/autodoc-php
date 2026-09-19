@@ -3,6 +3,7 @@
 namespace AutoDoc\Analyzer;
 
 use AutoDoc\Analyzer\Ast\ArrayTypeResolver;
+use AutoDoc\Analyzer\Ast\PartialApplicationResolver;
 use AutoDoc\Analyzer\Ast\PipeTypeResolver;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\Flow\BranchBreakout;
@@ -152,6 +153,15 @@ class Scope
 
             if ($node instanceof Node\Expr\Variable) {
                 return $this->variables->getType($node)?->unwrapType($this->config) ?? new UnknownType;
+            }
+
+            if (($node instanceof Node\Expr\FuncCall
+                || $node instanceof Node\Expr\MethodCall
+                || $node instanceof Node\Expr\NullsafeMethodCall
+                || $node instanceof Node\Expr\StaticCall)
+                && $node->isPartialFunctionApplication()
+            ) {
+                return new PartialApplicationResolver($node, $this)->resolveType();
             }
 
             if ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall) {

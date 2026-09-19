@@ -78,11 +78,15 @@ class PhpCallable
 
 
     /**
-     * Resolve the return type of an inline callable (closure/arrow function).
-     * Used by CallableType when the callable is invoked with arguments.
+     * Resolve the return type for an invocation with the given arguments.
+     * Used by CallableType when the callable is invoked.
      */
     public function resolveReturnType(ArgumentList $args, ?Node $callerNode = null): Type
     {
+        if (! $this->node) {
+            return $this->withArgs($args)->getReturnType();
+        }
+
         $analysis = $this->traverseInlineBody($args, $callerNode);
 
         if (! $analysis) {
@@ -94,6 +98,21 @@ class PhpCallable
         $returnType = new UnionType($nodeVisitor->returnTypes);
 
         return $returnType->unwrapType($this->scope->config);
+    }
+
+
+    /**
+     * Rebind the same target to a different invocation's arguments.
+     */
+    private function withArgs(ArgumentList $args): self
+    {
+        return new self(
+            scope: $this->scope,
+            reflection: $this->reflection,
+            args: $args,
+            phpClass: $this->phpClass,
+            methodName: $this->methodName,
+        );
     }
 
     /**
