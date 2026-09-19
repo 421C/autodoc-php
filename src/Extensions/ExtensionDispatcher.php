@@ -77,6 +77,10 @@ final class ExtensionDispatcher
      */
     public function runSideEffectExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
     {
+        if ($context->node->isPartialFunctionApplication()) {
+            return;
+        }
+
         if ($this->suppressSideEffects || isset($this->nodesWithHandledSideEffects[$context->node])) {
             return;
         }
