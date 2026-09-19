@@ -179,7 +179,7 @@ class DocViewer
         ob_start();
 
         try {
-            include dirname(__DIR__) . '/resources/views/docs.php';
+            include __DIR__ . '/../resources/views/docs.php';
 
         } catch (Throwable $exception) {
             ob_end_clean();
@@ -265,7 +265,7 @@ class DocViewer
             return null;
         }
 
-        $path = dirname(__DIR__) . '/resources/viewer/' . $file;
+        $path = __DIR__ . '/../resources/viewer/' . $file;
 
         return is_file($path) ? $path : null;
     }
@@ -278,7 +278,7 @@ class DocViewer
             return DocViewerResponse::notFound();
         }
 
-        $path = dirname(__DIR__) . '/resources/viewer/' . $file;
+        $path = __DIR__ . '/../resources/viewer/' . $file;
 
         if (! is_file($path)) {
             return DocViewerResponse::notFound();

@@ -336,11 +336,9 @@ trait WithMergeableTypes
 
             if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                 foreach ($array2->shape as $key => $type2) {
-                    if (!isset($array1->shape[$key])) {
-                        $array1->shape[$key] = $mergeAsIntersection
-                            ? $type2
-                            : $this->asOptionalMember($type2);
-                    }
+                    $array1->shape[$key] ??= $mergeAsIntersection
+                        ? $type2
+                        : $this->asOptionalMember($type2);
                 }
             }
 
@@ -450,11 +448,9 @@ trait WithMergeableTypes
 
         if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
             foreach ($object2->properties as $key => $type2) {
-                if (!isset($object1->properties[$key])) {
-                    $object1->properties[$key] = $mergeAsIntersection
-                        ? $type2
-                        : $this->asOptionalMember($type2);
-                }
+                $object1->properties[$key] ??= $mergeAsIntersection
+                    ? $type2
+                    : $this->asOptionalMember($type2);
             }
         }
 

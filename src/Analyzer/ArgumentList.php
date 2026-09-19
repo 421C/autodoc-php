@@ -11,6 +11,8 @@ use PhpParser\Node;
 /**
  * A lazy, scope-aware type collection. Types are resolved on first
  * access and cached for subsequent reads.
+ *
+ * @phpstan-type PhpParserArgNodes array<Node\Arg|Node\ArgPlaceholder|Node\VariadicPlaceholder>
  */
 class ArgumentList implements Countable
 {
@@ -18,7 +20,7 @@ class ArgumentList implements Countable
         private readonly Scope $scope,
 
         /**
-         * @var array<Node\Arg|Node\VariadicPlaceholder> $argNodes
+         * @var PhpParserArgNodes $argNodes
          */
         private array $argNodes = [],
     ) {}
@@ -27,7 +29,7 @@ class ArgumentList implements Countable
     private array $resolved = [];
 
     /**
-     * @param array<Node\Arg|Node\VariadicPlaceholder> $argNodes
+     * @param PhpParserArgNodes $argNodes
      */
     public static function fromArgNodes(array $argNodes, Scope $scope): self
     {

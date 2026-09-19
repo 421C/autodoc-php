@@ -27,6 +27,7 @@ use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Parameter;
 use AutoDoc\OpenApi\RequestBody;
 use AutoDoc\OpenApi\Response;
+use Deprecated;
 use Exception;
 use Override;
 use PhpParser\Node;
@@ -812,6 +813,8 @@ class PhpCallable
 
         $phpDocReturnType = null;
 
+        [$operation->deprecated, $operation->deprecatedDescription] = $this->getDeprecation();
+
         if ($phpDoc) {
             $phpDocResponseTag = $phpDoc->getResponseTag();
 
@@ -988,5 +991,44 @@ class PhpCallable
         }
 
         return $operation;
+    }
+
+
+    /**
+     * @return array{?true, ?string}
+     */
+    private function getDeprecation(): array
+    {
+        $phpDocTags = $this->getPhpDoc()?->getDeprecatedTags() ?? [];
+
+        if ($phpDocTags === [] && ! ($this->reflection?->isDeprecated() ?? false)) {
+            return [null, null];
+        }
+
+        $description = null;
+
+        foreach ($phpDocTags as $deprecation) {
+            $description = trim($description . "\n\n" . $deprecation['description']) ?: null;
+        }
+
+        return [true, $description ?? $this->getNativeDeprecationMessage()];
+    }
+
+
+    private function getNativeDeprecationMessage(): ?string
+    {
+        $attribute = $this->reflection?->getAttributes(Deprecated::class)[0] ?? null;
+
+        if (! $attribute) {
+            return null;
+        }
+
+        $deprecated = $attribute->newInstance();
+
+        $message = $deprecated->since === null
+            ? $deprecated->message
+            : trim('Since ' . $deprecated->since . ': ' . $deprecated->message, ': ');
+
+        return $message === null || $message === '' ? null : $message;
     }
 }
