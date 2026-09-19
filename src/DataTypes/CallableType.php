@@ -12,11 +12,14 @@ class CallableType extends Type
     public function __construct(
         public ?string $description = null,
         private readonly ?PhpCallable $phpCallable = null,
+        public ?Type $declaredReturnType = null,
     ) {}
 
     public function getReturnType(ArgumentList $args, ?Node $callerNode = null): Type
     {
-        return $this->phpCallable?->resolveReturnType($args, $callerNode) ?? new UnknownType;
+        return $this->phpCallable?->resolveReturnType($args, $callerNode)
+            ?? $this->declaredReturnType
+            ?? new UnknownType;
     }
 
     /**

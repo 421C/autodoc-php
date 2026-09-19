@@ -742,6 +742,9 @@ abstract class Type
         } else if ($type instanceof ClassStringType) {
             $type->classTemplateType = $type->classTemplateType?->deepClone();
 
+        } else if ($type instanceof CallableType) {
+            $type->declaredReturnType = $type->declaredReturnType?->deepClone();
+
         } else if ($type instanceof UnresolvedArrayDimType
             || $type instanceof UnresolvedArrayItemType
             || $type instanceof UnresolvedArrayKeyType
@@ -765,22 +768,60 @@ abstract class Type
     }
 
 
+    /**
+     * Shared by native type hints, PHPDoc types and reflection.
+     */
+    public static function fromKeyword(string $keyword): ?Type
+    {
+        return match ($keyword) {
+            'int', 'integer', 'non-zero-int' => new IntegerType,
+            'positive-int' => new IntegerType(minimum: 1),
+            'negative-int' => new IntegerType(maximum: -1),
+            'non-positive-int' => new IntegerType(maximum: 0),
+            'non-negative-int' => new IntegerType(minimum: 0),
+            'float', 'double' => new FloatType,
+            'string', 'lowercase-string', 'uppercase-string', 'literal-string',
+            'non-empty-lowercase-string', 'non-empty-uppercase-string', 'non-empty-literal-string',
+            'non-empty-string', 'non-falsy-string', 'truthy-string' => new StringType,
+            'numeric-string' => new NumberType(isString: true),
+            'true' => new BoolType(true),
+            'false' => new BoolType(false),
+            'bool', 'boolean' => new BoolType,
+            'array', 'iterable' => new ArrayType,
+            'list' => new ArrayType(keyType: new IntegerType),
+            'non-empty-array' => new ArrayType(minItems: 1),
+            'non-empty-list' => new ArrayType(keyType: new IntegerType, minItems: 1),
+            'associative-array', 'object' => new ObjectType,
+            'callable' => new CallableType,
+            'scalar' => new UnionType([
+                new IntegerType,
+                new FloatType,
+                new StringType,
+                new BoolType,
+            ]),
+            'numeric' => new UnionType([
+                new IntegerType,
+                new FloatType,
+                new NumberType(isString: false),
+            ]),
+            'array-key' => new UnionType([
+                new IntegerType,
+                new StringType,
+            ]),
+            'null' => new NullType,
+            'void' => new VoidType,
+            'never' => new NeverType,
+            default => null,
+        };
+    }
+
+
     public static function resolveFromReflection(ReflectionType $reflectionType, ?Scope $scope = null): Type
     {
         if ($reflectionType instanceof ReflectionNamedType) {
             $typeName = $reflectionType->getName();
 
-            $type = match ($reflectionType->getName()) {
-                'int' => new IntegerType,
-                'float' => new FloatType,
-                'string' => new StringType,
-                'bool', 'true', 'false' => new BoolType,
-                'array' => new ArrayType,
-                'object' => new ObjectType,
-                'null' => new NullType,
-                'never' => new NeverType,
-                default => new UnknownType,
-            };
+            $type = self::fromKeyword($typeName) ?? new UnknownType;
 
             if ($type instanceof UnknownType && $typeName === 'static' && isset($scope)) {
                 $typeName = $scope->getResolvedClassName($typeName) ?? $typeName;

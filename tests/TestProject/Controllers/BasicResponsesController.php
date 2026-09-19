@@ -316,6 +316,16 @@ class BasicResponsesController
     }
 
 
+    /**
+     * @phpstan-ignore missingType.return
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [])]
+    public function bareReturnDocumentsNoResponseBody()
+    {
+        return;
+    }
+
+
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             200 => [

@@ -5,14 +5,12 @@ namespace AutoDoc\Analyzer\DocBlock;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
-use AutoDoc\DataTypes\BoolType;
+use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
-use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
-use AutoDoc\DataTypes\NumberType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -22,7 +20,6 @@ use AutoDoc\DataTypes\UnresolvedArrayItemType;
 use AutoDoc\DataTypes\UnresolvedArrayKeyType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
-use AutoDoc\DataTypes\VoidType;
 use AutoDoc\Exceptions\AutoDocException;
 use Exception;
 use PHPStan\PhpDocParser\Ast\ConstExpr\ConstExprFloatNode;
@@ -36,6 +33,7 @@ use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTextNode;
 use PHPStan\PhpDocParser\Ast\PhpDoc\ReturnTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayShapeNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\CallableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeForParameterNode;
 use PHPStan\PhpDocParser\Ast\Type\ConditionalTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ConstTypeNode;
@@ -205,6 +203,15 @@ class PhpDoc
         }
 
         /**
+         * callable(paramTypes): returnType
+         */
+        if ($node instanceof CallableTypeNode) {
+            return new CallableType(
+                declaredReturnType: $this->resolveTypeFromNode($node->returnType) ?? new UnknownType,
+            );
+        }
+
+        /**
          * $this
          */
         if ($node instanceof ThisTypeNode) {
@@ -313,47 +320,10 @@ class PhpDoc
     private function resolveTypeFromIdentifier(string $identifier, array $genericTypeValues = []): ?Type
     {
         $type = match ($identifier) {
-            'int', 'integer', 'non-zero-int' => new IntegerType,
-            'positive-int' => new IntegerType(minimum: 1),
-            'negative-int' => new IntegerType(maximum: -1),
-            'non-positive-int' => new IntegerType(maximum: 0),
-            'non-negative-int' => new IntegerType(minimum: 0),
-            'float', 'double' => new FloatType,
-            'string', 'lowercase-string', 'uppercase-string', 'literal-string',
-            'non-empty-lowercase-string', 'non-empty-uppercase-string', 'non-empty-literal-string',
-            'non-empty-string', 'non-falsy-string', 'truthy-string' => new StringType,
             'class-string', 'interface-string', 'trait-string', 'enum-string' => new ClassStringType(classTemplateType: $genericTypeValues[0] ?? null),
-            'numeric-string' => new NumberType(isString: true),
-            'true' => new BoolType(true),
-            'false' => new BoolType(false),
-            'bool', 'boolean' => new BoolType,
-            'array', 'iterable' => new ArrayType,
-            'list' => new ArrayType(keyType: new IntegerType),
-            'non-empty-array' => new ArrayType(minItems: 1),
-            'non-empty-list' => new ArrayType(keyType: new IntegerType, minItems: 1),
-            'associative-array' => new ObjectType,
-            'object' => new ObjectType,
-            'scalar' => new UnionType([
-                new IntegerType,
-                new FloatType,
-                new StringType,
-                new BoolType,
-            ]),
-            'numeric' => new UnionType([
-                new IntegerType,
-                new FloatType,
-                new NumberType(isString: false),
-            ]),
-            'array-key' => new UnionType([
-                new IntegerType,
-                new StringType,
-            ]),
             'key-of' => isset($genericTypeValues[0]) ? new UnresolvedArrayKeyType($genericTypeValues[0], $this->scope) : null,
             'value-of' => isset($genericTypeValues[0]) ? $this->resolveValueOfType($genericTypeValues[0]) : null,
-            'null' => new NullType,
-            'void' => new VoidType,
-            'never' => new NeverType,
-            default => null,
+            default => Type::fromKeyword($identifier),
         };
 
         if ($type) {
