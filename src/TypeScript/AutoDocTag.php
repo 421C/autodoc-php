@@ -61,9 +61,7 @@ class AutoDocTag
      */
     public function getExistingStructureLines(): array
     {
-        if ($this->existingStructureLines === null) {
-            $this->existingStructureLines = $this->tsFile->getStructureAfterTag($this);
-        }
+        $this->existingStructureLines ??= $this->tsFile->getStructureAfterTag($this);
 
         return $this->existingStructureLines;
     }

@@ -294,7 +294,7 @@ class Scope
                     $propertyType = $propertyType?->unwrapType($this->config) ?? new UnknownType;
 
                     if ($propertyType instanceof UnknownType && isset($varClass)) {
-                        $onlyPublic = ! ($node->var instanceof Node\Expr\Variable && $node->var->name === 'this');
+                        $onlyPublic = !$node->var instanceof Node\Expr\Variable || $node->var->name !== 'this';
 
                         $propertyType = $varClass->getProperty(
                             name: $propertyName,
