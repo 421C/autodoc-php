@@ -373,6 +373,10 @@ trait WithMergeableTypes
 
     private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, Config $config, bool $mergeAsIntersection = false): ?ObjectType
     {
+        if (! $object1->canMergeWith($object2)) {
+            return null;
+        }
+
         if ($mergeAsIntersection) {
             if ($object1->className === null) {
                 $object1->className = $object2->className;

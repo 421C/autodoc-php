@@ -208,52 +208,57 @@ class ScopeEventLog
     {
         $eventPath = $event->branchPath;
 
-        if ($eventPath->depth() === 0 || $eventPath->isVisibleFrom($readBranchPath)) {
+        if ($eventPath->isVisibleFrom($readBranchPath)) {
             return ScopeEventVisibility::Certain;
         }
 
-        $divergingSegment = $eventPath->findDivergingSegmentFrom($readBranchPath);
+        $commonDepth = $eventPath->commonPrefixDepth($readBranchPath);
+        $eventSegment = $eventPath->segments[$commonDepth];
+        $readSegment = $readBranchPath->segments[$commonDepth] ?? null;
 
-        if ($divergingSegment === null) {
+        if ($readSegment !== null && $readSegment['conditionId'] === $eventSegment['conditionId']) {
             return ScopeEventVisibility::Hidden;
         }
 
-        $readDivergingSegment = $readBranchPath->findDivergingSegmentFrom($eventPath);
+        return $this->getVisibilityOfExitedBranchChain($eventPath, $commonDepth);
+    }
 
-        if ($readDivergingSegment !== null
-            && $divergingSegment['conditionId'] === $readDivergingSegment['conditionId']
-        ) {
-            return ScopeEventVisibility::Hidden;
-        }
+    /**
+     * Classify an event whose branch was already exited before the read, by
+     * walking every branch it was nested in from $fromDepth downwards.
+     */
+    private function getVisibilityOfExitedBranchChain(BranchPath $eventPath, int $fromDepth): ScopeEventVisibility
+    {
+        $isCertain = true;
 
-        $eventBranchIndex = $divergingSegment['branchIndex'];
-        $condition = $this->getConditionById($divergingSegment['conditionId']);
+        for ($depth = $fromDepth; $depth < $eventPath->depth(); $depth++) {
+            $segment = $eventPath->segments[$depth];
+            $condition = $this->getConditionById($segment['conditionId']);
 
-        if ($readBranchPath->depth() < $eventPath->depth()
-            && $condition?->branchHasBreakout($eventBranchIndex)
-        ) {
-            return ScopeEventVisibility::Hidden;
-        }
-
-        if ($condition !== null
-            && $condition->isExhaustive()
-            && $readBranchPath->depth() < $eventPath->depth()
-        ) {
-            $allOtherBranchesBreakOut = true;
-
-            for ($branchIndex = 0; $branchIndex < $condition->getBranchCount(); $branchIndex++) {
-                if ($branchIndex !== $eventBranchIndex && ! $condition->branchHasBreakout($branchIndex)) {
-                    $allOtherBranchesBreakOut = false;
-                    break;
-                }
+            if ($condition?->branchHasBreakout($segment['branchIndex'])) {
+                return ScopeEventVisibility::Hidden;
             }
 
-            if ($allOtherBranchesBreakOut) {
-                return ScopeEventVisibility::Certain;
+            $isCertain = $isCertain
+                && $condition !== null
+                && $condition->isExhaustive()
+                && $this->allBranchesExceptBreakOut(condition: $condition, exceptBranchIndex: $segment['branchIndex']);
+        }
+
+        return $isCertain
+            ? ScopeEventVisibility::Certain
+            : ScopeEventVisibility::Uncertain;
+    }
+
+    private function allBranchesExceptBreakOut(PhpCondition $condition, int $exceptBranchIndex): bool
+    {
+        for ($branchIndex = 0; $branchIndex < $condition->getBranchCount(); $branchIndex++) {
+            if ($branchIndex !== $exceptBranchIndex && ! $condition->branchHasBreakout($branchIndex)) {
+                return false;
             }
         }
 
-        return ScopeEventVisibility::Uncertain;
+        return true;
     }
 
     /**

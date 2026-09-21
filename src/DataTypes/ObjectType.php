@@ -46,6 +46,12 @@ class ObjectType extends Type
     }
 
 
+    public function canMergeWith(ObjectType $other): bool
+    {
+        return $this::class === ObjectType::class;
+    }
+
+
     #[Override]
     public function addDescription(?string $description, bool $prepend = false): self
     {

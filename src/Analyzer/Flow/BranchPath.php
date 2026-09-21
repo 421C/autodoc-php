@@ -33,61 +33,20 @@ class BranchPath
     }
 
     /**
-     * Whether this path and $other share the same parent condition
-     * but are in different branches (sibling branches of an if/else).
+     * The index of the first segment where this path differs from $other,
+     * or the shallower depth when one path is a prefix of the other.
      */
-    public function isSiblingOf(BranchPath $other): bool
-    {
-        $count = count($this->segments);
-
-        if ($count === 0 || $count !== count($other->segments)) {
-            return false;
-        }
-
-        for ($i = 0; $i < $count - 1; $i++) {
-            if ($this->segments[$i] !== $other->segments[$i]) {
-                return false;
-            }
-        }
-
-        return $this->segments[$count - 1]['conditionId'] === $other->segments[$count - 1]['conditionId']
-            && $this->segments[$count - 1]['branchIndex'] !== $other->segments[$count - 1]['branchIndex'];
-    }
-
-    /**
-     * Whether this path is deeper than (strictly contained within) the given path.
-     */
-    public function isDeeperThan(BranchPath $other): bool
-    {
-        return count($this->segments) > count($other->segments)
-            && $other->isVisibleFrom($this);
-    }
-
-    /**
-     * Find the segment where this path diverges from or extends another path.
-     *
-     * @return array{conditionId: int, branchIndex: int}|null
-     */
-    public function findDivergingSegmentFrom(self $other): ?array
+    public function commonPrefixDepth(self $other): int
     {
         $minDepth = min($this->depth(), $other->depth());
 
         for ($index = 0; $index < $minDepth; $index++) {
-            $segment = $this->segments[$index];
-            $otherSegment = $other->segments[$index];
-
-            if ($segment['conditionId'] === $otherSegment['conditionId']
-                && $segment['branchIndex'] !== $otherSegment['branchIndex']
-            ) {
-                return $segment;
-            }
-
-            if ($segment !== $otherSegment) {
-                return null;
+            if ($this->segments[$index] !== $other->segments[$index]) {
+                return $index;
             }
         }
 
-        return $this->segments[$minDepth] ?? null;
+        return $minDepth;
     }
 
     public function push(int $conditionId, int $branchIndex): self

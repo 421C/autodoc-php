@@ -4538,6 +4538,147 @@ final class ControlFlowAnalysisTest extends TestCase
         ], $schema, 'closure', 'return');
     }
 
+    #[Test]
+    public function readInsideALaterIfSeesAnAssignmentFromAnEarlierIf(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = 'a';
+
+            if (rand(0, 1)) {
+                $value = 'b';
+            }
+
+            if (rand(0, 1)) {
+                return $value;
+            }
+
+            return null;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'enum' => [
+                'a',
+                'b',
+            ],
+            'type' => [
+                'string',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function twoSequentialIfsWritingArrayKeysProduceEveryCombination(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = [];
+
+            if (rand(0, 1)) {
+                $value = [...$value, 'a' => 1];
+            }
+
+            if (rand(0, 1)) {
+                $value = [...$value, 'b' => 2];
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'a' => [
+                            'const' => 1,
+                            'type' => 'integer',
+                        ],
+                    ],
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => [
+                        'a' => [
+                            'const' => 1,
+                            'type' => 'integer',
+                        ],
+                        'b' => [
+                            'const' => 2,
+                            'type' => 'integer',
+                        ],
+                    ],
+                    'required' => [
+                        'b',
+                    ],
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function assignmentInsideANestedBranchThatReturnsIsHiddenFromTheFinalRead(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = null;
+
+            if (rand(0, 1)) {
+                if (rand(0, 1)) {
+                    $value = 1;
+
+                    return 'inner';
+                }
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'const' => 'inner',
+            'type' => [
+                'string',
+                'null',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function assignmentIsCertainWhenEveryEnclosingBranchIsExhaustiveAndItsSiblingsReturn(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (): mixed {
+            $value = null;
+
+            if (rand(0, 1)) {
+                if (rand(0, 1)) {
+                    $value = 1;
+
+                } else {
+                    return 'a';
+                }
+
+            } else {
+                return 'b';
+            }
+
+            return $value;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'enum' => [
+                        'a',
+                        'b',
+                    ],
+                    'type' => 'string',
+                ],
+                [
+                    'const' => 1,
+                    'type' => 'integer',
+                ],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
     /**
      * @return array<string, mixed>
      */

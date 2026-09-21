@@ -32,4 +32,47 @@ final class ScopeEventLogTest extends TestCase
             $events->getEventVisibility($event, $siblingBranch),
         );
     }
+
+    #[Test]
+    public function eventIsUncertainFromABranchOfAnUnrelatedLaterCondition(): void
+    {
+        $events = new ScopeEventLog;
+        $event = new ScopeEvent(
+            type: ScopeEventType::Mutate,
+            varName: 'value',
+            branchPath: new BranchPath([
+                ['conditionId' => 1, 'branchIndex' => 0],
+            ]),
+        );
+        $laterConditionBranch = new BranchPath([
+            ['conditionId' => 2, 'branchIndex' => 0],
+        ]);
+
+        self::assertSame(
+            ScopeEventVisibility::Uncertain,
+            $events->getEventVisibility($event, $laterConditionBranch),
+        );
+    }
+
+    #[Test]
+    public function nestedEventIsHiddenFromASiblingOfItsOuterBranch(): void
+    {
+        $events = new ScopeEventLog;
+        $event = new ScopeEvent(
+            type: ScopeEventType::Mutate,
+            varName: 'value',
+            branchPath: new BranchPath([
+                ['conditionId' => 1, 'branchIndex' => 0],
+                ['conditionId' => 2, 'branchIndex' => 0],
+            ]),
+        );
+        $outerSiblingBranch = new BranchPath([
+            ['conditionId' => 1, 'branchIndex' => 1],
+        ]);
+
+        self::assertSame(
+            ScopeEventVisibility::Hidden,
+            $events->getEventVisibility($event, $outerSiblingBranch),
+        );
+    }
 }
