@@ -159,7 +159,7 @@ class Scope
                 || $node instanceof Node\Expr\MethodCall
                 || $node instanceof Node\Expr\NullsafeMethodCall
                 || $node instanceof Node\Expr\StaticCall)
-                && $node->isPartialFunctionApplication()
+                && PartialApplicationResolver::appliesTo($node)
             ) {
                 return new PartialApplicationResolver($node, $this)->resolveType();
             }

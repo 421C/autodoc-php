@@ -25,6 +25,22 @@ class PartialApplicationResolver
         private readonly Scope $scope,
     ) {}
 
+    /**
+     * Not using `CallLike::isPartialFunctionApplication()` (php-parser 5.9) because PHPStan extensions that
+     * call into autodoc run inside phpstan.phar, whose bundled php-parser may predate the method.
+     */
+    public static function appliesTo(Node\Expr\FuncCall|Node\Expr\MethodCall|Node\Expr\NullsafeMethodCall|Node\Expr\StaticCall $node): bool
+    {
+        foreach ($node->getRawArgs() as $arg) {
+            if ($arg instanceof Node\VariadicPlaceholder || $arg instanceof Node\ArgPlaceholder) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
     public function resolveType(): Type
     {
         if (! $this->node->isFirstClassCallable()) {

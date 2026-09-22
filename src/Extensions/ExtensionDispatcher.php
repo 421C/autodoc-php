@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Extensions;
 
+use AutoDoc\Analyzer\Ast\PartialApplicationResolver;
 use AutoDoc\Analyzer\Narrowing\NarrowingFact;
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
@@ -77,7 +78,7 @@ final class ExtensionDispatcher
      */
     public function runSideEffectExtensions(MethodCallContext|FuncCallContext|StaticCallContext $context): void
     {
-        if ($context->node->isPartialFunctionApplication()) {
+        if (PartialApplicationResolver::appliesTo($context->node)) {
             return;
         }
 
