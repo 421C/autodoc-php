@@ -521,8 +521,18 @@ trait WithMergeableTypes
             }
 
             $resultType->description = $type1->description === $type2->description ? $type1->description : null;
-            $resultType->minimum = $type1->minimum === $type2->minimum ? $type1->minimum : null;
-            $resultType->maximum = $type1->maximum === $type2->maximum ? $type1->maximum : null;
+
+            $minimum = $type1->minimum === $type2->minimum ? $type1->minimum : null;
+            $maximum = $type1->maximum === $type2->maximum ? $type1->maximum : null;
+
+            if ($resultType instanceof IntegerType) {
+                $resultType->minimum = is_float($minimum) ? (int) ceil($minimum) : $minimum;
+                $resultType->maximum = is_float($maximum) ? (int) floor($maximum) : $maximum;
+
+            } else {
+                $resultType->minimum = $minimum;
+                $resultType->maximum = $maximum;
+            }
 
         } else if ($type1 instanceof StringType && $type2 instanceof StringType) {
             $resultType = new StringType(

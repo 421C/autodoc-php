@@ -12,8 +12,8 @@ class NumberType extends ScalarType
          */
         public int|float|array|null $value = null,
         public ?string $description = null,
-        public ?int $minimum = null,
-        public ?int $maximum = null,
+        public int|float|null $minimum = null,
+        public int|float|null $maximum = null,
         public bool $isString = false,
     ) {}
 
