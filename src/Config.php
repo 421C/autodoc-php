@@ -99,11 +99,11 @@ use Exception;
  *         description?: string,
  *         domain?: string,
  *     },
- *     security_schemes?: array<string, array<string, mixed>>,
  *     workspaces: WorkspaceConfig[],
  *     workspaces_json_dir?: string,
  *     ui: UiConfig,
  *     openapi: array{
+ *         security_schemes?: array<string, array<string, mixed>>,
  *         show_values_for_scalar_types?: bool,
  *         use_pattern_for_numeric_strings?: bool,
  *         json_pretty_print?: bool,
@@ -283,7 +283,7 @@ class Config
     public function getSecuritySchemes(): array
     {
         return array_replace(
-            $this->data['security_schemes'] ?? [],
+            $this->data['openapi']['security_schemes'] ?? [],
             $this->selectedWorkspace['security_schemes'] ?? [],
         );
     }
