@@ -241,6 +241,19 @@ final class IntersectionTypeTest extends TestCase
     }
 
     #[Test]
+    public function unknownIntersectionKeepsEachDescriptionParagraphOnce(): void
+    {
+        $intersectDescriptions = fn (string $first, string $second): ?string => (new IntersectionType([
+            new UnknownType($first),
+            new UnknownType($second),
+        ]))->unwrapType($this->configWithScalarValues())->description;
+
+        self::assertSame('Must match "password".', $intersectDescriptions('Must match "password".', 'Must match "password".'));
+        self::assertSame("Required.\n\nMust match \"password\".", $intersectDescriptions('Must match "password".', 'Required.'));
+        self::assertSame("Required.\n\nMust match \"password\".", $intersectDescriptions('Must match "password".', "Required.\n\nMust match \"password\"."));
+    }
+
+    #[Test]
     public function objectClassIntersectionKeepsTheMoreSpecificClass(): void
     {
         $left = (new IntersectionType([
