@@ -142,9 +142,9 @@ final class SecurityTest extends TestCase
 
         $openApiJson = json_encode((new DocGenerator)->makeOpenApi($config), JSON_THROW_ON_ERROR);
 
-        /** @var array{components: array<string, mixed>} */
+        /** @var array{components?: array<string, mixed>} */
         $openApi = json_decode($openApiJson, true, flags: JSON_THROW_ON_ERROR);
 
-        return $openApi['components'];
+        return $openApi['components'] ?? [];
     }
 }

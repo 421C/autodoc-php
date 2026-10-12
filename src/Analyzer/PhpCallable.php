@@ -12,6 +12,7 @@ use AutoDoc\Analyzer\Narrowing\ConditionTypeNarrower;
 use AutoDoc\Analyzer\Narrowing\Target;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ClassStringType;
+use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
@@ -918,22 +919,9 @@ class PhpCallable
                     }
 
                 } else {
-                    $contentType = $requestBodyType->getContentType();
-
-                    foreach ($operation->parameters ?? [] as $param) {
-                        if ($param instanceof Parameter
-                            && $param->in === 'header'
-                            && strcasecmp($param->name, 'Content-Type') === 0
-                            && $param->type instanceof StringType
-                            && is_string($param->type->value)
-                        ) {
-                            $contentType = $param->type->value;
-                        }
-                    }
-
                     $operation->requestBody = new RequestBody(
                         content: [
-                            $contentType => new MediaType(
+                            $this->getRequestBodyContentType($requestBodyType, $operation) => new MediaType(
                                 type: $requestBodyType,
                                 config: $this->scope->config,
                             ),
@@ -1010,6 +998,56 @@ class PhpCallable
         }
 
         return $operation;
+    }
+
+
+    private function getRequestBodyContentType(Type $requestBodyType, Operation $operation): string
+    {
+        $contentTypeHeader = null;
+
+        foreach ($operation->parameters ?? [] as $param) {
+            if ($param instanceof Parameter
+                && $param->in === 'header'
+                && strcasecmp($param->name, 'Content-Type') === 0
+                && $param->type instanceof StringType
+                && is_string($param->type->value)
+            ) {
+                $contentTypeHeader = $param->type->value;
+            }
+        }
+
+        if ($contentTypeHeader !== null) {
+            return $contentTypeHeader;
+        }
+
+        if ($requestBodyType->contentType === null && $this->hasBinaryField($requestBodyType, isInsideField: false)) {
+            return 'multipart/form-data';
+        }
+
+        return $requestBodyType->getContentType();
+    }
+
+    private function hasBinaryField(Type $type, bool $isInsideField): bool
+    {
+        if ($type instanceof StringType) {
+            return $isInsideField && $type->format === 'binary';
+        }
+
+        if ($type instanceof UnionType || $type instanceof IntersectionType) {
+            return array_any($type->types, fn (Type $member) => $this->hasBinaryField($member, $isInsideField));
+        }
+
+        if ($type instanceof ObjectType) {
+            return ($type->typeToDisplay && $this->hasBinaryField($type->typeToDisplay, $isInsideField))
+                || array_any($type->properties, fn (Type $property) => $this->hasBinaryField($property, isInsideField: true));
+        }
+
+        if ($type instanceof ArrayType) {
+            return ($type->itemType && $this->hasBinaryField($type->itemType, $isInsideField))
+                || array_any($type->shape, fn (Type $entry) => $this->hasBinaryField($entry, isInsideField: true));
+        }
+
+        return false;
     }
 
 

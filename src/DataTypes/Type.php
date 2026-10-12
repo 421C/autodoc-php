@@ -154,6 +154,10 @@ abstract class Type
             return $this->contentType;
         }
 
+        if ($this instanceof StringType && $this->format === 'binary') {
+            return 'application/octet-stream';
+        }
+
         if ($this instanceof StringType
             || $this instanceof IntegerType
             || $this instanceof FloatType

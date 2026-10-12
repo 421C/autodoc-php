@@ -24,6 +24,7 @@ class TypeScriptRenderContext
         public readonly bool $isRootLevel = false,
         public readonly array $namedTypes = [],
         public readonly array $rootOptions = [],
+        public readonly bool $isRequest = false,
     ) {}
 
     public function nested(?string $baseIndent = null): self
@@ -34,6 +35,7 @@ class TypeScriptRenderContext
             baseIndent: $baseIndent ?? $this->baseIndent,
             namedTypes: $this->namedTypes,
             rootOptions: $this->rootOptions,
+            isRequest: $this->isRequest,
         );
     }
 }

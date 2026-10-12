@@ -61,7 +61,7 @@ class TypeScriptRouteTagResolver
             throw new Exception('Request body not found for route "' . $this->routeName($route) . '"');
         }
 
-        $type = $this->resolveContentType($operation->requestBody->content);
+        $type = MediaType::findPreferredType($operation->requestBody->content);
 
         if (! $type) {
             throw new Exception('Request type not found for route "' . $this->routeName($route) . '"');
@@ -92,23 +92,13 @@ class TypeScriptRouteTagResolver
             throw new Exception('Response status "' . $httpStatus . '" not found for route "' . $this->routeName($route) . '"');
         }
 
-        $type = $this->resolveContentType($response->content ?? []);
+        $type = MediaType::findPreferredType($response->content ?? []);
 
         if (! $type) {
             throw new Exception('Response type not found for route "' . $this->routeName($route) . '"');
         }
 
         return $type;
-    }
-
-    /**
-     * @param array<string, MediaType> $content
-     */
-    private function resolveContentType(array $content): ?Type
-    {
-        return $content['application/json']->type
-            ?? $content[array_key_first($content) ?? '']->type
-            ?? null;
     }
 
     private function routeName(Route $route): string

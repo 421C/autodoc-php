@@ -38,7 +38,11 @@ class DocGenerator
             '',
         );
 
-        $openApi->components['schemas'] = $this->getSchemaComponents($config);
+        $schemaComponents = $this->getSchemaComponents($config);
+
+        if ($schemaComponents) {
+            $openApi->components['schemas'] = $schemaComponents;
+        }
 
         $securitySchemes = $config->getSecuritySchemes();
 

@@ -59,7 +59,13 @@ class TypeScriptGenerator
         $lastPartOfUri = preg_replace('/[^a-zA-Z]/', ' ', basename($resolvedRoute->route->uri));
         $name = $tag->getExistingStructureName() ?? $this->toPascalCase($lastPartOfUri . $resolvedRoute->declarationSuffix);
 
-        return $this->renderDeclarationLine($tag, $name, $type, $exportedClassName);
+        return $this->renderDeclarationLine(
+            tag: $tag,
+            name: $name,
+            type: $type,
+            exportedClassName: $exportedClassName,
+            isRequest: $resolvedRoute->declarationSuffix === 'Request',
+        );
     }
 
 
@@ -117,8 +123,13 @@ class TypeScriptGenerator
      * Renders the inline declaration for a tag; in separate-file mode also
      * registers the exported declaration and points the inline one at it.
      */
-    private function renderDeclarationLine(AutoDocTag $tag, string $name, Type $type, ?string $exportedClassName): string
-    {
+    private function renderDeclarationLine(
+        AutoDocTag $tag,
+        string $name,
+        Type $type,
+        ?string $exportedClassName,
+        bool $isRequest = false,
+    ): string {
         $baseIndent = $tag->getDeclarationIndent();
         $outputFilePath = $tag->getConfig('save_types_in_single_file');
 
@@ -137,14 +148,14 @@ class TypeScriptGenerator
                 $outputFilePath,
                 fn (array $namedTypes): string => $baseIndent
                     . $this->generateDeclarationHeader(true, $exportName, $structureType)
-                    . $this->renderType($type, $tag, $baseIndent, $namedTypes),
+                    . $this->renderType($type, $tag, $baseIndent, $isRequest, $namedTypes),
                 $exportedClassName,
             );
 
             return $baseIndent . $declarationHeader . $this->generateImportStatement($tag, $exportName, $outputFilePath);
         }
 
-        return $baseIndent . $declarationHeader . $this->renderType($type, $tag, $baseIndent);
+        return $baseIndent . $declarationHeader . $this->renderType($type, $tag, $baseIndent, $isRequest);
     }
 
 
@@ -235,7 +246,7 @@ class TypeScriptGenerator
     /**
      * @param array<string, string> $namedTypes
      */
-    private function renderType(Type $type, AutoDocTag $tag, string $baseIndent, array $namedTypes = []): string
+    private function renderType(Type $type, AutoDocTag $tag, string $baseIndent, bool $isRequest, array $namedTypes = []): string
     {
         return $this->typeConverter->convertToTypeScriptType(
             $type,
@@ -246,6 +257,7 @@ class TypeScriptGenerator
                 isRootLevel: true,
                 namedTypes: $namedTypes,
                 rootOptions: $tag->options,
+                isRequest: $isRequest,
             ),
         );
     }

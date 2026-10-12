@@ -2,10 +2,12 @@
 
 namespace AutoDoc\OpenApi;
 
+use JsonSerializable;
+
 /**
  * https://spec.openapis.org/oas/v3.1.0.html#schema
  */
-class RootSchema
+class RootSchema implements JsonSerializable
 {
     public string $openapi = '3.1.0';
 
@@ -24,4 +26,16 @@ class RootSchema
      * }
      */
     public array $components = [];
+
+
+    public function jsonSerialize(): mixed
+    {
+        return array_filter([
+            'openapi' => $this->openapi,
+            'info' => $this->info,
+            'servers' => $this->servers,
+            'paths' => (object) $this->paths,
+            'components' => $this->components ?: null,
+        ], fn ($value) => $value !== null);
+    }
 }
