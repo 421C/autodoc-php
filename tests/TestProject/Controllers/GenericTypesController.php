@@ -4,6 +4,7 @@ namespace AutoDoc\Tests\TestProject\Controllers;
 
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray;
+use AutoDoc\Tests\TestProject\Entities\ClassWithTypeAliasDefinition;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
@@ -11,6 +12,8 @@ use AutoDoc\Tests\TestProject\Entities\StateEnum;
 
 /**
  * Tests for generic types, class-string, templates.
+ *
+ * @phpstan-import-type TestTypeAlias from ClassWithTypeAliasDefinition
  */
 class GenericTypesController
 {
@@ -446,6 +449,171 @@ class GenericTypesController
             'mapValues' => 1,
             'untypedKeys' => 'id',
             'enumValues' => StateEnum::One->value,
+        ];
+    }
+
+
+    /**
+     * Offset access
+     *
+     * A literal offset picks that key, any other offset yields every value.
+     *
+     * @return array{
+     *     literalOffset: TestTypeAlias['a'],
+     *     typeOffset: TestTypeAlias[key-of<TestTypeAlias>],
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Offset access',
+        'description' => 'A literal offset picks that key, any other offset yields every value.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'literalOffset' => [
+                                    'type' => 'integer',
+                                ],
+                                'typeOffset' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'literalOffset',
+                                'typeOffset',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function offsetAccess(): array
+    {
+        return [
+            'literalOffset' => 1,
+            'typeOffset' => 'first',
+        ];
+    }
+
+
+    /**
+     * Nullable doc types
+     *
+     * @return array{
+     *     stringList: ?list<string>,
+     *     stringArray: ?string[],
+     *     shape: ?array{id: int},
+     *     literal: ?'draft',
+     *     literals: 'draft'|'published'|null,
+     *     state: ?StateEnum,
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Nullable doc types',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'stringList' => [
+                                    'type' => [
+                                        'array',
+                                        'null',
+                                    ],
+                                    'items' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'stringArray' => [
+                                    'type' => [
+                                        'array',
+                                        'null',
+                                    ],
+                                    'items' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'shape' => [
+                                    'type' => [
+                                        'object',
+                                        'null',
+                                    ],
+                                    'properties' => [
+                                        'id' => [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'id',
+                                    ],
+                                ],
+                                'literal' => [
+                                    'type' => [
+                                        'string',
+                                        'null',
+                                    ],
+                                    'enum' => [
+                                        'draft',
+                                        null,
+                                    ],
+                                ],
+                                'literals' => [
+                                    'type' => [
+                                        'string',
+                                        'null',
+                                    ],
+                                    'enum' => [
+                                        'draft',
+                                        'published',
+                                        null,
+                                    ],
+                                ],
+                                'state' => [
+                                    'type' => [
+                                        'integer',
+                                        'null',
+                                    ],
+                                    'description' => '[StateEnum](#/schemas/StateEnum)',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                        null,
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'stringList',
+                                'stringArray',
+                                'shape',
+                                'literal',
+                                'literals',
+                                'state',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function nullableDocTypes(): array
+    {
+        return [
+            'stringList' => null,
+            'stringArray' => null,
+            'shape' => null,
+            'literal' => null,
+            'literals' => null,
+            'state' => null,
         ];
     }
 

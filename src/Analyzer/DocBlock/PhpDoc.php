@@ -42,6 +42,7 @@ use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IntersectionTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ObjectShapeNode;
+use PHPStan\PhpDocParser\Ast\Type\OffsetAccessTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\ThisTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
@@ -52,6 +53,7 @@ use PHPStan\PhpDocParser\Parser\TokenIterator;
 use PHPStan\PhpDocParser\Parser\TypeParser;
 use PHPStan\PhpDocParser\ParserConfig;
 use Throwable;
+use Traversable;
 use WeakMap;
 
 class PhpDoc
@@ -156,7 +158,7 @@ class PhpDoc
             /**
              * int<0, 100> / int<min, 50> / int<1, self::LIMIT>
              */
-            if ($type instanceof IntegerType && count($node->genericTypes) === 2) {
+            if ($type instanceof IntegerType && $node->type->name === 'int' && count($node->genericTypes) === 2) {
                 $type->minimum = $this->resolveIntegerRangeBound($node->genericTypes[0]);
                 $type->maximum = $this->resolveIntegerRangeBound($node->genericTypes[1]);
             }
@@ -171,6 +173,13 @@ class PhpDoc
             return new ArrayType(
                 itemType: $this->resolveTypeFromNode($node->type),
             );
+        }
+
+        /**
+         * type['key'] / type[offsetType]
+         */
+        if ($node instanceof OffsetAccessTypeNode) {
+            return $this->resolveOffsetAccessType($node);
         }
 
         /**
@@ -223,7 +232,7 @@ class PhpDoc
          */
         if ($node instanceof NullableTypeNode) {
             $type = new UnionType([
-                $this->resolveTypeFromIdentifier((string) $node->type) ?? new UnknownType,
+                $this->resolveTypeFromNode($node->type) ?? new UnknownType,
                 new NullType,
             ]);
 
@@ -370,6 +379,10 @@ class PhpDoc
 
         $className = $this->scope->getResolvedClassName($identifier);
 
+        if ($className === Traversable::class) {
+            return new ArrayType;
+        }
+
         if ($className) {
             $phpClass = $this->scope->getPhpClassInDeeperScope($className);
 
@@ -403,6 +416,29 @@ class PhpDoc
         }
 
         return new UnresolvedArrayItemType($genericTypeValue, $this->scope);
+    }
+
+
+    /**
+     * A literal offset picks that key; any other offset yields the union of all item types.
+     */
+    private function resolveOffsetAccessType(OffsetAccessTypeNode $node): ?Type
+    {
+        $type = $this->resolveTypeFromNode($node->type)?->unwrapType($this->scope->config);
+
+        if ($type === null) {
+            return null;
+        }
+
+        $offsetType = $this->resolveTypeFromNode($node->offset);
+
+        if (($offsetType instanceof StringType || $offsetType instanceof IntegerType)
+            && (is_string($offsetType->value) || is_int($offsetType->value))
+        ) {
+            return $this->scope->getTypeAtKey($type, $offsetType->value);
+        }
+
+        return new UnresolvedArrayItemType($type, $this->scope)->resolve();
     }
 
 

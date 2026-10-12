@@ -774,7 +774,7 @@ abstract class Type
     public static function fromKeyword(string $keyword): ?Type
     {
         return match ($keyword) {
-            'int', 'integer', 'non-zero-int' => new IntegerType,
+            'int', 'integer', 'non-zero-int', 'int-mask', 'int-mask-of' => new IntegerType,
             'positive-int' => new IntegerType(minimum: 1),
             'negative-int' => new IntegerType(maximum: -1),
             'non-positive-int' => new IntegerType(maximum: 0),
@@ -782,7 +782,7 @@ abstract class Type
             'float', 'double' => new FloatType,
             'string', 'lowercase-string', 'uppercase-string', 'literal-string',
             'non-empty-lowercase-string', 'non-empty-uppercase-string', 'non-empty-literal-string',
-            'non-empty-string', 'non-falsy-string', 'truthy-string' => new StringType,
+            'non-empty-string', 'non-falsy-string', 'truthy-string', 'callable-string' => new StringType,
             'numeric-string' => new NumberType(isString: true),
             'true' => new BoolType(true),
             'false' => new BoolType(false),
@@ -793,7 +793,7 @@ abstract class Type
             'non-empty-list' => new ArrayType(keyType: new IntegerType, minItems: 1),
             'associative-array', 'object' => new ObjectType,
             'callable' => new CallableType,
-            'scalar' => new UnionType([
+            'scalar', 'non-empty-scalar' => new UnionType([
                 new IntegerType,
                 new FloatType,
                 new StringType,
