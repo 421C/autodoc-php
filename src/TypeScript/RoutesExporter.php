@@ -4,7 +4,9 @@ namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Parameter;
+use AutoDoc\OpenApi\Response;
 
 /**
  * @phpstan-import-type TypeScriptRouteExportConfig from Config
@@ -42,7 +44,7 @@ class RoutesExporter
         foreach ($this->routeExportCollector->collect($this->exportOptions) as $route => $path) {
             foreach ($path->operations as $method => $operation) {
                 $method = strtoupper($method);
-                $requestBodyType = $operation->requestBody->content['application/json']->type ?? null;
+                $requestBodyType = MediaType::findPreferredType($operation->requestBody->content ?? []);
 
                 if ($requestBodyType) {
                     $this->routeTypeMap->addRequestBody($route, $method, $requestBodyType);
@@ -59,8 +61,12 @@ class RoutesExporter
                 }
 
                 foreach ($operation->responses ?? [] as $responseCode => $response) {
-                    if (isset($response->content['application/json']->type)) {
-                        $this->routeTypeMap->addResponse($route, $method, $responseCode, $response->content['application/json']->type);
+                    $responseType = $response instanceof Response
+                        ? MediaType::findPreferredType($response->content ?? [])
+                        : null;
+
+                    if ($responseType) {
+                        $this->routeTypeMap->addResponse($route, $method, $responseCode, $responseType);
                     }
                 }
             }
@@ -73,9 +79,14 @@ class RoutesExporter
 
         $this->routeTypeMap->sortRoutes();
 
-        $renderContext = new TypeScriptRenderContext($scope, $tsConfig);
-        $requestsTsType = $typeConverter->convertToTypeScriptType($this->routeTypeMap->requests, $renderContext);
-        $responsesTsType = $typeConverter->convertToTypeScriptType($this->routeTypeMap->responses, $renderContext);
+        $requestsTsType = $typeConverter->convertToTypeScriptType(
+            type: $this->routeTypeMap->requests,
+            context: new TypeScriptRenderContext(scope: $scope, config: $tsConfig, isRequest: true),
+        );
+        $responsesTsType = $typeConverter->convertToTypeScriptType(
+            type: $this->routeTypeMap->responses,
+            context: new TypeScriptRenderContext(scope: $scope, config: $tsConfig),
+        );
 
         $fileBody = 'export type Requests = ' . $requestsTsType . "\n\n"
             . 'export type Responses = ' . $responsesTsType . "\n";

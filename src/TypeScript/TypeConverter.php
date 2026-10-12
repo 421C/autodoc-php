@@ -73,6 +73,10 @@ class TypeConverter
         }
 
         if ($type instanceof StringType) {
+            if ($type->format === 'binary') {
+                return $context->isRequest ? 'File' : 'Blob';
+            }
+
             if ($type->isEnum || $tsConfig['show_values_for_scalar_types']) {
                 $values = $type->getPossibleValues();
                 $stringQuote = $tsConfig['string_quote'];

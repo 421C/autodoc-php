@@ -27,6 +27,16 @@ class MediaType implements JsonSerializable
         public mixed $example = null,
     ) {}
 
+    /**
+     * @param array<string, MediaType> $content
+     */
+    public static function findPreferredType(array $content): ?Type
+    {
+        return $content['application/json']->type
+            ?? $content[array_key_first($content) ?? '']->type
+            ?? null;
+    }
+
     public function jsonSerialize(): mixed
     {
         return array_filter([
