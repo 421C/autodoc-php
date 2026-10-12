@@ -451,6 +451,79 @@ class GenericTypesController
 
 
     /**
+     * Nullable doc types
+     *
+     * @return array{
+     *     stringList: ?list<string>,
+     *     stringArray: ?string[],
+     *     shape: ?array{id: int},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Nullable doc types',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'stringList' => [
+                                    'type' => [
+                                        'array',
+                                        'null',
+                                    ],
+                                    'items' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'stringArray' => [
+                                    'type' => [
+                                        'array',
+                                        'null',
+                                    ],
+                                    'items' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'shape' => [
+                                    'type' => [
+                                        'object',
+                                        'null',
+                                    ],
+                                    'properties' => [
+                                        'id' => [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'id',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'stringList',
+                                'stringArray',
+                                'shape',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function nullableDocTypes(): array
+    {
+        return [
+            'stringList' => null,
+            'stringArray' => null,
+            'shape' => null,
+        ];
+    }
+
+
+    /**
      * Conditional types
      *
      * Nothing decides the condition here, so both branches are documented.

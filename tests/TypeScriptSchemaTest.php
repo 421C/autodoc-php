@@ -389,7 +389,7 @@ final class TypeScriptSchemaTest extends TestCase
                     contentType?: string
                     body?: {
                         description: string|null
-                        examples: unknown
+                        examples: unknown[]|null
                         required: boolean
                         deprecated: boolean
                         deprecatedDescription: string|null
@@ -401,7 +401,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestQueryParams: Record<string, {
                     description: string|null
-                    examples: unknown
+                    examples: unknown[]|null
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -412,7 +412,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestUrlParams: Record<string, {
                     description: string|null
-                    examples: unknown
+                    examples: unknown[]|null
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -423,7 +423,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestHeaders: Record<string, {
                     description: string|null
-                    examples: unknown
+                    examples: unknown[]|null
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -434,7 +434,7 @@ final class TypeScriptSchemaTest extends TestCase
                 }>
                 requestCookies: Record<string, {
                     description: string|null
-                    examples: unknown
+                    examples: unknown[]|null
                     required: boolean
                     deprecated: boolean
                     deprecatedDescription: string|null
@@ -443,6 +443,7 @@ final class TypeScriptSchemaTest extends TestCase
                     contentType: string|null
                     httpStatusCode: number|null
                 }>
+                security: Record<string, string[]>[]|null
             }
 
             text ...

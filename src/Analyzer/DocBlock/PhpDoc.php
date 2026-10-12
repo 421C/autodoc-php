@@ -223,7 +223,7 @@ class PhpDoc
          */
         if ($node instanceof NullableTypeNode) {
             $type = new UnionType([
-                $this->resolveTypeFromIdentifier((string) $node->type) ?? new UnknownType,
+                $this->resolveTypeFromNode($node->type) ?? new UnknownType,
                 new NullType,
             ]);
 
