@@ -457,6 +457,9 @@ class GenericTypesController
      *     stringList: ?list<string>,
      *     stringArray: ?string[],
      *     shape: ?array{id: int},
+     *     literal: ?'draft',
+     *     literals: 'draft'|'published'|null,
+     *     state: ?StateEnum,
      * }
      */
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
@@ -500,11 +503,47 @@ class GenericTypesController
                                         'id',
                                     ],
                                 ],
+                                'literal' => [
+                                    'type' => [
+                                        'string',
+                                        'null',
+                                    ],
+                                    'enum' => [
+                                        'draft',
+                                        null,
+                                    ],
+                                ],
+                                'literals' => [
+                                    'type' => [
+                                        'string',
+                                        'null',
+                                    ],
+                                    'enum' => [
+                                        'draft',
+                                        'published',
+                                        null,
+                                    ],
+                                ],
+                                'state' => [
+                                    'type' => [
+                                        'integer',
+                                        'null',
+                                    ],
+                                    'description' => '[StateEnum](#/schemas/StateEnum)',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                        null,
+                                    ],
+                                ],
                             ],
                             'required' => [
                                 'stringList',
                                 'stringArray',
                                 'shape',
+                                'literal',
+                                'literals',
+                                'state',
                             ],
                         ],
                     ],
@@ -519,6 +558,9 @@ class GenericTypesController
             'stringList' => null,
             'stringArray' => null,
             'shape' => null,
+            'literal' => null,
+            'literals' => null,
+            'state' => null,
         ];
     }
 

@@ -4426,7 +4426,7 @@ final class ControlFlowAnalysisTest extends TestCase
 
         $this->assertSchemaArraysMatch([
             'description' => '[StateEnum](#/schemas/StateEnum)',
-            'enum' => [1, 2],
+            'enum' => [1, 2, null],
             'type' => [
                 'integer',
                 'null',
@@ -4559,6 +4559,7 @@ final class ControlFlowAnalysisTest extends TestCase
             'enum' => [
                 'a',
                 'b',
+                null,
             ],
             'type' => [
                 'string',
@@ -4633,7 +4634,10 @@ final class ControlFlowAnalysisTest extends TestCase
         });
 
         $this->assertSchemaArraysMatch([
-            'const' => 'inner',
+            'enum' => [
+                'inner',
+                null,
+            ],
             'type' => [
                 'string',
                 'null',

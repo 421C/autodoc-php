@@ -54,6 +54,15 @@ class UnionType extends Type
                 if (isset($schema['type'])) {
                     $schema['type'] = $this->flattenArrayOfStrings([$schema['type'], 'null']);
 
+                    if (isset($schema['const'])) {
+                        $schema['enum'] = [$schema['const'], null];
+
+                        unset($schema['const']);
+
+                    } else if (isset($schema['enum'])) {
+                        $schema['enum'][] = null;
+                    }
+
                     return $schema;
 
                 } else if (isset($schema['anyOf'])) {
