@@ -254,6 +254,57 @@ final class IntersectionTypeTest extends TestCase
     }
 
     #[Test]
+    public function numericIntersectionKeepsTheStricterBounds(): void
+    {
+        $intersect = fn (Type ...$types): Type => (new IntersectionType($types))->unwrapType(self::loadConfig());
+
+        $bounded = $intersect(new IntegerType, new IntegerType(minimum: 1));
+        self::assertInstanceOf(IntegerType::class, $bounded);
+        self::assertSame([1, null], [$bounded->minimum, $bounded->maximum]);
+
+        $narrowed = $intersect(new IntegerType(minimum: 0, maximum: 100), new IntegerType(minimum: 1, maximum: 500));
+        self::assertInstanceOf(IntegerType::class, $narrowed);
+        self::assertSame([1, 100], [$narrowed->minimum, $narrowed->maximum]);
+
+        $integer = $intersect(new NumberType(minimum: 0.5, maximum: 9.5), new IntegerType);
+        self::assertInstanceOf(IntegerType::class, $integer);
+        self::assertSame([1, 9], [$integer->minimum, $integer->maximum]);
+    }
+
+    #[Test]
+    public function stringIntersectionKeepsTheStricterFacets(): void
+    {
+        $intersect = fn (Type ...$types): Type => (new IntersectionType($types))->unwrapType(self::loadConfig());
+
+        $binary = $intersect(new StringType, new StringType(format: 'binary'));
+        self::assertInstanceOf(StringType::class, $binary);
+        self::assertSame('binary', $binary->format);
+
+        $lengths = $intersect(
+            new StringType(minLength: 2, pattern: '^[a-z]+$'),
+            new StringType(minLength: 5, maxLength: 10),
+        );
+        self::assertInstanceOf(StringType::class, $lengths);
+        self::assertSame([5, 10, '^[a-z]+$'], [$lengths->minLength, $lengths->maxLength, $lengths->pattern]);
+
+        $conflicting = $intersect(new StringType(format: 'date'), new StringType(format: 'date-time'));
+        self::assertInstanceOf(StringType::class, $conflicting);
+        self::assertNull($conflicting->format);
+    }
+
+    #[Test]
+    public function unionStillDropsBoundsThatDiffer(): void
+    {
+        $type = (new UnionType([
+            new IntegerType(minimum: 0, maximum: 10),
+            new IntegerType(minimum: 0, maximum: 30),
+        ]))->unwrapType(self::loadConfig());
+
+        self::assertInstanceOf(IntegerType::class, $type);
+        self::assertSame([0, null], [$type->minimum, $type->maximum]);
+    }
+
+    #[Test]
     public function objectClassIntersectionKeepsTheMoreSpecificClass(): void
     {
         $left = (new IntersectionType([
