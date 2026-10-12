@@ -2,10 +2,12 @@
 
 namespace AutoDoc\Tests\TestProject\Controllers;
 
+use ArrayIterator;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
+use Traversable;
 
 /**
  * Tests for basic response types: scalars, arrays, objects, PHPDoc return types.
@@ -452,6 +454,81 @@ class BasicResponsesController
             'key' => 'id',
             'nullableKey' => null,
             'keyed' => ['id' => 'first'],
+        ];
+    }
+
+
+    /**
+     * Pseudo doc types
+     *
+     * `int-mask<1, 2>` is not an `int<1, 2>` range, and `Traversable` reads like `iterable`.
+     *
+     * @return array{
+     *     intMask: int-mask<1, 2>,
+     *     intMaskOf: int-mask-of<1|2>,
+     *     callableStrings: list<callable-string>,
+     *     nonEmptyScalar: non-empty-scalar,
+     *     traversable: Traversable<string, int>,
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Pseudo doc types',
+        'description' => '`int-mask<1, 2>` is not an `int<1, 2>` range, and `Traversable` reads like `iterable`.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'intMask' => [
+                                    'type' => 'integer',
+                                ],
+                                'intMaskOf' => [
+                                    'type' => 'integer',
+                                ],
+                                'callableStrings' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'string',
+                                    ],
+                                ],
+                                'nonEmptyScalar' => [
+                                    'type' => [
+                                        'number',
+                                        'string',
+                                        'boolean',
+                                    ],
+                                ],
+                                'traversable' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'intMask',
+                                'intMaskOf',
+                                'callableStrings',
+                                'nonEmptyScalar',
+                                'traversable',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function pseudoDocTypes(): array
+    {
+        return [
+            'intMask' => 3,
+            'intMaskOf' => 3,
+            'callableStrings' => ['strlen'],
+            'nonEmptyScalar' => 1,
+            'traversable' => new ArrayIterator(['id' => 1]),
         ];
     }
 }

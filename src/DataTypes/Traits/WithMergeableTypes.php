@@ -213,8 +213,6 @@ trait WithMergeableTypes
             return $this->mergeScalarTypes($type1, $type2, $config, $mergeAsIntersection);
         }
 
-        // Intersected array-shapes and objects both emit `type: object`, so merge
-        // cross-kind pairs into one object shape instead of leaving an allOf.
         if ($mergeAsIntersection) {
             if ($type1 instanceof ArrayType && $type1->shape && $type2 instanceof ObjectType) {
                 $type1 = $this->arrayShapeToObject($type1);
@@ -222,6 +220,16 @@ trait WithMergeableTypes
 
             if ($type2 instanceof ArrayType && $type2->shape && $type1 instanceof ObjectType) {
                 $type2 = $this->arrayShapeToObject($type2);
+            }
+
+            $objectType = match (true) {
+                $type1 instanceof ObjectType && $type2 instanceof ArrayType => $type1,
+                $type2 instanceof ObjectType && $type1 instanceof ArrayType => $type2,
+                default => null,
+            };
+
+            if ($objectType !== null) {
+                return $objectType->setRequired($this->required || $type1->required || $type2->required);
             }
         }
 

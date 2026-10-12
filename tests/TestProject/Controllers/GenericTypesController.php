@@ -4,6 +4,7 @@ namespace AutoDoc\Tests\TestProject\Controllers;
 
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray;
+use AutoDoc\Tests\TestProject\Entities\ClassWithTypeAliasDefinition;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
@@ -11,6 +12,8 @@ use AutoDoc\Tests\TestProject\Entities\StateEnum;
 
 /**
  * Tests for generic types, class-string, templates.
+ *
+ * @phpstan-import-type TestTypeAlias from ClassWithTypeAliasDefinition
  */
 class GenericTypesController
 {
@@ -446,6 +449,56 @@ class GenericTypesController
             'mapValues' => 1,
             'untypedKeys' => 'id',
             'enumValues' => StateEnum::One->value,
+        ];
+    }
+
+
+    /**
+     * Offset access
+     *
+     * A literal offset picks that key, any other offset yields every value.
+     *
+     * @return array{
+     *     literalOffset: TestTypeAlias['a'],
+     *     typeOffset: TestTypeAlias[key-of<TestTypeAlias>],
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Offset access',
+        'description' => 'A literal offset picks that key, any other offset yields every value.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'literalOffset' => [
+                                    'type' => 'integer',
+                                ],
+                                'typeOffset' => [
+                                    'type' => [
+                                        'integer',
+                                        'string',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'literalOffset',
+                                'typeOffset',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function offsetAccess(): array
+    {
+        return [
+            'literalOffset' => 1,
+            'typeOffset' => 'first',
         ];
     }
 
