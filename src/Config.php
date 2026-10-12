@@ -54,6 +54,7 @@ use Exception;
  *     access_token?: string,
  *     request_methods?: string[],
  *     ui?: UiConfig,
+ *     security_schemes?: array<string, array<string, mixed>>,
  * }
  *
  * @phpstan-type TypeScriptRouteExportConfig array{
@@ -98,6 +99,7 @@ use Exception;
  *         description?: string,
  *         domain?: string,
  *     },
+ *     security_schemes?: array<string, array<string, mixed>>,
  *     workspaces: WorkspaceConfig[],
  *     workspaces_json_dir?: string,
  *     ui: UiConfig,
@@ -272,6 +274,18 @@ class Config
         }
 
         return $schemas;
+    }
+
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function getSecuritySchemes(): array
+    {
+        return array_replace(
+            $this->data['security_schemes'] ?? [],
+            $this->selectedWorkspace['security_schemes'] ?? [],
+        );
     }
 
 
