@@ -32,20 +32,24 @@ trait WithMergeableTypes
             || $type instanceof FloatType
             || $type instanceof NumberType;
 
-        // string ∩ numeric → a numeric string ("123", "-4.5")
-        if (($type1 instanceof StringType && $isNumber($type2))
-            || ($type2 instanceof StringType && $isNumber($type1))
-        ) {
-            $numeric = $type1 instanceof StringType ? $type2 : $type1;
+        $numeric = $type1 instanceof StringType ? $type2 : $type1;
+        $string = $type1 instanceof StringType ? $type1 : $type2;
 
+        // string ∩ numeric → a numeric string ("123", "-4.5")
+        if ($string instanceof StringType
+            && ($numeric instanceof IntegerType || $numeric instanceof FloatType || $numeric instanceof NumberType)
+        ) {
             if ($numeric instanceof IntegerType) {
-                $result = new IntegerType;
+                $result = new IntegerType(minimum: $numeric->minimum, maximum: $numeric->maximum);
                 $result->isString = true;
 
-                return $result;
+            } else {
+                $result = new NumberType(minimum: $numeric->minimum, maximum: $numeric->maximum, isString: true);
             }
 
-            return new NumberType(isString: true);
+            return $result
+                ->addDescription($type1->description)
+                ->addDescription($type2->description);
         }
 
         // bool ∩ numeric → 0/1

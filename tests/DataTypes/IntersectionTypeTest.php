@@ -100,6 +100,36 @@ final class IntersectionTypeTest extends TestCase
     }
 
     #[Test]
+    public function numericStringCoercionKeepsTheNumbersBoundsAndBothDescriptions(): void
+    {
+        $config = $this->configWithCoerciveScalarOverlap();
+
+        $integerString = (new IntersectionType([
+            new StringType(description: 'Page size.'),
+            new IntegerType(description: 'At least 1.', minimum: 1, maximum: 100),
+        ]))->toSchema($config);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'format' => 'integer',
+            'description' => "Page size.\n\nAt least 1.",
+            'minimum' => 1,
+            'maximum' => 100,
+        ], $integerString, 'type', 'schema');
+
+        $numberString = (new IntersectionType([
+            new FloatType(minimum: 0.01),
+            new StringType,
+        ]))->toSchema($config);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'format' => 'numeric',
+            'minimum' => 0.01,
+        ], $numberString, 'type', 'schema');
+    }
+
+    #[Test]
     public function integerIntersectedWithBoolYieldsZeroOneInteger(): void
     {
         foreach ([[new IntegerType, new BoolType], [new BoolType, new IntegerType]] as [$a, $b]) {
