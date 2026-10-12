@@ -113,6 +113,8 @@ abstract class AbstractRouteLoader
             return null;
         }
 
+        $operation->security = $route->security;
+
         return $scope->extensions->handleOperationExtensions($operation, $route);
     }
 

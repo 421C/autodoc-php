@@ -49,6 +49,9 @@ class Route
     /** @var array<string, Type> */
     public array $requestCookies = [];
 
+    /** @var ?list<array<string, list<string>>> */
+    public ?array $security = null;
+
     /** @var list<Type> */
     private array $requestBodyTypes = [];
 
@@ -60,6 +63,15 @@ class Route
             'contentType' => $contentType,
             'body' => $body,
         ];
+    }
+
+
+    /**
+     * @param array<string, list<string>> $requirement
+     */
+    public function addSecurityRequirement(array $requirement): void
+    {
+        $this->security[] = $requirement;
     }
 
 

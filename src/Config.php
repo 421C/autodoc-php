@@ -54,6 +54,7 @@ use Exception;
  *     access_token?: string,
  *     request_methods?: string[],
  *     ui?: UiConfig,
+ *     security_schemes?: array<string, array<string, mixed>>,
  * }
  *
  * @phpstan-type TypeScriptRouteExportConfig array{
@@ -102,6 +103,7 @@ use Exception;
  *     workspaces_json_dir?: string,
  *     ui: UiConfig,
  *     openapi: array{
+ *         security_schemes?: array<string, array<string, mixed>>,
  *         show_values_for_scalar_types?: bool,
  *         use_pattern_for_numeric_strings?: bool,
  *         json_pretty_print?: bool,
@@ -272,6 +274,18 @@ class Config
         }
 
         return $schemas;
+    }
+
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function getSecuritySchemes(): array
+    {
+        return array_replace(
+            $this->data['openapi']['security_schemes'] ?? [],
+            $this->selectedWorkspace['security_schemes'] ?? [],
+        );
     }
 
 

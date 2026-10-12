@@ -17,6 +17,9 @@ return [
      *
      * A workspace may also carry a `ui` block (same shape as the top-level `ui` below) that
      * overrides the global UI per key for that client — e.g. its own `wiki_pages` or `logo`.
+     *
+     * A workspace may also carry its own `security_schemes`, merged over the top-level map by
+     * scheme name.
      */
     'workspaces' => [
         'your-api-name' => [
@@ -93,6 +96,16 @@ return [
     ],
 
     'openapi' => [
+        /**
+         * Each entry maps a scheme name to an OpenApi 3.1.0 Security Scheme Object.
+         */
+        // 'security_schemes' => [
+        //     'bearerAuth' => [
+        //         'type' => 'http',
+        //         'scheme' => 'bearer',
+        //     ],
+        // ],
+
         /**
          * When enabled, will attempt to read possible values for returned scalar types.
          * It is not guaranteed that all possible values will be detected, so depending on

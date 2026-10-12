@@ -26,7 +26,18 @@ class Operation implements JsonSerializable
 
         /** @var ?list<Server> */
         public ?array $servers = null,
+
+        /** @var ?list<array<string, list<string>>> */
+        public ?array $security = null,
     ) {}
+
+    /**
+     * @param array<string, list<string>> $requirement
+     */
+    public function addSecurityRequirement(array $requirement): void
+    {
+        $this->security[] = $requirement;
+    }
 
     public function jsonSerialize(): mixed
     {
@@ -39,6 +50,7 @@ class Operation implements JsonSerializable
             'externalDocs' => $this->externalDocs,
             'deprecated' => $this->deprecated,
             'x-deprecated-description' => $this->deprecatedDescription,
+            'security' => $this->security === null ? null : array_map(fn ($requirement) => (object) $requirement, $this->security),
             'servers' => $this->servers,
             'parameters' => $this->parameters,
         ], fn ($value) => $value !== null);

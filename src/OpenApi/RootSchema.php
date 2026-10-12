@@ -20,6 +20,7 @@ class RootSchema
     /**
      * @var array{
      *     schemas?: array<string, array<string, mixed>>,
+     *     securitySchemes?: array<string, array<string, mixed>>,
      * }
      */
     public array $components = [];
