@@ -68,17 +68,13 @@ class IntegerType extends ScalarType
         $schema = $this->withScalarValues($schema, $config);
 
         if ($this->isString) {
-            // OpenApi 3.1.0 string type does not support `minimum` and `maximum` properties,
-            // so we only set the type to string if these properties are not set.
-            if ($this->minimum === null && $this->maximum === null) {
-                $schema['type'] = 'string';
+            $schema['type'] = 'string';
 
-                if ($config?->data['openapi']['use_pattern_for_numeric_strings'] ?? false) {
-                    $schema['pattern'] = '^[0-9]+$';
+            if ($config->data['openapi']['use_pattern_for_numeric_strings'] ?? false) {
+                $schema['pattern'] = '^[0-9]+$';
 
-                } else {
-                    $schema['format'] = 'integer';
-                }
+            } else {
+                $schema['format'] = 'integer';
             }
         }
 
