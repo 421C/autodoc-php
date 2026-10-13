@@ -6,6 +6,8 @@ use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Entities\ClassThatRepresentsAssocArray;
 use AutoDoc\Tests\TestProject\Entities\ClassWithTypeAliasDefinition;
 use AutoDoc\Tests\TestProject\Entities\GenericClass;
+use AutoDoc\Tests\TestProject\Entities\GenericContainer;
+use AutoDoc\Tests\TestProject\Entities\GenericContainerChild;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
@@ -715,6 +717,99 @@ class GenericTypesController
             'nullableBranch' => null,
             'parameterSubject' => 1,
             'nested' => ['value' => 'value'],
+        ];
+    }
+
+
+    /**
+     * Class template values in nested positions
+     *
+     * @phpstan-ignore missingType.iterableValue
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Class template values in nested positions',
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'container' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'nullable' => [
+                                            'type' => ['integer', 'null'],
+                                            'enum' => [1, null],
+                                        ],
+                                        'items' => [
+                                            'type' => 'array',
+                                            'items' => [
+                                                'type' => 'integer',
+                                                'const' => 1,
+                                            ],
+                                        ],
+                                        'wrapped' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'value' => [
+                                                    'type' => 'integer',
+                                                    'const' => 1,
+                                                ],
+                                            ],
+                                            'required' => ['value'],
+                                        ],
+                                        'keyed' => [
+                                            'type' => 'object',
+                                            'additionalProperties' => [
+                                                'type' => 'integer',
+                                                'const' => 1,
+                                            ],
+                                        ],
+                                    ],
+                                    'required' => ['nullable', 'items', 'wrapped'],
+                                ],
+                                'child' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'nullable' => [
+                                            'type' => ['string', 'null'],
+                                            'enum' => ['x', null],
+                                        ],
+                                        'items' => [
+                                            'type' => 'array',
+                                            'items' => [
+                                                'type' => 'string',
+                                                'const' => 'x',
+                                            ],
+                                        ],
+                                        'wrapped' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'value' => [
+                                                    'type' => 'string',
+                                                    'const' => 'x',
+                                                ],
+                                            ],
+                                            'required' => ['value'],
+                                        ],
+                                    ],
+                                    'required' => ['nullable', 'items', 'wrapped'],
+                                ],
+                            ],
+                            'required' => ['container', 'child'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function classTemplateInNestedPositions(): array
+    {
+        return [
+            'container' => new GenericContainer(1),
+            'child' => new GenericContainerChild('x'),
         ];
     }
 

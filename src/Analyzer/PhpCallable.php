@@ -5,6 +5,7 @@ namespace AutoDoc\Analyzer;
 use AutoDoc\Analyzer\Ast\FunctionBodyVisitor;
 use AutoDoc\Analyzer\Ast\PromotedPropertyPhpDocCollector;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDocBinding;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\CallerParameterBindingAnalysis;
 use AutoDoc\Analyzer\Flow\CallerParameterTypeResolver;
@@ -640,7 +641,7 @@ class PhpCallable
     }
 
 
-    public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode): ?UnresolvedPhpDocType
+    public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode, bool $bindArguments = true): ?UnresolvedPhpDocType
     {
         $phpDoc = $this->getPhpDoc();
 
@@ -648,7 +649,13 @@ class PhpCallable
             return null;
         }
 
-        return $phpDoc->getTypeFromPhpDocTag($tagValueNode, $this->fillTemplateTypesFromParameters());
+        return $phpDoc->getTypeFromPhpDocTag(
+            tagValueNode: $tagValueNode,
+            binding: new PhpDocBinding(
+                templateTypes: $this->fillTemplateTypesFromParameters(),
+                argumentTypeResolver: $bindArguments ? $this->getArgumentType(...) : null,
+            ),
+        );
     }
 
 
@@ -839,13 +846,13 @@ class PhpCallable
             $phpDocResponseTag = $phpDoc->getResponseTag();
 
             if ($phpDocResponseTag) {
-                $responseBodyType = $this->getTypeFromPhpDocTag($phpDocResponseTag);
+                $responseBodyType = $this->getTypeFromPhpDocTag($phpDocResponseTag, bindArguments: false);
 
             } else {
                 $phpDocReturnTag = $phpDoc->getReturnTag();
 
                 if ($phpDocReturnTag) {
-                    $phpDocReturnType = $this->getTypeFromPhpDocTag($phpDocReturnTag)?->resolve();
+                    $phpDocReturnType = $this->getTypeFromPhpDocTag($phpDocReturnTag, bindArguments: false)?->resolve();
                 }
             }
 
