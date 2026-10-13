@@ -879,6 +879,31 @@ class Scope
      * @param (callable(): TResult) $callback
      * @return TResult
      */
+    public function withScalarTypeValuesShown(callable $callback): mixed
+    {
+        $initialValues = [
+            'show' => $this->config->data['openapi']['show_values_for_scalar_types'] ?? false,
+            'merge' => $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true,
+        ];
+
+        $this->config->data['openapi']['show_values_for_scalar_types'] = true;
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = true;
+
+        try {
+            return $callback();
+
+        } finally {
+            $this->config->data['openapi']['show_values_for_scalar_types'] = $initialValues['show'];
+            $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = $initialValues['merge'];
+        }
+    }
+
+
+    /**
+     * @template TResult
+     * @param (callable(): TResult) $callback
+     * @return TResult
+     */
     public function withPartialArraysResolvingAsShapes(callable $callback): mixed
     {
         $initialValue = $this->config->data['arrays']['resolve_partial_shapes'] ?? false;

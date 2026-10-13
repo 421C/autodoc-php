@@ -9,6 +9,7 @@ use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
+use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\Exceptions\AutoDocException;
 use PhpParser\Comment;
@@ -45,15 +46,10 @@ class ArrayTypeResolver
                         }
 
                     } else {
-                        if ($typeInUnion->itemType instanceof UnionType) {
-                            $unpackedUnion = $this->unpackArrayItems($typeInUnion->itemType);
+                        $unpackedList = $this->unpackListItems($typeInUnion);
 
-                            $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedUnion['itemTypes']);
-                            $result['shape'] = array_merge($result['shape'], $unpackedUnion['shape']);
-
-                        } else if ($typeInUnion->itemType) {
-                            $result['itemTypes'][] = $typeInUnion->itemType;
-                        }
+                        $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedList['itemTypes']);
+                        $result['shape'] = array_merge($result['shape'], $unpackedList['shape']);
                     }
 
                 } else {
@@ -66,19 +62,33 @@ class ArrayTypeResolver
                 $result['shape'] = $type->shape;
 
             } else {
-                if ($type->itemType instanceof UnionType) {
-                    $unpackedUnion = $this->unpackArrayItems($type->itemType);
-
-                    $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedUnion['itemTypes']);
-                    $result['shape'] = array_merge($result['shape'], $unpackedUnion['shape']);
-
-                } else if ($type->itemType) {
-                    $result['itemTypes'][] = $type->itemType;
-                }
+                $result = $this->unpackListItems($type);
             }
+
+        } else {
+            $result['itemTypes'][] = new UnknownType;
         }
 
         return $result;
+    }
+
+
+    /**
+     * @return array{
+     *     shape: array<int|string, Type>,
+     *     itemTypes: list<Type>,
+     * }
+     */
+    private function unpackListItems(ArrayType $type): array
+    {
+        if ($type->itemType instanceof UnionType) {
+            return $this->unpackArrayItems($type->itemType);
+        }
+
+        return [
+            'shape' => [],
+            'itemTypes' => [$type->itemType ?? new UnknownType],
+        ];
     }
 
 

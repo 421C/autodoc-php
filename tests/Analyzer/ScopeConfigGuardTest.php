@@ -4,6 +4,9 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use AutoDoc\DataTypes\StringType;
+use AutoDoc\DataTypes\Type;
+use AutoDoc\DataTypes\UnionType;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -56,6 +59,36 @@ final class ScopeConfigGuardTest extends TestCase
 
         $this->assertTrue($this->config->data['openapi']['show_values_for_scalar_types'] ?? null);
         $this->assertFalse($this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? null);
+    }
+
+    #[Test]
+    public function withScalarTypeValuesShownRestoresFlagsWhenTheCallbackThrows(): void
+    {
+        $this->config->data['openapi']['show_values_for_scalar_types'] = false;
+        $this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] = false;
+
+        $this->assertGuardLetsThrowPropagate(
+            fn (callable $callback) => $this->scope->withScalarTypeValuesShown($callback),
+        );
+
+        $this->assertFalse($this->config->data['openapi']['show_values_for_scalar_types'] ?? null);
+        $this->assertFalse($this->config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? null);
+    }
+
+    #[Test]
+    public function withScalarTypeValuesShownKeepsLiteralsButLetsAnUnconstrainedScalarAbsorbThem(): void
+    {
+        $merge = fn (Type ...$types): Type => new UnionType($types)->unwrapType($this->config);
+
+        [$literals, $withUnconstrained] = $this->scope->withoutScalarTypeValueMerging(
+            fn () => $this->scope->withScalarTypeValuesShown(fn () => [
+                $merge(new StringType('a'), new StringType('b')),
+                $merge(new StringType, new StringType('all')),
+            ]),
+        );
+
+        $this->assertSame(['type' => 'string', 'enum' => ['a', 'b']], $literals->toSchema($this->config));
+        $this->assertSame(['type' => 'string'], $withUnconstrained->toSchema($this->config));
     }
 
     #[Test]
