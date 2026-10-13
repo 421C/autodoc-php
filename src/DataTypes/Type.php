@@ -131,6 +131,13 @@ abstract class Type
 
     public function addDescription(?string $description, bool $prepend = false): self
     {
+        $existingParagraphs = array_map(trim(...), explode("\n\n", $this->description ?? ''));
+
+        $description = implode("\n\n", array_filter(
+            array: explode("\n\n", $description ?? ''),
+            callback: fn (string $paragraph) => ! in_array(trim($paragraph), $existingParagraphs, true),
+        ));
+
         if ($prepend) {
             $this->description = trim($description . "\n\n" . $this->description) ?: null;
 

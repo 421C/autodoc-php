@@ -3,6 +3,7 @@
 namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDocBinding;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 
@@ -13,6 +14,7 @@ class UnresolvedPhpDocType extends UnresolvedType
         public TypeNode $typeNode,
         public PhpDoc $phpDoc,
         public ?string $description = null,
+        public ?PhpDocBinding $binding = null,
     ) {}
 
     public ?Type $fallbackType = null;
@@ -20,7 +22,7 @@ class UnresolvedPhpDocType extends UnresolvedType
 
     public function resolve(): Type
     {
-        $resolvedType = $this->phpDoc->resolveTypeFromNode($this->typeNode);
+        $resolvedType = $this->phpDoc->resolveTypeFromNode($this->typeNode, $this->binding);
 
         if (! $resolvedType) {
             if ($this->phpDoc->scope->isDebugModeEnabled()) {

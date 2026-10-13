@@ -59,6 +59,14 @@ final class RequestBodyContentTypeTest extends TestCase
             'multipart/form-data',
         ];
 
+        yield 'binary field also recorded as a plain string' => [
+            [
+                new ObjectType(properties: ['avatar' => new StringType]),
+                new ObjectType(properties: ['avatar' => self::binary()]),
+            ],
+            'multipart/form-data',
+        ];
+
         yield 'formatted string that is not binary' => [
             [new ObjectType(properties: ['publishedAt' => new StringType(format: 'date-time')])],
             'application/json',

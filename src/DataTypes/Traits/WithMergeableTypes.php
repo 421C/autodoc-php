@@ -32,20 +32,24 @@ trait WithMergeableTypes
             || $type instanceof FloatType
             || $type instanceof NumberType;
 
-        // string ∩ numeric → a numeric string ("123", "-4.5")
-        if (($type1 instanceof StringType && $isNumber($type2))
-            || ($type2 instanceof StringType && $isNumber($type1))
-        ) {
-            $numeric = $type1 instanceof StringType ? $type2 : $type1;
+        $numeric = $type1 instanceof StringType ? $type2 : $type1;
+        $string = $type1 instanceof StringType ? $type1 : $type2;
 
+        // string ∩ numeric → a numeric string ("123", "-4.5")
+        if ($string instanceof StringType
+            && ($numeric instanceof IntegerType || $numeric instanceof FloatType || $numeric instanceof NumberType)
+        ) {
             if ($numeric instanceof IntegerType) {
-                $result = new IntegerType;
+                $result = new IntegerType(minimum: $numeric->minimum, maximum: $numeric->maximum);
                 $result->isString = true;
 
-                return $result;
+            } else {
+                $result = new NumberType(minimum: $numeric->minimum, maximum: $numeric->maximum, isString: true);
             }
 
-            return new NumberType(isString: true);
+            return $result
+                ->addDescription($type1->description)
+                ->addDescription($type2->description);
         }
 
         // bool ∩ numeric → 0/1
@@ -521,16 +525,26 @@ trait WithMergeableTypes
             }
 
             $resultType->description = $type1->description === $type2->description ? $type1->description : null;
-            $resultType->minimum = $type1->minimum === $type2->minimum ? $type1->minimum : null;
-            $resultType->maximum = $type1->maximum === $type2->maximum ? $type1->maximum : null;
+
+            $minimum = $this->mergeScalarFacet($type1->minimum, $type2->minimum, $mergeAsIntersection, stricter: 'max');
+            $maximum = $this->mergeScalarFacet($type1->maximum, $type2->maximum, $mergeAsIntersection, stricter: 'min');
+
+            if ($resultType instanceof IntegerType) {
+                $resultType->minimum = is_float($minimum) ? (int) ceil($minimum) : $minimum;
+                $resultType->maximum = is_float($maximum) ? (int) floor($maximum) : $maximum;
+
+            } else {
+                $resultType->minimum = $minimum;
+                $resultType->maximum = $maximum;
+            }
 
         } else if ($type1 instanceof StringType && $type2 instanceof StringType) {
             $resultType = new StringType(
                 description: $type1->description === $type2->description ? $type1->description : null,
-                format: $type1->format === $type2->format ? $type1->format : null,
-                minLength: $type1->minLength === $type2->minLength ? $type1->minLength : null,
-                maxLength: $type1->maxLength === $type2->maxLength ? $type1->maxLength : null,
-                pattern: $type1->pattern === $type2->pattern ? $type1->pattern : null,
+                format: $this->mergeScalarFacet($type1->format, $type2->format, $mergeAsIntersection),
+                minLength: $this->mergeScalarFacet($type1->minLength, $type2->minLength, $mergeAsIntersection, stricter: 'max'),
+                maxLength: $this->mergeScalarFacet($type1->maxLength, $type2->maxLength, $mergeAsIntersection, stricter: 'min'),
+                pattern: $this->mergeScalarFacet($type1->pattern, $type2->pattern, $mergeAsIntersection),
             );
 
         } else {
@@ -577,6 +591,38 @@ trait WithMergeableTypes
         return $resultType;
     }
 
+
+    /**
+     * @template T of int|float|string
+     * @param T|null $value1
+     * @param T|null $value2
+     * @param 'max'|'min'|null $stricter
+     * @return T|null
+     */
+    private function mergeScalarFacet(
+        int|float|string|null $value1,
+        int|float|string|null $value2,
+        bool $mergeAsIntersection,
+        ?string $stricter = null,
+    ): int|float|string|null {
+        if ($value1 === $value2) {
+            return $value1;
+        }
+
+        if (! $mergeAsIntersection) {
+            return null;
+        }
+
+        if ($value1 === null || $value2 === null) {
+            return $value1 ?? $value2;
+        }
+
+        return match ($stricter) {
+            'max' => max($value1, $value2),
+            'min' => min($value1, $value2),
+            null => null,
+        };
+    }
 
     /**
      * @param list<float|int|string> $values

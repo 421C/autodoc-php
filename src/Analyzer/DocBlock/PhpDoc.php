@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer\DocBlock;
 
+use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
@@ -10,6 +11,7 @@ use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\FloatType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
+use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
@@ -70,7 +72,7 @@ class PhpDoc
     /**
      * @var array<string, ?Type>
      */
-    public array $templateTypes;
+    private array $declaredTemplateTypes;
 
     /**
      * @var array<string, Type>
@@ -126,15 +128,20 @@ class PhpDoc
     /**
      * https://phpstan.org/writing-php-code/phpdoc-types
      */
-    public function resolveTypeFromNode(TypeNode $node): ?Type
+    public function resolveTypeFromNode(TypeNode $node, ?PhpDocBinding $binding = null): ?Type
     {
+        $binding ??= $this->bindTemplates($this->scope);
+
         /**
          * type<genericTypes>
          */
         if ($node instanceof GenericTypeNode) {
-            $genericTypeValues = array_map($this->createUnresolvedType(...), $node->genericTypes);
+            $genericTypeValues = array_map(
+                callback: fn (TypeNode $genericTypeNode) => $this->createUnresolvedType($genericTypeNode, binding: $binding),
+                array: $node->genericTypes,
+            );
 
-            $type = $this->resolveTypeFromIdentifier($node->type->name, $genericTypeValues);
+            $type = $this->resolveTypeFromIdentifier($node->type->name, $binding, $genericTypeValues);
 
             /**
              * array<keyType, itemType>
@@ -143,12 +150,6 @@ class PhpDoc
                 if (isset($genericTypeValues[0], $genericTypeValues[1])) {
                     $type->keyType = $genericTypeValues[0];
                     $type->itemType = $genericTypeValues[1];
-
-                    if ($type->itemType->typeNode instanceof IdentifierTypeNode
-                        && isset($this->scope->constructorTemplateTypes[$type->itemType->typeNode->name])
-                    ) {
-                        $type->itemType = $this->scope->constructorTemplateTypes[$type->itemType->typeNode->name];
-                    }
 
                 } else {
                     $type->itemType = $genericTypeValues[0];
@@ -159,8 +160,8 @@ class PhpDoc
              * int<0, 100> / int<min, 50> / int<1, self::LIMIT>
              */
             if ($type instanceof IntegerType && $node->type->name === 'int' && count($node->genericTypes) === 2) {
-                $type->minimum = $this->resolveIntegerRangeBound($node->genericTypes[0]);
-                $type->maximum = $this->resolveIntegerRangeBound($node->genericTypes[1]);
+                $type->minimum = $this->resolveIntegerRangeBound($node->genericTypes[0], $binding);
+                $type->maximum = $this->resolveIntegerRangeBound($node->genericTypes[1], $binding);
             }
 
             return $type;
@@ -171,7 +172,7 @@ class PhpDoc
          */
         if ($node instanceof ArrayTypeNode) {
             return new ArrayType(
-                itemType: $this->resolveTypeFromNode($node->type),
+                itemType: $this->resolveTypeFromNode($node->type, $binding),
             );
         }
 
@@ -179,7 +180,7 @@ class PhpDoc
          * type['key'] / type[offsetType]
          */
         if ($node instanceof OffsetAccessTypeNode) {
-            return $this->resolveOffsetAccessType($node);
+            return $this->resolveOffsetAccessType($node, $binding);
         }
 
         /**
@@ -189,7 +190,7 @@ class PhpDoc
             $arrayType = new ArrayType;
 
             foreach ($node->items as $itemNode) {
-                $itemType = $this->resolveTypeFromNode($itemNode->valueType) ?? new UnknownType;
+                $itemType = $this->resolveTypeFromNode($itemNode->valueType, $binding) ?? new UnknownType;
 
                 $itemType->required = $itemNode->optional === false;
 
@@ -208,7 +209,7 @@ class PhpDoc
          * type
          */
         if ($node instanceof IdentifierTypeNode) {
-            return $this->resolveTypeFromIdentifier($node->name);
+            return $this->resolveTypeFromIdentifier($node->name, $binding);
         }
 
         /**
@@ -216,7 +217,7 @@ class PhpDoc
          */
         if ($node instanceof CallableTypeNode) {
             return new CallableType(
-                declaredReturnType: $this->resolveTypeFromNode($node->returnType) ?? new UnknownType,
+                declaredReturnType: $this->resolveTypeFromNode($node->returnType, $binding) ?? new UnknownType,
             );
         }
 
@@ -224,7 +225,7 @@ class PhpDoc
          * $this
          */
         if ($node instanceof ThisTypeNode) {
-            return $this->resolveTypeFromIdentifier('static');
+            return $this->resolveTypeFromIdentifier('static', $binding);
         }
 
         /**
@@ -232,7 +233,7 @@ class PhpDoc
          */
         if ($node instanceof NullableTypeNode) {
             $type = new UnionType([
-                $this->resolveTypeFromNode($node->type) ?? new UnknownType,
+                $this->resolveTypeFromNode($node->type, $binding) ?? new UnknownType,
                 new NullType,
             ]);
 
@@ -269,7 +270,7 @@ class PhpDoc
             $unionType = new UnionType;
 
             foreach ($node->types as $typeNode) {
-                $unionType->types[] = $this->resolveTypeFromNode($typeNode) ?? new UnknownType;
+                $unionType->types[] = $this->resolveTypeFromNode($typeNode, $binding) ?? new UnknownType;
             }
 
             $unionType->isEnum = true;
@@ -284,7 +285,7 @@ class PhpDoc
             $intersectionType = new IntersectionType;
 
             foreach ($node->types as $typeNode) {
-                $intersectionType->types[] = $this->resolveTypeFromNode($typeNode) ?? new UnknownType;
+                $intersectionType->types[] = $this->resolveTypeFromNode($typeNode, $binding) ?? new UnknownType;
             }
 
             return $intersectionType->unwrapType($this->scope->config);
@@ -293,10 +294,18 @@ class PhpDoc
         /**
          * ($param is targetType ? if : else) / (subjectType is targetType ? if : else)
          */
+        if ($node instanceof ConditionalTypeForParameterNode) {
+            $branchNode = $this->resolveConditionalBranchFromArgument($node, $binding);
+
+            if ($branchNode) {
+                return $this->resolveTypeFromNode($branchNode, $binding);
+            }
+        }
+
         if ($node instanceof ConditionalTypeForParameterNode || $node instanceof ConditionalTypeNode) {
             $type = new UnionType([
-                $this->resolveTypeFromNode($node->if) ?? new UnknownType,
-                $this->resolveTypeFromNode($node->else) ?? new UnknownType,
+                $this->resolveTypeFromNode($node->if, $binding) ?? new UnknownType,
+                $this->resolveTypeFromNode($node->else, $binding) ?? new UnknownType,
             ]);
 
             return $type->unwrapType($this->scope->config);
@@ -309,7 +318,7 @@ class PhpDoc
             $objectType = new ObjectType;
 
             foreach ($node->items as $itemNode) {
-                $itemType = $this->resolveTypeFromNode($itemNode->valueType) ?? new UnknownType;
+                $itemType = $this->resolveTypeFromNode($itemNode->valueType, $binding) ?? new UnknownType;
 
                 $itemType->required = $itemNode->optional === false;
 
@@ -326,7 +335,7 @@ class PhpDoc
     /**
      * @param array<?UnresolvedPhpDocType> $genericTypeValues
      */
-    private function resolveTypeFromIdentifier(string $identifier, array $genericTypeValues = []): ?Type
+    private function resolveTypeFromIdentifier(string $identifier, PhpDocBinding $binding, array $genericTypeValues = []): ?Type
     {
         $type = match ($identifier) {
             'class-string', 'interface-string', 'trait-string', 'enum-string' => new ClassStringType(classTemplateType: $genericTypeValues[0] ?? null),
@@ -362,19 +371,17 @@ class PhpDoc
             }
         }
 
-        $templateTypes = $this->getTemplateTypes();
+        $templateType = $binding->templateTypes[$identifier] ?? null;
 
-        if (array_key_exists($identifier, $templateTypes)) {
-            // Identifier is a `@template` type.
+        if ($templateType) {
+            // Bound values are shared across every position that names the template.
+            $templateType = clone $templateType;
 
-            if ($templateTypes[$identifier]) {
-
-                if ($templateTypes[$identifier] instanceof UnresolvedClassType) {
-                    $templateTypes[$identifier]->templateTypeValues = $genericTypeValues;
-                }
-
-                return $templateTypes[$identifier]->unwrapType($this->scope->config);
+            if ($templateType instanceof UnresolvedClassType) {
+                $templateType->templateTypeValues = $genericTypeValues;
             }
+
+            return $templateType->unwrapType($this->scope->config);
         }
 
         $className = $this->scope->getResolvedClassName($identifier);
@@ -394,6 +401,38 @@ class PhpDoc
         }
 
         return $this->resolveTypeFromConstantName($identifier);
+    }
+
+
+    private function resolveConditionalBranchFromArgument(ConditionalTypeForParameterNode $node, PhpDocBinding $binding): ?TypeNode
+    {
+        if (! $binding->argumentTypeResolver) {
+            return null;
+        }
+
+        $targetType = $this->resolveTypeFromNode($node->targetType, $binding);
+
+        if (! $targetType || $targetType instanceof UnknownType) {
+            return null;
+        }
+
+        $argumentType = ($binding->argumentTypeResolver)(substr($node->parameterName, 1))->unwrapType($this->scope->config);
+
+        if ($argumentType instanceof UnknownType || $argumentType instanceof NeverType) {
+            return null;
+        }
+
+        if ($argumentType->isSubTypeOf($targetType, $this->scope->config)) {
+            $conditionHolds = true;
+
+        } else if (new IsType($targetType)->apply($argumentType, $this->scope) instanceof NeverType) {
+            $conditionHolds = false;
+
+        } else {
+            return null;
+        }
+
+        return $conditionHolds !== $node->negated ? $node->if : $node->else;
     }
 
 
@@ -422,15 +461,15 @@ class PhpDoc
     /**
      * A literal offset picks that key; any other offset yields the union of all item types.
      */
-    private function resolveOffsetAccessType(OffsetAccessTypeNode $node): ?Type
+    private function resolveOffsetAccessType(OffsetAccessTypeNode $node, PhpDocBinding $binding): ?Type
     {
-        $type = $this->resolveTypeFromNode($node->type)?->unwrapType($this->scope->config);
+        $type = $this->resolveTypeFromNode($node->type, $binding)?->unwrapType($this->scope->config);
 
         if ($type === null) {
             return null;
         }
 
-        $offsetType = $this->resolveTypeFromNode($node->offset);
+        $offsetType = $this->resolveTypeFromNode($node->offset, $binding);
 
         if (($offsetType instanceof StringType || $offsetType instanceof IntegerType)
             && (is_string($offsetType->value) || is_int($offsetType->value))
@@ -446,9 +485,9 @@ class PhpDoc
      * A bound is either an integer literal, a constant that holds one,
      * or the `min`/`max` keyword, which leaves that end unbounded.
      */
-    private function resolveIntegerRangeBound(TypeNode $node): ?int
+    private function resolveIntegerRangeBound(TypeNode $node, PhpDocBinding $binding): ?int
     {
-        $boundType = $this->resolveTypeFromNode($node);
+        $boundType = $this->resolveTypeFromNode($node, $binding);
 
         return $boundType instanceof IntegerType && is_int($boundType->value)
             ? $boundType->value
@@ -498,19 +537,13 @@ class PhpDoc
     }
 
 
-    public function resolveVarType(?string $name): Type
+    public function resolveVarType(?string $name, ?PhpDocBinding $binding = null): Type
     {
-        foreach ($this->getVarTags() as $var) {
+        foreach ($this->getVarTags($binding) as $var) {
             [$varName, $varType] = $var;
 
             if ($name && $varName && $name !== $varName) {
                 continue;
-            }
-
-            $identifier = $varType->getIdentifier();
-
-            if ($identifier && isset($this->scope->constructorTemplateTypes[$identifier])) {
-                return $this->scope->constructorTemplateTypes[$identifier]->unwrapType($this->scope->config);
             }
 
             return $varType->resolve();
@@ -520,17 +553,15 @@ class PhpDoc
     }
 
 
-    public function resolvePropertyType(string $name): Type
+    public function resolvePropertyType(string $name, ?PhpDocBinding $binding = null): Type
     {
-        $varTags = $this->getVarTags();
-
-        if ($varTags) {
-            return $this->resolveVarType($name);
+        if ($this->node->getVarTagValues()) {
+            return $this->resolveVarType($name, $binding);
         }
 
         $phpClass = $this->scope->getCurrentPhpClass();
 
-        return $phpClass?->resolvePropertyFromParentDocComments($name) ?? new UnknownType;
+        return $phpClass?->resolvePropertyFromParentDocComments($name, $binding) ?? new UnknownType;
     }
 
 
@@ -539,14 +570,14 @@ class PhpDoc
      *
      * @return array{?string, UnresolvedPhpDocType}[]
      */
-    public function getVarTags(): array
+    public function getVarTags(?PhpDocBinding $binding = null): array
     {
         $tags = [];
 
         foreach ($this->node->getVarTagValues() as $varTag) {
             $name = $varTag->variableName ? substr($varTag->variableName, 1) : null;
 
-            $type = $this->createUnresolvedType($varTag->type, $varTag->description ?: null);
+            $type = $this->createUnresolvedType($varTag->type, $varTag->description ?: null, $binding);
 
             $tags[] = [$name, $type];
         }
@@ -559,14 +590,14 @@ class PhpDoc
      *
      * @return array{?string, UnresolvedPhpDocType}[]
      */
-    public function getPropertyTags(): array
+    public function getPropertyTags(?PhpDocBinding $binding = null): array
     {
         $tags = [];
 
         foreach ($this->node->getPropertyTagValues() as $tag) {
             $name = $tag->propertyName ? substr($tag->propertyName, 1) : null;
 
-            $type = $this->createUnresolvedType($tag->type, $tag->description ?: null);
+            $type = $this->createUnresolvedType($tag->type, $tag->description ?: null, $binding);
 
             $tags[] = [$name, $type];
         }
@@ -648,25 +679,29 @@ class PhpDoc
     }
 
 
-    /**
-     * @param array<string, ?Type> $templateTypes
-     */
-    public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode, array $templateTypes = []): ?UnresolvedPhpDocType
+    public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode, ?PhpDocBinding $binding = null): ?UnresolvedPhpDocType
     {
-        $this->templateTypes = array_merge(
-            $this->getTemplateTypes(),
-            $this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? [],
-            $templateTypes,
+        $tagBinding = new PhpDocBinding(
+            templateTypes: [
+                ...($this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? []),
+                ...$this->bindTemplates($this->scope)->templateTypes,
+                ...($binding->templateTypes ?? []),
+            ],
+            argumentTypeResolver: $binding?->argumentTypeResolver,
         );
 
         if ($tagValueNode instanceof ReturnTagValueNode) {
             return $this->createUnresolvedType(
                 typeNode: $tagValueNode->type,
                 description: $tagValueNode->description,
+                binding: $tagBinding,
             );
 
         } else if ($tagValueNode instanceof GenericTagValueNode) {
-            return $this->createUnresolvedType($this->createTypeNode($tagValueNode->value));
+            return $this->createUnresolvedType(
+                typeNode: $this->createTypeNode($tagValueNode->value),
+                binding: $tagBinding,
+            );
         }
 
         return null;
@@ -750,15 +785,17 @@ class PhpDoc
     }
 
     /**
+     * Declared `@template` names mapped to their bound types.
+     *
      * @return array<string, ?Type>
      */
     public function getTemplateTypes(): array
     {
-        if (isset($this->templateTypes)) {
-            return $this->templateTypes;
+        if (isset($this->declaredTemplateTypes)) {
+            return $this->declaredTemplateTypes;
         }
 
-        $this->templateTypes = [];
+        $this->declaredTemplateTypes = [];
 
         $tags = [
             ...$this->node->getTemplateTagValues('@template'),
@@ -769,10 +806,22 @@ class PhpDoc
         foreach ($tags as $templateTag) {
             $boundType = $templateTag->bound ? $this->createUnresolvedType($templateTag->bound) : null;
 
-            $this->templateTypes[$templateTag->name] = $boundType;
+            $this->declaredTemplateTypes[$templateTag->name] = $boundType;
         }
 
-        return $this->templateTypes;
+        return $this->declaredTemplateTypes;
+    }
+
+
+    /**
+     * This doc's declared templates, overridden by the class template values bound in `$scope`.
+     */
+    public function bindTemplates(Scope $scope): PhpDocBinding
+    {
+        return new PhpDocBinding([
+            ...$this->getTemplateTypes(),
+            ...$scope->constructorTemplateTypes,
+        ]);
     }
 
 
@@ -782,7 +831,7 @@ class PhpDoc
      *     genericTypes: UnresolvedPhpDocType[],
      * }
      */
-    public function getExtendsTag(): ?object
+    public function getExtendsTag(?PhpDocBinding $binding = null): ?object
     {
         foreach ($this->node->getExtendsTagValues() as $extendsTag) {
             try {
@@ -794,7 +843,10 @@ class PhpDoc
 
                 return (object) [
                     'className' => $parentClassName,
-                    'genericTypes' => array_map($this->createUnresolvedType(...), $extendsTag->type->genericTypes),
+                    'genericTypes' => array_map(
+                        callback: fn (TypeNode $genericTypeNode) => $this->createUnresolvedType($genericTypeNode, binding: $binding),
+                        array: $extendsTag->type->genericTypes,
+                    ),
                 ];
 
             } catch (Throwable $exception) {
@@ -1003,9 +1055,14 @@ class PhpDoc
     }
 
 
-    public function createUnresolvedType(TypeNode $typeNode, ?string $description = null): UnresolvedPhpDocType
+    public function createUnresolvedType(TypeNode $typeNode, ?string $description = null, ?PhpDocBinding $binding = null): UnresolvedPhpDocType
     {
-        return new UnresolvedPhpDocType($typeNode, $this, $description);
+        return new UnresolvedPhpDocType(
+            typeNode: $typeNode,
+            phpDoc: $this,
+            description: $description,
+            binding: $binding,
+        );
     }
 
 

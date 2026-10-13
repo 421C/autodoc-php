@@ -52,6 +52,18 @@ final class UnionTypeCollapseTest extends TestCase
     }
 
     #[Test]
+    public function collapseDoesNotRepeatADescriptionTheMemberAlreadyHas(): void
+    {
+        $member = new IntegerType;
+        $member->description = 'The record ID.';
+
+        $union = new UnionType([$member]);
+        $union->description = 'The record ID.';
+
+        self::assertSame('The record ID.', $union->unwrapType(self::loadConfig())->description);
+    }
+
+    #[Test]
     public function collapseDoesNotMutateAMemberSharedWithAnotherWrapper(): void
     {
         $config = self::loadConfig();

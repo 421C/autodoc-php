@@ -58,6 +58,34 @@ final class RequestArgResolutionTest extends TestCase
     }
 
     #[Test]
+    public function requestPathKeepsSpreadOfUnknownValueFromNarrowingTheItemType(): void
+    {
+        $schemas = $this->analyze(function (object $r, mixed $names): void {
+            // @phpstan-ignore method.notFound, arrayUnpacking.nonIterable
+            $r->markRequest([...$names, 'all']);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => ['type' => 'string'],
+        ], $schemas['request'], '/test', 'request');
+    }
+
+    #[Test]
+    public function requestPathKeepsSpreadOfArrayWithUnknownItemsFromNarrowingTheItemType(): void
+    {
+        $schemas = $this->analyze(function (object $r, array $names): void {
+            // @phpstan-ignore method.notFound
+            $r->markRequest([...$names, 'all']);
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'items' => ['type' => 'string'],
+        ], $schemas['request'], '/test', 'request');
+    }
+
+    #[Test]
     public function requestPathResolvesLocalVariableInsideArrayLiteral(): void
     {
         $schemas = $this->analyze(function (object $r): void {

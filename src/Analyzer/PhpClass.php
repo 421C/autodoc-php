@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer;
 
 use AutoDoc\Analyzer\Ast\SymbolNameResolver;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDocBinding;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\FloatType;
@@ -175,7 +176,11 @@ class PhpClass
     {
         $depthBudget = $this->getRemainingDepthBudget();
 
-        if ($this->scopeAllowsUsingCache()) {
+        // Resolving a property can move this shared instance onto another scope, so both are read up front.
+        $templateBinding = $this->getTemplateBinding();
+        $allowsUsingCache = $this->scopeAllowsUsingCache();
+
+        if ($allowsUsingCache) {
             if ($onlyPublic) {
                 if (isset($this->publicProperties, $this->publicPropertiesDepthBudget)
                     && $this->publicPropertiesDepthBudget >= $depthBudget
@@ -198,7 +203,6 @@ class PhpClass
 
         $publicProperties = [];
         $privateAndProtectedProperties = [];
-        $propertyScopeAllowsUsingCache = true;
 
         foreach ($this->getReflection()->getProperties() as $propertyReflection) {
             $isPublic = $propertyReflection->isPublic();
@@ -212,14 +216,10 @@ class PhpClass
             $propertyType = new UnknownType;
 
             if ($propertyPhpDoc && $propertyReflection->getDeclaringClass()->name === $this->className) {
-                $propertyType = $propertyPhpDoc->resolvePropertyType($propertyName);
-
-                if ($propertyScopeAllowsUsingCache) {
-                    $propertyScopeAllowsUsingCache = ! $propertyPhpDoc->scope->constructorTemplateTypes;
-                }
+                $propertyType = $propertyPhpDoc->resolvePropertyType($propertyName, $templateBinding);
 
             } else {
-                $propertyType = $this->resolvePropertyFromParentDocComments($propertyName) ?? $propertyType;
+                $propertyType = $this->resolvePropertyFromParentDocComments($propertyName, $templateBinding) ?? $propertyType;
             }
 
             if ($propertyType instanceof UnknownType) {
@@ -253,14 +253,14 @@ class PhpClass
         }
 
         if ($onlyPublic) {
-            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties);
+            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties, $templateBinding);
 
         } else {
-            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties);
-            $privateAndProtectedProperties = $this->handlePhpDocPropertyTags($privateAndProtectedProperties);
+            $publicProperties = $this->handlePhpDocPropertyTags($publicProperties, $templateBinding);
+            $privateAndProtectedProperties = $this->handlePhpDocPropertyTags($privateAndProtectedProperties, $templateBinding);
         }
 
-        if ($this->scopeAllowsUsingCache() && $propertyScopeAllowsUsingCache) {
+        if ($allowsUsingCache) {
             if (! isset($this->publicPropertiesDepthBudget)
                 || $depthBudget >= $this->publicPropertiesDepthBudget
             ) {
@@ -296,9 +296,11 @@ class PhpClass
      * @param array<string, Type> $properties
      * @return array<string, Type>
      */
-    public function handlePhpDocPropertyTags(array $properties): array
+    public function handlePhpDocPropertyTags(array $properties, ?PhpDocBinding $templateBinding = null): array
     {
-        foreach ($this->getPhpDoc()?->getPropertyTags() ?? [] as $propertyTag) {
+        $templateBinding ??= $this->getTemplateBinding();
+
+        foreach ($this->getPhpDoc()?->getPropertyTags($templateBinding) ?? [] as $propertyTag) {
             [$propertyName, $propertyType] = $propertyTag;
 
             if ($propertyName) {
@@ -451,9 +453,9 @@ class PhpClass
     }
 
 
-    public function resolvePropertyFromParentDocComments(string $propertyName): ?Type
+    public function resolvePropertyFromParentDocComments(string $propertyName, ?PhpDocBinding $templateBinding = null): ?Type
     {
-        $parentClass = $this->getParent();
+        $parentClass = $this->getParent($templateBinding);
 
         if (! $parentClass) {
             return null;
@@ -486,6 +488,15 @@ class PhpClass
         }
 
         return $this->docComment;
+    }
+
+
+    /**
+     * The class doc is memoized across scopes, so class template values are read from the current scope.
+     */
+    public function getTemplateBinding(): ?PhpDocBinding
+    {
+        return $this->getPhpDoc()?->bindTemplates($this->scope);
     }
 
 
@@ -605,7 +616,7 @@ class PhpClass
     /**
      * @return ?PhpClass<object>
      */
-    public function getParent(): ?PhpClass
+    public function getParent(?PhpDocBinding $templateBinding = null): ?PhpClass
     {
         $parentReflection = $this->getReflection()->getParentClass();
 
@@ -615,7 +626,7 @@ class PhpClass
 
         $parentClass = $this->scope->getPhpClassInDeeperScope($parentReflection->getName());
 
-        $extendsTag = $this->getPhpDoc()?->getExtendsTag();
+        $extendsTag = $this->getPhpDoc()?->getExtendsTag($templateBinding ?? $this->getTemplateBinding());
 
         if ($extendsTag?->genericTypes) {
             $parentClass->setTemplateTypeValues($extendsTag->genericTypes);

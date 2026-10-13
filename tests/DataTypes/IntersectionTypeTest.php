@@ -100,6 +100,36 @@ final class IntersectionTypeTest extends TestCase
     }
 
     #[Test]
+    public function numericStringCoercionKeepsTheNumbersBoundsAndBothDescriptions(): void
+    {
+        $config = $this->configWithCoerciveScalarOverlap();
+
+        $integerString = (new IntersectionType([
+            new StringType(description: 'Page size.'),
+            new IntegerType(description: 'At least 1.', minimum: 1, maximum: 100),
+        ]))->toSchema($config);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'format' => 'integer',
+            'description' => "Page size.\n\nAt least 1.",
+            'minimum' => 1,
+            'maximum' => 100,
+        ], $integerString, 'type', 'schema');
+
+        $numberString = (new IntersectionType([
+            new FloatType(minimum: 0.01),
+            new StringType,
+        ]))->toSchema($config);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'string',
+            'format' => 'numeric',
+            'minimum' => 0.01,
+        ], $numberString, 'type', 'schema');
+    }
+
+    #[Test]
     public function integerIntersectedWithBoolYieldsZeroOneInteger(): void
     {
         foreach ([[new IntegerType, new BoolType], [new BoolType, new IntegerType]] as [$a, $b]) {
@@ -238,6 +268,70 @@ final class IntersectionTypeTest extends TestCase
             ->unwrapType($this->configWithScalarValues());
 
         self::assertFalse($shared->required);
+    }
+
+    #[Test]
+    public function unknownIntersectionKeepsEachDescriptionParagraphOnce(): void
+    {
+        $intersectDescriptions = fn (string $first, string $second): ?string => (new IntersectionType([
+            new UnknownType($first),
+            new UnknownType($second),
+        ]))->unwrapType($this->configWithScalarValues())->description;
+
+        self::assertSame('Must match "password".', $intersectDescriptions('Must match "password".', 'Must match "password".'));
+        self::assertSame("Required.\n\nMust match \"password\".", $intersectDescriptions('Must match "password".', 'Required.'));
+        self::assertSame("Required.\n\nMust match \"password\".", $intersectDescriptions('Must match "password".', "Required.\n\nMust match \"password\"."));
+    }
+
+    #[Test]
+    public function numericIntersectionKeepsTheStricterBounds(): void
+    {
+        $intersect = fn (Type ...$types): Type => (new IntersectionType($types))->unwrapType(self::loadConfig());
+
+        $bounded = $intersect(new IntegerType, new IntegerType(minimum: 1));
+        self::assertInstanceOf(IntegerType::class, $bounded);
+        self::assertSame([1, null], [$bounded->minimum, $bounded->maximum]);
+
+        $narrowed = $intersect(new IntegerType(minimum: 0, maximum: 100), new IntegerType(minimum: 1, maximum: 500));
+        self::assertInstanceOf(IntegerType::class, $narrowed);
+        self::assertSame([1, 100], [$narrowed->minimum, $narrowed->maximum]);
+
+        $integer = $intersect(new NumberType(minimum: 0.5, maximum: 9.5), new IntegerType);
+        self::assertInstanceOf(IntegerType::class, $integer);
+        self::assertSame([1, 9], [$integer->minimum, $integer->maximum]);
+    }
+
+    #[Test]
+    public function stringIntersectionKeepsTheStricterFacets(): void
+    {
+        $intersect = fn (Type ...$types): Type => (new IntersectionType($types))->unwrapType(self::loadConfig());
+
+        $binary = $intersect(new StringType, new StringType(format: 'binary'));
+        self::assertInstanceOf(StringType::class, $binary);
+        self::assertSame('binary', $binary->format);
+
+        $lengths = $intersect(
+            new StringType(minLength: 2, pattern: '^[a-z]+$'),
+            new StringType(minLength: 5, maxLength: 10),
+        );
+        self::assertInstanceOf(StringType::class, $lengths);
+        self::assertSame([5, 10, '^[a-z]+$'], [$lengths->minLength, $lengths->maxLength, $lengths->pattern]);
+
+        $conflicting = $intersect(new StringType(format: 'date'), new StringType(format: 'date-time'));
+        self::assertInstanceOf(StringType::class, $conflicting);
+        self::assertNull($conflicting->format);
+    }
+
+    #[Test]
+    public function unionStillDropsBoundsThatDiffer(): void
+    {
+        $type = (new UnionType([
+            new IntegerType(minimum: 0, maximum: 10),
+            new IntegerType(minimum: 0, maximum: 30),
+        ]))->unwrapType(self::loadConfig());
+
+        self::assertInstanceOf(IntegerType::class, $type);
+        self::assertSame([0, null], [$type->minimum, $type->maximum]);
     }
 
     #[Test]
