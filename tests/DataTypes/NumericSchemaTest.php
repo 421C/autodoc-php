@@ -59,6 +59,62 @@ final class NumericSchemaTest extends TestCase
 
 
     #[Test]
+    public function aUnionOfANumberAndANumericStringKeepsBoth(): void
+    {
+        $schema = (new UnionType([
+            new FloatType(minimum: 0, maximum: 100),
+            new NumberType(minimum: 0, maximum: 100, isString: true),
+        ]))->toSchema(self::loadConfig());
+
+        $this->assertEquals(
+            [
+                'anyOf' => [
+                    ['type' => 'number', 'format' => 'float', 'minimum' => 0, 'maximum' => 100],
+                    ['type' => 'string', 'format' => 'numeric', 'minimum' => 0, 'maximum' => 100],
+                ],
+            ],
+            $schema,
+        );
+    }
+
+
+    #[Test]
+    public function aUnionOfNumericStringsStaysANumericString(): void
+    {
+        $config = self::loadConfig();
+
+        $integerString = new IntegerType;
+        $integerString->isString = true;
+
+        $type = (new UnionType([$integerString, clone $integerString]))->unwrapType($config);
+
+        $this->assertInstanceOf(IntegerType::class, $type);
+        $this->assertTrue($type->isString);
+
+        $type = (new UnionType([clone $integerString, new NumberType(isString: true)]))->unwrapType($config);
+
+        $this->assertInstanceOf(NumberType::class, $type);
+        $this->assertTrue($type->isString);
+    }
+
+
+    #[Test]
+    public function anIntersectionOfNumericStringsStaysANumericString(): void
+    {
+        $integerString = new IntegerType;
+        $integerString->isString = true;
+
+        $type = (new IntersectionType([
+            new NumberType(isString: true),
+            $integerString,
+        ]))->unwrapType(self::loadConfig());
+
+        $this->assertInstanceOf(IntegerType::class, $type);
+        $this->assertTrue($type->isString);
+    }
+
+
+    #[Test]
     public function aBoundedNumericStringStaysAString(): void
     {
         $config = self::loadConfig();

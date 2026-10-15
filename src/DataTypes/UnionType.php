@@ -153,15 +153,30 @@ class UnionType extends Type
         }
 
         if ($canOutputTypesAsArray) {
-            return [
+            return $this->withOwnMetadata([
                 'type' => $this->flattenArrayOfStrings(array_column($typeSchemas, 'type')),
-            ];
+            ]);
         }
 
 
-        return [
+        return $this->withOwnMetadata([
             'anyOf' => $typeSchemas,
-        ];
+        ]);
+    }
+
+
+    /**
+     * @param TypeSchema $schema
+     * @return TypeSchema
+     */
+    private function withOwnMetadata(array $schema): array
+    {
+        return array_merge($schema, array_filter([
+            'description' => $this->description,
+            'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
+        ]));
     }
 
 

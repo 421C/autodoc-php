@@ -505,6 +505,13 @@ trait WithMergeableTypes
             || $type2 instanceof NumberType;
 
         if ($t1IsNumber && $t2IsNumber) {
+            $t1IsString = ! ($type1 instanceof FloatType) && $type1->isString;
+            $t2IsString = ! ($type2 instanceof FloatType) && $type2->isString;
+
+            if (! $mergeAsIntersection && $t1IsString !== $t2IsString) {
+                return null;
+            }
+
             if ($mergeAsIntersection && $type1 instanceof NumberType) {
                 $typeClassName = $type2::class;
                 $resultType = new $typeClassName;
@@ -536,6 +543,10 @@ trait WithMergeableTypes
             } else {
                 $resultType->minimum = $minimum;
                 $resultType->maximum = $maximum;
+            }
+
+            if (! ($resultType instanceof FloatType)) {
+                $resultType->isString = $t1IsString && $t2IsString;
             }
 
         } else if ($type1 instanceof StringType && $type2 instanceof StringType) {
