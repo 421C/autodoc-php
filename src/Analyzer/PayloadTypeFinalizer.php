@@ -31,7 +31,8 @@ final readonly class PayloadTypeFinalizer
             callback: fn (): Type => $this->scope->withCoerciveScalarOverlap(
                 callback: fn (): Type => $type
                     ->deepResolve($this->scope->config)
-                    ->unwrapType($this->scope->config),
+                    ->unwrapType($this->scope->config)
+                    ->deepResolve($this->scope->config),
             ),
         );
     }

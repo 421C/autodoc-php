@@ -8,6 +8,7 @@ use AutoDoc\Analyzer\PayloadTypeFinalizer;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -430,6 +431,34 @@ final class PayloadTypeFinalizationTest extends TestCase
             ],
             actual: $finalizedType->toSchema(self::loadConfig()),
             uri: '/test/request-scalar-intersection',
+            method: 'request',
+        );
+    }
+
+    #[Test]
+    public function requestBodyFieldIntersectedWithAUnionUsesCoerciveScalarIntersectionSemantics(): void
+    {
+        $finalizedType = $this->finalizer()->finalizeRequestBodyTypes(types: [
+            new ObjectType(properties: ['page' => (new StringType)->setRequired(true)]),
+            new ObjectType(properties: ['page' => new UnionType([new IntegerType, new NullType])]),
+        ]);
+
+        $this->assertNotNull($finalizedType);
+        $this->assertSchemaArraysMatch(
+            expected: [
+                'type' => 'object',
+                'properties' => [
+                    'page' => [
+                        'type' => 'string',
+                        'format' => 'integer',
+                    ],
+                ],
+                'required' => [
+                    'page',
+                ],
+            ],
+            actual: $finalizedType->toSchema(self::loadConfig()),
+            uri: '/test/request-nested-scalar-intersection',
             method: 'request',
         );
     }
