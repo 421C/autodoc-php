@@ -587,7 +587,7 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function handleArrayMerge(Config $config, ArgumentList $argTypes): Type
     {
-        $shape = [];
+        $mergedArray = new ArrayType;
         $itemTypes = [];
         $keyTypes = [];
         $hasShape = true;
@@ -601,7 +601,7 @@ class ArrayFuncCall extends FuncCallExtension
             }
 
             if ($argType->shape && $hasShape) {
-                $shape = array_merge($shape, $argType->shape);
+                $mergedArray->mergeShape($argType->shape);
 
             } else {
                 $hasShape = false;
@@ -614,9 +614,7 @@ class ArrayFuncCall extends FuncCallExtension
         }
 
         if ($hasShape) {
-            return new ArrayType(
-                shape: $shape,
-            );
+            return $mergedArray;
         }
 
         return new ArrayType(
