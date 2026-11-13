@@ -4,6 +4,9 @@ namespace AutoDoc\Tests\TestProject\Controllers;
 
 use ArrayIterator;
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Entities\ClassWithDeprecatedProperties;
+use AutoDoc\Tests\TestProject\Entities\ClassWithDocumentedDateAndEnumProperties;
+use AutoDoc\Tests\TestProject\Entities\ClassWithDocumentedVarTagProperties;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
@@ -530,5 +533,146 @@ class BasicResponsesController
             'nonEmptyScalar' => 1,
             'traversable' => new ArrayIterator(['id' => 1]),
         ];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'plain' => [
+                                    'type' => 'string',
+                                    'description' => 'Plain var tag.',
+                                ],
+                                'nullable' => [
+                                    'type' => ['string', 'null'],
+                                    'description' => 'Nullable var tag.',
+                                ],
+                            ],
+                            'required' => [
+                                'plain',
+                                'nullable',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function varTagPropertyDescriptions(): ClassWithDocumentedVarTagProperties
+    {
+        return new ClassWithDocumentedVarTagProperties;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'date' => [
+                                    'type' => 'string',
+                                    'format' => 'date-time',
+                                    'description' => 'Plain date.',
+                                    'examples' => ['2024-01-01T00:00:00Z'],
+                                ],
+                                'nullableDate' => [
+                                    'type' => ['string', 'null'],
+                                    'format' => 'date-time',
+                                    'description' => 'Nullable date.',
+                                    'examples' => ['2024-01-01T00:00:00Z'],
+                                ],
+                                'state' => [
+                                    'type' => 'integer',
+                                    'description' => '[StateEnum](#/schemas/StateEnum)' . "\n\n" . 'Plain enum.',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                    ],
+                                ],
+                                'nullableState' => [
+                                    'type' => ['integer', 'null'],
+                                    'description' => '[StateEnum](#/schemas/StateEnum)' . "\n\n" . 'Nullable enum.',
+                                    'enum' => [
+                                        1,
+                                        2,
+                                        null,
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'date',
+                                'nullableDate',
+                                'state',
+                                'nullableState',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function dateAndEnumPropertyDescriptions(): ClassWithDocumentedDateAndEnumProperties
+    {
+        return new ClassWithDocumentedDateAndEnumProperties;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'plain' => [
+                                    'type' => 'string',
+                                    'deprecated' => true,
+                                    'x-deprecated-description' => 'Use `slug`.',
+                                ],
+                                'nullable' => [
+                                    'type' => ['string', 'null'],
+                                    'deprecated' => true,
+                                    'x-deprecated-description' => 'Use `slug`.',
+                                ],
+                                'date' => [
+                                    'type' => 'string',
+                                    'format' => 'date-time',
+                                    'deprecated' => true,
+                                    'x-deprecated-description' => 'Use `launchedAt`.',
+                                ],
+                                'nullableDate' => [
+                                    'type' => ['string', 'null'],
+                                    'format' => 'date-time',
+                                    'deprecated' => true,
+                                    'x-deprecated-description' => 'Use `launchedAt`.',
+                                ],
+                            ],
+                            'required' => [
+                                'plain',
+                                'nullable',
+                                'date',
+                                'nullableDate',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function deprecatedPropertyMessages(): ClassWithDeprecatedProperties
+    {
+        return new ClassWithDeprecatedProperties;
     }
 }

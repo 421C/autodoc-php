@@ -140,7 +140,7 @@ class PhpClass
             return $objectType;
         }
 
-        if (! ($this->scope->config->data['classes']['remove_description'] ?? false)) {
+        if (! $objectType->typeToDisplay && ! ($this->scope->config->data['classes']['remove_description'] ?? false)) {
             $classPhpDoc = $this->getPhpDoc();
 
             if ($classPhpDoc) {
@@ -233,7 +233,7 @@ class PhpClass
             $propertyType->required = true;
 
             if ($propertyPhpDoc) {
-                $propertyType->description = $propertyPhpDoc->getText();
+                $propertyType->addDescription($propertyPhpDoc->getText());
                 $propertyType->examples = $propertyPhpDoc->getExampleValues() ?: null;
 
                 $deprecations = $propertyPhpDoc->getDeprecatedTags();
