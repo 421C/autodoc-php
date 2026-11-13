@@ -902,16 +902,23 @@ abstract class Type
     /**
      * Build a Type from a literal PHP value, such as a parameter's default value.
      */
-    public static function fromValue(mixed $value): Type
+    public static function fromValue(mixed $value, ?Config $config = null): Type
     {
         if (is_array($value)) {
-            $arrayType = new ArrayType;
+            $itemTypes = array_map(fn (mixed $item) => self::fromValue($item, $config)->setRequired(true), $value);
 
-            foreach ($value as $key => $item) {
-                $arrayType->shape[$key] = self::fromValue($item)->setRequired(true);
+            $resolvePartialShapes = $config->data['arrays']['resolve_partial_shapes'] ?? false;
+
+            if ($itemTypes && array_is_list($itemTypes) && ! $resolvePartialShapes) {
+                $itemType = new UnionType($itemTypes);
+
+                return new ArrayType(
+                    itemType: $config ? $itemType->unwrapType($config) : $itemType,
+                    keyType: new IntegerType,
+                );
             }
 
-            return $arrayType;
+            return new ArrayType(shape: $itemTypes);
         }
 
         return match (true) {

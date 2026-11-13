@@ -503,7 +503,7 @@ class PhpDoc
             return null;
         }
 
-        return Type::fromValue(constant($constantName));
+        return Type::fromValue(constant($constantName), $this->scope->config);
     }
 
 

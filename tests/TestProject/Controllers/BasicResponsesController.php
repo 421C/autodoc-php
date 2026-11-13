@@ -17,6 +17,13 @@ use Traversable;
  */
 class BasicResponsesController
 {
+    private const array PLANET = [
+        'name' => 'Mars',
+        'moons' => ['Phobos', 'Deimos'],
+    ];
+
+    private const array IDS = [1, 2, 3];
+
     /**
      * Array shape from return tag
      *
@@ -397,6 +404,130 @@ class BasicResponsesController
     public function keylessArrayLiteral(): mixed
     {
         return ['a', 2];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => [
+                                    'type' => 'string',
+                                    'const' => 'Mars',
+                                ],
+                                'moons' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'string',
+                                        'enum' => ['Phobos', 'Deimos'],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'name',
+                                'moons',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => [
+                                    'type' => 'string',
+                                ],
+                                'moons' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'minItems' => 2,
+                                    'maxItems' => 2,
+                                ],
+                            ],
+                            'required' => [
+                                'name',
+                                'moons',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function associativeArrayConstant(): mixed
+    {
+        return self::PLANET;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'integer',
+                                'enum' => [1, 2, 3],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 3,
+                            'maxItems' => 3,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function listArrayConstant(): mixed
+    {
+        return self::IDS;
     }
 
 

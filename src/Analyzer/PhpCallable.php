@@ -733,7 +733,7 @@ class PhpCallable
             }
 
             if ($parameter->isDefaultValueAvailable()) {
-                $defaultType = Type::fromValue($parameter->getDefaultValue());
+                $defaultType = Type::fromValue($parameter->getDefaultValue(), $this->scope->config);
 
                 if (! $defaultType instanceof UnknownType) {
                     return $defaultType;

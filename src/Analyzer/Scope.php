@@ -478,7 +478,7 @@ class Scope
                 $constantName = $this->getResolvedConstantName($node->name);
 
                 if (defined($constantName)) {
-                    return Type::fromValue(constant($constantName));
+                    return Type::fromValue(constant($constantName), $this->config);
                 }
             }
 
