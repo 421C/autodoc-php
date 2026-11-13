@@ -4,7 +4,6 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Config;
-use Override;
 
 class ObjectType extends Type
 {
@@ -52,21 +51,6 @@ class ObjectType extends Type
     }
 
 
-    #[Override]
-    public function addDescription(?string $description, bool $prepend = false): self
-    {
-        if ($this->typeToDisplay) {
-            $this->typeToDisplay->addDescription($description, $prepend);
-
-            return $this;
-        }
-
-        parent::addDescription($description, $prepend);
-
-        return $this;
-    }
-
-
     public function hasResolvedShape(): bool
     {
         return $this->properties !== []
@@ -78,10 +62,10 @@ class ObjectType extends Type
     public function toSchema(Config $config): array
     {
         if ($this->typeToDisplay) {
-            $this->typeToDisplay->required = $this->typeToDisplay->required || $this->required;
-            $this->typeToDisplay->deprecated = $this->typeToDisplay->deprecated || $this->deprecated;
+            $typeToDisplay = (clone $this->typeToDisplay->unwrapType($config))->inheritDocumentationFrom($this);
+            $typeToDisplay->required = $typeToDisplay->required || $this->required;
 
-            return $this->typeToDisplay->toSchema($config);
+            return $typeToDisplay->toSchema($config);
         }
 
         return array_filter([

@@ -100,11 +100,16 @@ trait WithMergeableTypes
         foreach ($this->types as $type) {
             $type = $type->unwrapType($config);
 
-            if (($mergeAsIntersection && $type instanceof IntersectionType)
-                || (! $mergeAsIntersection && $type instanceof UnionType)
-            ) {
-                foreach ($type->types as $type) {
-                    $types[] = $type;
+            if ($mergeAsIntersection && $type instanceof IntersectionType) {
+                foreach ($type->types as $member) {
+                    $types[] = $member;
+                }
+
+            } else if (! $mergeAsIntersection && $type instanceof UnionType) {
+                foreach ($type->types as $member) {
+                    $types[] = $member instanceof NullType
+                        ? $member
+                        : (clone $member)->inheritDocumentationFrom($type);
                 }
 
             } else {

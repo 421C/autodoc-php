@@ -155,6 +155,19 @@ abstract class Type
         return $this;
     }
 
+    public function inheritDocumentationFrom(Type $type): static
+    {
+        $this->addDescription($type->description);
+
+        $this->examples = $type->examples ?: $this->examples;
+        $this->example = $type->example ?? $this->example;
+
+        $this->deprecated = $this->deprecated || $type->deprecated;
+        $this->deprecatedDescription = $type->deprecatedDescription ?? $this->deprecatedDescription;
+
+        return $this;
+    }
+
     public function getContentType(): string
     {
         if ($this->contentType) {
@@ -408,9 +421,10 @@ abstract class Type
     public function removeNull(Config $config): Type
     {
         if ($this instanceof UnionType) {
-            $types = array_filter($this->types, fn (Type $type) => ! $type instanceof NullType);
+            $union = clone $this;
+            $union->types = array_values(array_filter($this->types, fn (Type $type) => ! $type instanceof NullType));
 
-            return new UnionType($types)->unwrapType($config);
+            return $union->unwrapType($config);
 
         } else if ($this instanceof NullType) {
             return new NeverType;
@@ -482,15 +496,8 @@ abstract class Type
      */
     private function collapseSingleMemberOnto(Type $member, Config $config): Type
     {
-        $member = clone $member;
-
-        $member->addDescription($this->description);
-
-        $member->examples = $this->examples ?: $member->examples;
-        $member->example = $this->example ?? $member->example;
-
+        $member = (clone $member)->inheritDocumentationFrom($this);
         $member->required = $member->required || $this->required;
-        $member->deprecated = $member->deprecated || $this->deprecated;
 
         return $member->unwrapType($config);
     }
