@@ -734,10 +734,73 @@ class BasicResponsesController
     ])]
     public function arrayKeyDocType(): array
     {
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
+    }
+
+
+    /**
+     * Literal refining the return shape
+     *
+     * The returned literal fits the `@return` shape, so its values are documented, as for a scalar return.
+     *
+     * @return array{
+     *     status: string,
+     *     state: int|string,
+     *     nested: array{count: int},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Literal refining the return shape',
+        'description' => 'The returned literal fits the `@return` shape, so its values are documented, as for a scalar return.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'status' => [
+                                    'type' => 'string',
+                                    'const' => 'ok',
+                                ],
+                                'state' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'integer',
+                                            'const' => 0,
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                            'const' => 'off',
+                                        ],
+                                    ],
+                                ],
+                                'nested' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'count' => [
+                                            'type' => 'integer',
+                                            'const' => 2,
+                                        ],
+                                    ],
+                                    'required' => ['count'],
+                                ],
+                            ],
+                            'required' => ['status', 'state', 'nested'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function literalRefiningReturnShape(): array
+    {
         return [
-            'key' => 'id',
-            'nullableKey' => null,
-            'keyed' => ['id' => 'first'],
+            'status' => 'ok',
+            'state' => rand(0, 1) ? 0 : 'off',
+            'nested' => ['count' => 2],
         ];
     }
 
@@ -955,5 +1018,14 @@ class BasicResponsesController
     public function deprecatedPropertyMessages(): ClassWithDeprecatedProperties
     {
         return new ClassWithDeprecatedProperties;
+    }
+
+
+    /**
+     * An unknown analyzed type leaves a route's PHPDoc `@return` type in place.
+     */
+    private function opaquePayload(): mixed
+    {
+        return json_decode('null', true);
     }
 }

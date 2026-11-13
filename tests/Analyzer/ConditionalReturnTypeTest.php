@@ -99,6 +99,50 @@ final class ConditionalReturnTypeTest extends TestCase
         ], $schema, 'closure', 'return');
     }
 
+    #[Test]
+    public function literalArrayArgumentMatchingTheShapePicksTheIfBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn (): mixed => [
+            'flat' => ConditionalReturnTypeTest::describeShape(['a' => 1, 'b' => 2]),
+            'nested' => ConditionalReturnTypeTest::describeNestedShape(['a' => ['x' => 1]]),
+        ]);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'flat' => ['type' => 'integer'],
+                'nested' => ['type' => 'integer'],
+            ],
+            'required' => ['flat', 'nested'],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function unionArgumentWhoseMembersAllMatchPicksTheIfBranch(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn (): mixed => [
+            'scalar' => ConditionalReturnTypeTest::describeKey(rand(0, 1) ? 1 : 'a'),
+            'shapeEntry' => ConditionalReturnTypeTest::describeKeyedShape(['key' => rand(0, 1) ? 1 : 'a']),
+        ]);
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'scalar' => ['type' => 'integer'],
+                'shapeEntry' => ['type' => 'integer'],
+            ],
+            'required' => ['scalar', 'shapeEntry'],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function bindingATemplateFromTheArgumentKeepsItsShapeForTheCondition(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn (): mixed => ConditionalReturnTypeTest::describeTemplatedShape(['a' => 1, 'b' => 2]));
+
+        $this->assertSchemaArraysMatch(['type' => 'integer'], $schema, 'closure', 'return');
+    }
+
     /**
      * Mirrors Laravel's `response()` helper.
      *
@@ -123,6 +167,56 @@ final class ConditionalReturnTypeTest extends TestCase
     private static function respondWrapped(?string $content = null): array
     {
         return ['data' => $content ?? 0];
+    }
+
+    /**
+     * @return ($key is int|string ? int : string)
+     */
+    private static function describeKey(int|string|null $key): int|string
+    {
+        return $key ?? 'none';
+    }
+
+    /**
+     * @param array<string, int|string> $items
+     *
+     * @return ($items is array{key: int|string} ? int : string)
+     */
+    private static function describeKeyedShape(array $items): int|string
+    {
+        return $items === [] ? 'empty' : count($items);
+    }
+
+    /**
+     * @param array<string, int> $items
+     *
+     * @return ($items is array{a: int, b: int} ? int : string)
+     */
+    private static function describeShape(array $items): int|string
+    {
+        return $items === [] ? 'empty' : count($items);
+    }
+
+    /**
+     * @param array<string, array<string, int>> $items
+     *
+     * @return ($items is array{a: array{x: int}} ? int : string)
+     */
+    private static function describeNestedShape(array $items): int|string
+    {
+        return $items === [] ? 'empty' : count($items);
+    }
+
+    /**
+     * @template TValue
+     *
+     * @param array<string, TValue> $items
+     *
+     * @return ($items is array{a: int, b: int} ? int : string)
+     */
+    private static function describeTemplatedShape(array $items): int|string
+    {
+        return $items === [] ? 'empty' : count($items);
     }
 
     /**

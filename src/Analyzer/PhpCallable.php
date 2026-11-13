@@ -29,6 +29,7 @@ use AutoDoc\OpenApi\Operation;
 use AutoDoc\OpenApi\Parameter;
 use AutoDoc\OpenApi\RequestBody;
 use AutoDoc\OpenApi\Response;
+use Closure;
 use Deprecated;
 use Exception;
 use Override;
@@ -37,8 +38,12 @@ use PhpParser\NodeTraverser;
 use PhpParser\NodeVisitor\NameResolver as PhpParserNameResolver;
 use PhpParser\ParserFactory;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
+use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\TypeNode;
+use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
 use ReflectionException;
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
@@ -777,54 +782,144 @@ class PhpCallable
         }
 
         foreach ($phpDocParamTypes as $name => $unresolvedType) {
-            $docTypeNode = $unresolvedType->typeNode;
-
-            if ($docTypeNode instanceof IdentifierTypeNode) {
-                if (array_key_exists($docTypeNode->name, $templateTypes)) {
-                    $parsedArgumentType = $this->getArgumentType($name);
-
-                    if (! $parsedArgumentType instanceof UnknownType) {
-                        $templateTypes[$docTypeNode->name] = $parsedArgumentType;
-                    }
-                }
-
-            } else if ($docTypeNode instanceof GenericTypeNode && $docTypeNode->genericTypes) {
-                if (in_array($docTypeNode->type->name, ['array', 'iterable', 'list', 'non-empty-array', 'non-empty-list'])) {
-
-                    if (isset($docTypeNode->genericTypes[0], $docTypeNode->genericTypes[1])) {
-                        $keyType = $docTypeNode->genericTypes[0];
-                        $itemType = $docTypeNode->genericTypes[1];
-
-                    } else {
-                        $keyType = null;
-                        $itemType = $docTypeNode->genericTypes[0] ?? null;
-                    }
-
-                    if ($itemType instanceof IdentifierTypeNode && array_key_exists($itemType->name, $templateTypes)) {
-                        $argumentType = $this->getArgumentType($name);
-
-                        if ($argumentType instanceof ArrayType) {
-                            $argumentType->convertShapeToTypePair($this->scope->config);
-
-                            $templateTypes[$itemType->name] = $argumentType->itemType;
-                        }
-                    }
-
-                } else if ($docTypeNode->type->name === 'class-string') {
-                    $paramName = $docTypeNode->genericTypes[0]->name ?? null;
-
-                    if ((is_int($paramName) || is_string($paramName)) && array_key_exists($paramName, $templateTypes)) {
-                        $parameterValue = $this->getArgumentType($name);
-
-                        if ($parameterValue instanceof ClassStringType) {
-                            $templateTypes[$paramName] = new UnresolvedClassType($parameterValue->className, $this->scope);
-                        }
-                    }
-                }
-            }
+            $templateTypes = [
+                ...$templateTypes,
+                ...$this->bindTemplatesFromArgument(
+                    declaredType: $unresolvedType->typeNode,
+                    resolveArgument: fn () => $this->getArgumentType($name),
+                    templateTypes: $templateTypes,
+                ),
+            ];
         }
 
         return $templateTypes;
+    }
+
+
+    /**
+     * @param Closure(): ?Type $resolveArgument
+     * @param array<string, ?Type> $templateTypes
+     *
+     * @return array<string, Type>
+     */
+    private function bindTemplatesFromArgument(TypeNode $declaredType, Closure $resolveArgument, array $templateTypes): array
+    {
+        $config = $this->scope->config;
+
+        if ($declaredType instanceof IdentifierTypeNode) {
+            if (! array_key_exists($declaredType->name, $templateTypes)) {
+                return [];
+            }
+
+            $argumentType = $resolveArgument()?->unwrapType($config);
+
+            if ($argumentType === null || $argumentType instanceof UnknownType || $argumentType instanceof NeverType) {
+                return [];
+            }
+
+            return [$declaredType->name => $argumentType];
+        }
+
+        if ($declaredType instanceof NullableTypeNode) {
+            return $this->bindTemplatesFromArgument(
+                declaredType: $declaredType->type,
+                resolveArgument: fn () => $resolveArgument()?->unwrapType($config)->removeNull($config),
+                templateTypes: $templateTypes,
+            );
+        }
+
+        if ($declaredType instanceof UnionTypeNode) {
+            $nonNullMembers = array_values(array_filter(
+                $declaredType->types,
+                fn (TypeNode $member) => ! $member instanceof IdentifierTypeNode || strtolower($member->name) !== 'null',
+            ));
+
+            if (count($nonNullMembers) !== 1) {
+                return [];
+            }
+
+            return $this->bindTemplatesFromArgument(
+                declaredType: $nonNullMembers[0],
+                resolveArgument: fn () => $resolveArgument()?->unwrapType($config)->removeNull($config),
+                templateTypes: $templateTypes,
+            );
+        }
+
+        if ($declaredType instanceof ArrayTypeNode) {
+            return $this->bindTemplatesFromArrayArgument(
+                keyType: null,
+                itemType: $declaredType->type,
+                resolveArgument: $resolveArgument,
+                templateTypes: $templateTypes,
+            );
+        }
+
+        if (! $declaredType instanceof GenericTypeNode) {
+            return [];
+        }
+
+        if (in_array($declaredType->type->name, ['array', 'iterable', 'list', 'non-empty-array', 'non-empty-list'], true)) {
+            $hasKeyType = isset($declaredType->genericTypes[1]);
+
+            return $this->bindTemplatesFromArrayArgument(
+                keyType: $hasKeyType ? $declaredType->genericTypes[0] : null,
+                itemType: $declaredType->genericTypes[$hasKeyType ? 1 : 0] ?? null,
+                resolveArgument: $resolveArgument,
+                templateTypes: $templateTypes,
+            );
+        }
+
+        if ($declaredType->type->name === 'class-string') {
+            $templateNode = $declaredType->genericTypes[0] ?? null;
+
+            if (! $templateNode instanceof IdentifierTypeNode || ! array_key_exists($templateNode->name, $templateTypes)) {
+                return [];
+            }
+
+            $argumentType = $resolveArgument()?->unwrapType($config);
+
+            if ($argumentType instanceof ClassStringType) {
+                return [$templateNode->name => new UnresolvedClassType($argumentType->className, $this->scope)];
+            }
+        }
+
+        return [];
+    }
+
+
+    /**
+     * @param Closure(): ?Type $resolveArgument
+     * @param array<string, ?Type> $templateTypes
+     *
+     * @return array<string, Type>
+     */
+    private function bindTemplatesFromArrayArgument(?TypeNode $keyType, ?TypeNode $itemType, Closure $resolveArgument, array $templateTypes): array
+    {
+        $typePair = null;
+
+        $resolveTypePair = function () use ($resolveArgument, &$typePair): ?ArrayType {
+            if ($typePair !== null) {
+                return $typePair;
+            }
+
+            $argumentType = $resolveArgument()?->unwrapType($this->scope->config);
+
+            if (! $argumentType instanceof ArrayType) {
+                return null;
+            }
+
+            return $typePair = (clone $argumentType)->convertShapeToTypePair($this->scope->config);
+        };
+
+        $keyBindings = $keyType
+            ? $this->bindTemplatesFromArgument($keyType, fn () => $resolveTypePair()?->keyType, $templateTypes)
+            : [];
+
+        $itemBindings = $itemType
+            ? $this->bindTemplatesFromArgument($itemType, fn () => $resolveTypePair()?->itemType, $templateTypes)
+            : [];
+
+        return [...$keyBindings, ...$itemBindings];
     }
 
 

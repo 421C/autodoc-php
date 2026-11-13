@@ -277,6 +277,14 @@ abstract class Type
 
     public function isSubTypeOf(Type $superType, Config $config): bool
     {
+        if ($this instanceof UnresolvedType) {
+            return $this->unwrapType($config)->isSubTypeOf($superType, $config);
+        }
+
+        if ($superType instanceof UnresolvedType) {
+            return $this->isSubTypeOf($superType->unwrapType($config), $config);
+        }
+
         if ($this instanceof NeverType) {
             return true;
         }
@@ -287,6 +295,10 @@ abstract class Type
 
         if ($this instanceof UnknownType) {
             return false;
+        }
+
+        if ($this instanceof UnionType) {
+            return $this->types !== [] && array_all($this->types, fn (Type $type) => $type->isSubTypeOf($superType, $config));
         }
 
         if ($superType instanceof UnionType) {
