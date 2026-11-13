@@ -223,7 +223,7 @@ class TypeScriptGenerator
 
     private function isObjectOrArrayShape(Type $type): bool
     {
-        return $type instanceof ObjectType || ($type instanceof ArrayType && $type->shape && !array_is_list($type->shape));
+        return $type instanceof ObjectType || ($type instanceof ArrayType && $type->shape && ! $type->isTuple());
     }
 
     private function toPascalCase(string $input): string

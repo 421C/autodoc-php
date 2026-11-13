@@ -70,19 +70,10 @@ class ObjectType extends Type
 
         return array_filter([
             'type' => 'object',
-            'properties' => array_combine(
-                array_map(fn ($key) => (string) $key, array_keys($this->properties)),
-                array_map(fn ($prop) => $prop->toSchema($config), $this->properties)
-            ),
+            'properties' => self::propertySchemas($this->properties, $config),
             'description' => $this->description,
             'examples' => $this->examples ? array_values($this->examples) : null,
-            'required' => array_values(array_filter(
-                array_map(
-                    fn ($prop, $propName) => $prop->required ? (string) $propName : null,
-                    $this->properties,
-                    array_keys($this->properties),
-                )
-            )),
+            'required' => self::requiredPropertyNames($this->properties),
             'deprecated' => $this->deprecated,
             'x-deprecated-description' => $this->deprecatedDescription,
         ]);

@@ -41,6 +41,8 @@ class Parameter implements JsonSerializable
 
     public function jsonSerialize(): mixed
     {
+        $schema = $this->type?->toSchema($this->config);
+
         return array_filter([
             'name' => $this->name,
             'in' => $this->in,
@@ -50,7 +52,7 @@ class Parameter implements JsonSerializable
             'style' => $this->style,
             'allowEmptyValue' => $this->allowEmptyValue ?: null,
             'allowReserved' => $this->allowReserved ?: null,
-            'schema' => $this->type?->toSchema($this->config),
+            'schema' => $schema === null ? null : SchemaJson::castPropertiesToObjects($schema),
             'content' => $this->content,
             'examples' => $this->examples,
             'example' => $this->example,

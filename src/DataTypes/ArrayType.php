@@ -26,26 +26,49 @@ class ArrayType extends Type
     ) {}
 
 
+    public function isTuple(): bool
+    {
+        if ($this->shape === [] || ! array_is_list($this->shape)) {
+            return false;
+        }
+
+        $hasOptionalEntry = false;
+
+        foreach ($this->shape as $entry) {
+            if ($entry->required && $hasOptionalEntry) {
+                return false;
+            }
+
+            $hasOptionalEntry = $hasOptionalEntry || ! $entry->required;
+        }
+
+        return true;
+    }
+
+
     public function toSchema(Config $config): array
     {
+        if ($this->isTuple()) {
+            return array_filter([
+                'type' => 'array',
+                'prefixItems' => array_values(array_map(fn (Type $entry) => $entry->toSchema($config), $this->shape)),
+                'description' => $this->description,
+                'examples' => $this->examples ? array_values($this->examples) : null,
+                'minItems' => count(array_filter($this->shape, fn (Type $entry) => $entry->required)),
+                'maxItems' => count($this->shape),
+                'deprecated' => $this->deprecated,
+                'x-deprecated-description' => $this->deprecatedDescription,
+            ]);
+        }
+
         if ($this->shape) {
             return [
                 ...array_filter([
                     'type' => 'object',
-                    'properties' => array_combine(
-                        array_map(fn ($key) => (string) $key, array_keys($this->shape)),
-                        array_map(fn ($prop) => $prop->toSchema($config), $this->shape)
-                    ),
+                    'properties' => self::propertySchemas($this->shape, $config),
                     'description' => $this->description,
                     'examples' => $this->examples ? array_values($this->examples) : null,
-                    'required' => array_values(array_filter(
-                        array_map(
-                            fn ($prop, $propName) => $prop->required ? (string) $propName : null,
-                            $this->shape,
-                            array_keys($this->shape),
-                        ),
-                        fn ($propName) => $propName !== null,
-                    )),
+                    'required' => self::requiredPropertyNames($this->shape),
                     'deprecated' => $this->deprecated,
                     'x-deprecated-description' => $this->deprecatedDescription,
                 ]),

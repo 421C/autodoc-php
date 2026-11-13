@@ -4,6 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use ArrayObject;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionType;
@@ -167,6 +168,32 @@ abstract class Type
 
         return $this;
     }
+
+
+    /**
+     * @param array<int|string, Type> $properties
+     * @return array<string, TypeSchemaRecursive>
+     */
+    protected static function propertySchemas(array $properties, Config $config): array
+    {
+        return array_combine(
+            array_map(fn ($name) => (string) $name, array_keys($properties)),
+            array_map(fn (Type $property) => $property->toSchema($config), $properties),
+        );
+    }
+
+    /**
+     * @param array<int|string, Type> $properties
+     * @return list<string>
+     */
+    protected static function requiredPropertyNames(array $properties): array
+    {
+        return array_map(
+            fn ($name) => (string) $name,
+            array_keys(array_filter($properties, fn (Type $property) => $property->required)),
+        );
+    }
+
 
     public function getContentType(): string
     {

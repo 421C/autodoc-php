@@ -585,6 +585,91 @@ final class TypeScriptSchemaTest extends TestCase
     }
 
     #[Test]
+    public function tupleWithOptionalTrailingElement(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1?: string} */
+            type OptionalTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1?: string} */
+            type OptionalTuple = [number, string?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function optionalTupleElementWithUnionTypeIsParenthesized(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1?: int|string} */
+            type OptionalUnionTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1?: int|string} */
+            type OptionalUnionTuple = [number, (number|string)?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function multilineTupleWithOptionalTrailingElement(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1: string, 2: bool, 3?: int|string} */
+            type LongOptionalTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1: string, 2: bool, 3?: int|string} */
+            type LongOptionalTuple = [
+                number,
+                string,
+                boolean,
+                (number|string)?,
+            ]
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithOptionalTupleResponseBecomesType(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc POST /api/test/basicresponses/tuple-with-trailing-optional-entry */
+            interface OptionalTupleResponse {
+            }
+            ',
+            expected: '
+            /** @autodoc POST /api/test/basicresponses/tuple-with-trailing-optional-entry */
+            type OptionalTupleResponse = [number, string?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithListKeyedObjectShapeStaysInterface(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0?: int, 1: string} */
+            interface ListKeyedShape {
+            }
+            ',
+            expected: '
+            /** @autodoc array{0?: int, 1: string} */
+            interface ListKeyedShape {
+                \'0\'?: number
+                \'1\': string
+            }
+            ',
+        );
+    }
+
+    #[Test]
     public function controllerMethodWithIntersectionType(): void
     {
         $this->assertTypeScriptGeneratedCorrectly(

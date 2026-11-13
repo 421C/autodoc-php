@@ -13,6 +13,7 @@ use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
 use ReflectionFunction;
+use stdClass;
 
 /**
  * @phpstan-type Schema array{
@@ -78,10 +79,14 @@ final class OpenApiSchemaTest extends TestCase
 
         $this->assertNotNull($workspace);
 
+        $json = $workspace->getJson() ?: '';
+
         /** @var ?Schema */
-        $schema = json_decode($workspace->getJson() ?: '', true);
+        $schema = json_decode($json, true);
 
         $this->assertNotNull($schema);
+
+        $this->assertEveryPropertiesKeyIsAnObject(json_decode($json));
 
         foreach ($config->getRouteLoader()->getRoutes() as $route) {
             $this->assertTrue(isset($schema['paths'][$route->uri][$route->method]), 'Operation schema not found.');
@@ -91,6 +96,25 @@ final class OpenApiSchemaTest extends TestCase
                 route: $route,
                 testMethod: $testMethod,
             );
+        }
+    }
+
+
+    private function assertEveryPropertiesKeyIsAnObject(mixed $node, string $path = '#'): void
+    {
+        if ($node instanceof stdClass) {
+            if (property_exists($node, 'properties')) {
+                $this->assertInstanceOf(stdClass::class, $node->properties, "`properties` at $path does not encode as a JSON object.");
+            }
+
+            foreach (get_object_vars($node) as $key => $value) {
+                $this->assertEveryPropertiesKeyIsAnObject($value, $path . '/' . $key);
+            }
+
+        } else if (is_array($node)) {
+            foreach ($node as $index => $value) {
+                $this->assertEveryPropertiesKeyIsAnObject($value, $path . '/' . $index);
+            }
         }
     }
 

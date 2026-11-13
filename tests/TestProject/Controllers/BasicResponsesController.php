@@ -223,8 +223,8 @@ class BasicResponsesController
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            'type' => 'object',
-                            'properties' => [
+                            'type' => 'array',
+                            'prefixItems' => [
                                 [
                                     'type' => 'boolean',
                                 ],
@@ -235,11 +235,8 @@ class BasicResponsesController
                                     'type' => 'null',
                                 ],
                             ],
-                            'required' => [
-                                '0',
-                                '1',
-                                '2',
-                            ],
+                            'minItems' => 3,
+                            'maxItems' => 3,
                         ],
                     ],
                 ],
@@ -248,6 +245,159 @@ class BasicResponsesController
         ],
     ])]
     public function tupleWithBoolsAndNull() {}
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'const' => 'a',
+                                    'type' => 'string',
+                                ],
+                                [
+                                    'const' => 2,
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function tupleWithExplicitListKeys(): mixed
+    {
+        return [0 => 'a', 1 => 2];
+    }
+
+
+    /**
+     * @return array{0: int, 1?: string}
+     *
+     * @phpstan-ignore return.missing
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'minItems' => 1,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function tupleWithTrailingOptionalEntry() {}
+
+
+    /**
+     * @return array{0?: int, 1: string}
+     *
+     * @phpstan-ignore return.missing
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                0 => [
+                                    'type' => 'integer',
+                                ],
+                                1 => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => [
+                                '1',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function listKeyedShapeWithOptionalFirstEntry() {}
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'anyOf' => [
+                                    [
+                                        'const' => 'a',
+                                        'type' => 'string',
+                                    ],
+                                    [
+                                        'const' => 2,
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'string',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function keylessArrayLiteral(): mixed
+    {
+        return ['a', 2];
+    }
 
 
     #[ExpectedOperationSchema('showValuesForScalarTypes', [

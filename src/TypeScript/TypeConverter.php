@@ -107,8 +107,11 @@ class TypeConverter
 
         if ($type instanceof ArrayType) {
             if ($type->shape) {
-                if (array_is_list($type->shape) && !in_array(false, array_column($type->shape, 'required'))) {
-                    $tsTypes = array_map(fn ($value) => $this->convertToTypeScriptType($value, $context->nested()), $type->shape);
+                if ($type->isTuple()) {
+                    $tsTypes = array_map(
+                        fn (Type $value) => $this->toTsTupleElement($this->convertToTypeScriptType($value, $context->nested()), $value->required),
+                        $type->shape,
+                    );
 
                     if (count($type->shape) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
                         return '[' . implode(', ', $tsTypes) . ']';
@@ -119,7 +122,10 @@ class TypeConverter
                         foreach ($type->shape as $propertyType) {
                             $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
 
-                            $tsType = $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent));
+                            $tsType = $this->toTsTupleElement(
+                                tsType: $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent)),
+                                required: $propertyType->required,
+                            );
 
                             $result .= "\n" . $propertyBaseIndent . $tsType . ',';
                         }
@@ -179,6 +185,20 @@ class TypeConverter
         }
 
         return 'unknown';
+    }
+
+
+    private function toTsTupleElement(string $tsType, bool $required): string
+    {
+        if ($required) {
+            return $tsType;
+        }
+
+        if (str_contains($tsType, '|') || str_contains($tsType, '&') || str_contains($tsType, '=>')) {
+            return '(' . $tsType . ')?';
+        }
+
+        return $tsType . '?';
     }
 
     /**

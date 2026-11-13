@@ -195,8 +195,8 @@ class GenericTypesController
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            'type' => 'object',
-                            'properties' => [
+                            'type' => 'array',
+                            'prefixItems' => [
                                 [
                                     'type' => 'integer',
                                     'enum' => [
@@ -208,10 +208,8 @@ class GenericTypesController
                                     'type' => 'string',
                                 ],
                             ],
-                            'required' => [
-                                '0',
-                                '1',
-                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
                         ],
                     ],
                 ],
