@@ -168,4 +168,25 @@ class ArrayType extends Type
 
         return $this;
     }
+
+
+    /**
+     * @param array<int|string, Type> $shape
+     */
+    public function mergeShape(array $shape): void
+    {
+        foreach ($shape as $key => $type) {
+            if (is_int($key)) {
+                $this->shape[] = $type;
+
+            } else if (! $type->required && isset($this->shape[$key])) {
+                $existingType = $this->shape[$key];
+
+                $this->shape[$key] = new UnionType([$existingType, $type])->setRequired($existingType->required);
+
+            } else {
+                $this->shape[$key] = $type;
+            }
+        }
+    }
 }

@@ -31,45 +31,28 @@ class ArrayTypeResolver
      */
     private function unpackArrayItems(Type $type): array
     {
-        $result = [
-            'shape' => [],
-            'itemTypes' => [],
-        ];
-
         if ($type instanceof UnionType) {
-            foreach ($type->types as $typeInUnion) {
-                if ($typeInUnion instanceof ArrayType) {
-                    if ($typeInUnion->shape) {
-                        foreach ($typeInUnion->shape as $key => $valueType) {
-                            $result['itemTypes'][] = $valueType;
-                            $result['shape'][$key] = $valueType->setRequired(false);
-                        }
-
-                    } else {
-                        $unpackedList = $this->unpackListItems($typeInUnion);
-
-                        $result['itemTypes'] = array_merge($result['itemTypes'], $unpackedList['itemTypes']);
-                        $result['shape'] = array_merge($result['shape'], $unpackedList['shape']);
-                    }
-
-                } else {
-                    $result['itemTypes'][] = $typeInUnion;
-                }
-            }
-
-        } else if ($type instanceof ArrayType) {
-            if ($type->shape) {
-                $result['shape'] = $type->shape;
-
-            } else {
-                $result = $this->unpackListItems($type);
-            }
-
-        } else {
-            $result['itemTypes'][] = new UnknownType;
+            return $this->unpackUnionItems($type);
         }
 
-        return $result;
+        if ($type instanceof ArrayType) {
+            if ($type->shape) {
+                return [
+                    'shape' => $type->shape,
+                    'itemTypes' => array_values($type->shape),
+                ];
+            }
+
+            return [
+                'shape' => [],
+                'itemTypes' => $this->getListItemTypes($type),
+            ];
+        }
+
+        return [
+            'shape' => [],
+            'itemTypes' => [new UnknownType],
+        ];
     }
 
 
@@ -79,16 +62,54 @@ class ArrayTypeResolver
      *     itemTypes: list<Type>,
      * }
      */
-    private function unpackListItems(ArrayType $type): array
+    private function unpackUnionItems(UnionType $type): array
     {
-        if ($type->itemType instanceof UnionType) {
-            return $this->unpackArrayItems($type->itemType);
+        $itemTypes = [];
+        $valueTypesByKey = [];
+
+        foreach ($type->types as $typeInUnion) {
+            if ($typeInUnion instanceof ArrayType && $typeInUnion->shape) {
+                foreach ($typeInUnion->shape as $key => $valueType) {
+                    $itemTypes[] = $valueType;
+                    $valueTypesByKey[$key][] = $valueType;
+                }
+
+            } else if ($typeInUnion instanceof ArrayType) {
+                $itemTypes = array_merge($itemTypes, $this->getListItemTypes($typeInUnion));
+
+            } else {
+                $itemTypes[] = $typeInUnion;
+            }
+        }
+
+        $shape = [];
+
+        foreach ($valueTypesByKey as $key => $valueTypes) {
+            $isInEveryMember = count($valueTypes) === count($type->types);
+            $isRequired = $isInEveryMember && array_all($valueTypes, fn (Type $valueType) => $valueType->required);
+
+            $shape[$key] = count($valueTypes) === 1
+                ? (clone $valueTypes[0])->setRequired($isRequired)
+                : new UnionType($valueTypes)->setRequired($isRequired);
         }
 
         return [
-            'shape' => [],
-            'itemTypes' => [$type->itemType ?? new UnknownType],
+            'shape' => $shape,
+            'itemTypes' => $itemTypes,
         ];
+    }
+
+
+    /**
+     * @return list<Type>
+     */
+    private function getListItemTypes(ArrayType $type): array
+    {
+        if ($type->itemType instanceof UnionType) {
+            return array_values($type->itemType->types);
+        }
+
+        return [$type->itemType ?? new UnknownType];
     }
 
 
@@ -109,14 +130,13 @@ class ArrayTypeResolver
             $hasAtLeastOneUnknownKey = false;
 
             $resolvePartialArrayShapes = $this->scope->config->data['arrays']['resolve_partial_shapes'] ?? false;
-            $autoIncrementIndex = 0;
 
             foreach ($this->node->items as $arrayItemNode) {
                 if ($arrayItemNode->unpack) {
                     $unpackedArray = $this->unpackArrayItems($this->scope->resolveType($arrayItemNode->value));
 
                     $itemTypes = array_merge($itemTypes, $unpackedArray['itemTypes']);
-                    $arrayType->shape = array_merge($arrayType->shape, $unpackedArray['shape']);
+                    $arrayType->mergeShape($unpackedArray['shape']);
 
                 } else {
                     $comments = $arrayItemNode->getComments();
@@ -170,16 +190,13 @@ class ArrayTypeResolver
                     if ($arrayItemNode->key instanceof Node\Scalar\Int_) {
                         $arrayType->shape[$arrayItemNode->key->value] = $itemType;
                         $keyTypes[] = new IntegerType($arrayItemNode->key->value);
-                        $autoIncrementIndex = max($autoIncrementIndex, $arrayItemNode->key->value + 1);
 
                     } else if ($arrayItemNode->key instanceof Node\Scalar\String_) {
                         $arrayType->shape[$arrayItemNode->key->value] = $itemType;
                         $keyTypes[] = new StringType($arrayItemNode->key->value);
 
                     } else if ($resolvePartialArrayShapes && ! $arrayItemNode->key) {
-                        $arrayType->shape[$autoIncrementIndex] = $itemType;
-                        $keyTypes[] = new IntegerType($autoIncrementIndex);
-                        $autoIncrementIndex++;
+                        $arrayType->shape[] = $itemType;
 
                     } else {
                         $keyType = $arrayItemNode->key ? $this->scope->resolveType($arrayItemNode->key) : new IntegerType;
@@ -261,7 +278,7 @@ class ArrayTypeResolver
                         }
 
                         foreach ($variantShapes as $variantShape) {
-                            $unionType->types[] = new ArrayType(shape: array_merge($arrayType->shape, $variantShape));
+                            $unionType->types[] = new ArrayType(shape: array_replace($arrayType->shape, $variantShape));
                         }
                     }
                 }
