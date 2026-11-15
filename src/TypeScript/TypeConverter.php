@@ -26,7 +26,6 @@ class TypeConverter
     ): string {
         $scope = $context->scope;
         $tsConfig = $context->config;
-        $baseIndent = $context->baseIndent;
 
         $type = $type->unwrapType($scope->config);
 
@@ -106,53 +105,7 @@ class TypeConverter
         }
 
         if ($type instanceof ArrayType) {
-            if ($type->shape) {
-                if ($type->isTuple()) {
-                    $tsTypes = array_map(
-                        fn (Type $value) => $this->toTsTupleElement($this->convertToTypeScriptType($value, $context->nested()), $value->required),
-                        $type->shape,
-                    );
-
-                    if (count($type->shape) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
-                        return '[' . implode(', ', $tsTypes) . ']';
-
-                    } else {
-                        $result = '[';
-
-                        foreach ($type->shape as $propertyType) {
-                            $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
-
-                            $tsType = $this->toTsTupleElement(
-                                tsType: $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent)),
-                                required: $propertyType->required,
-                            );
-
-                            $result .= "\n" . $propertyBaseIndent . $tsType . ',';
-                        }
-
-                        $result .= "\n" . $baseIndent . ']';
-
-                        return $result;
-                    }
-                }
-
-                return $this->toTsObject($type->shape, $context);
-            }
-
-            $keyType = $type->keyType?->unwrapType($scope->config);
-            $itemType = $type->itemType?->unwrapType($scope->config);
-
-            $tsItemType = $this->convertToTypeScriptType($itemType ?? new UnknownType, $context->nested());
-
-            if ($keyType && !($keyType instanceof IntegerType)) {
-                return 'Record<string, ' . $tsItemType . '>';
-            }
-
-            if (str_contains($tsItemType, '|') || str_contains($tsItemType, '&') || str_contains($tsItemType, '(') || str_contains($tsItemType, "\n")) {
-                return 'Array<' . $tsItemType . '>';
-            }
-
-            return $tsItemType . '[]';
+            return $type->shape ? $this->toTsShape($type, $context) : $this->toTsTypePair($type, $context);
         }
 
         if ($type instanceof ObjectType) {
@@ -179,12 +132,91 @@ class TypeConverter
         if ($type instanceof IntersectionType) {
             $type->mergeDuplicateTypes(config: $scope->config, mergeAsIntersection: true);
 
-            $types = array_map(fn (Type $type) => $this->convertToTypeScriptType($type, $context), $type->types);
+            $types = array_map(fn (Type $type) => $this->toTsIntersectionMember($this->convertToTypeScriptType($type, $context)), $type->types);
 
             return implode('&', array_unique($types));
         }
 
         return 'unknown';
+    }
+
+
+    private function toTsShape(ArrayType $type, TypeScriptRenderContext $context): string
+    {
+        $tupleEntries = $type->getTupleEntries();
+        $tsTypes = [];
+
+        if ($tupleEntries !== null) {
+            $tsTypes[] = $this->toTsTuple($tupleEntries, $context);
+        }
+
+        if ($type->mayEncodeAsObject($context->scope->config)) {
+            $tsTypes[] = $this->toTsObject($type->shape, $context);
+        }
+
+        return implode('|', $tsTypes);
+    }
+
+
+    private function toTsTypePair(ArrayType $type, TypeScriptRenderContext $context): string
+    {
+        $tsItemType = $this->convertToTypeScriptType($type->itemType ?? new UnknownType, $context->nested());
+        $config = $context->scope->config;
+        $tsTypes = [];
+
+        if ($type->mayEncodeAsList($config)) {
+            $tsTypes[] = $this->toTsList($tsItemType);
+        }
+
+        if ($type->mayEncodeAsObject($config)) {
+            $tsTypes[] = 'Record<string, ' . $tsItemType . '>';
+        }
+
+        return implode('|', $tsTypes);
+    }
+
+
+    /**
+     * @param list<Type> $entries
+     */
+    private function toTsTuple(array $entries, TypeScriptRenderContext $context): string
+    {
+        $tsTypes = [];
+
+        foreach ($entries as $entry) {
+            $tsTypes[] = $this->toTsTupleElement(
+                tsType: $this->convertToTypeScriptType($entry, $context->nested()),
+                required: $entry->required,
+            );
+        }
+
+        if (count($tsTypes) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
+            return '[' . implode(', ', $tsTypes) . ']';
+        }
+
+        $entryBaseIndent = $context->baseIndent . $context->config['indent'];
+        $result = '[';
+
+        foreach ($entries as $entry) {
+            $tsType = $this->toTsTupleElement(
+                tsType: $this->convertToTypeScriptType($entry, $context->nested($entryBaseIndent)),
+                required: $entry->required,
+            );
+
+            $result .= "\n" . $entryBaseIndent . $tsType . ',';
+        }
+
+        return $result . "\n" . $context->baseIndent . ']';
+    }
+
+
+    private function toTsList(string $tsItemType): string
+    {
+        if (str_contains($tsItemType, '|') || str_contains($tsItemType, '&') || str_contains($tsItemType, '(') || str_contains($tsItemType, "\n")) {
+            return 'Array<' . $tsItemType . '>';
+        }
+
+        return $tsItemType . '[]';
     }
 
 
@@ -199,6 +231,16 @@ class TypeConverter
         }
 
         return $tsType . '?';
+    }
+
+
+    private function toTsIntersectionMember(string $tsType): string
+    {
+        if (str_contains($tsType, '|')) {
+            return '(' . $tsType . ')';
+        }
+
+        return $tsType;
     }
 
     /**

@@ -9,6 +9,7 @@ use AutoDoc\DataTypes\Type;
 use PhpParser\Node;
 use ReflectionClass;
 use ReflectionProperty;
+use UnitEnum;
 
 class TypeInspector
 {
@@ -47,6 +48,7 @@ class TypeInspector
             is_int($value), is_float($value) => $this->colors['number'] . (string) $value . $this->colors['reset'],
             is_bool($value) => $this->colors['bool'] . ($value ? 'true' : 'false') . $this->colors['reset'],
             $value === null => $this->colors['muted'] . 'null' . $this->colors['reset'],
+            $value instanceof UnitEnum => $this->colors['type'] . PhpClass::basename($value::class) . '::' . $value->name . $this->colors['reset'],
             is_array($value) => $this->dumpArray($value, $level),
             is_object($value) => $this->dumpObject($value, $level),
             default => gettype($value),

@@ -1892,21 +1892,25 @@ final class ControlFlowAnalysisTest extends TestCase
             );
         });
 
-        $this->assertSchemaArraysMatch([
-            'type' => 'array',
-            'items' => [
-                'type' => 'object',
-                'properties' => [
-                    'n' => [
-                        'type' => [
-                            'integer',
-                            'null',
-                        ],
+        $itemSchema = [
+            'type' => 'object',
+            'properties' => [
+                'n' => [
+                    'type' => [
+                        'integer',
+                        'null',
                     ],
                 ],
-                'required' => [
-                    'n',
-                ],
+            ],
+            'required' => [
+                'n',
+            ],
+        ];
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                ['type' => 'array', 'items' => $itemSchema],
+                ['type' => 'object', 'additionalProperties' => $itemSchema],
             ],
         ], $schema, 'closure', 'return');
     }
@@ -1924,11 +1928,15 @@ final class ControlFlowAnalysisTest extends TestCase
             return array_filter([$value], 'is_string');
         });
 
+        $itemSchema = [
+            'const' => 'ready',
+            'type' => 'string',
+        ];
+
         $this->assertSchemaArraysMatch([
-            'type' => 'array',
-            'items' => [
-                'const' => 'ready',
-                'type' => 'string',
+            'anyOf' => [
+                ['type' => 'array', 'items' => $itemSchema],
+                ['type' => 'object', 'additionalProperties' => $itemSchema],
             ],
         ], $schema, 'closure', 'return');
     }
@@ -1947,9 +1955,9 @@ final class ControlFlowAnalysisTest extends TestCase
         });
 
         $this->assertSchemaArraysMatch([
-            'type' => 'array',
-            'items' => [
-                'type' => 'boolean',
+            'anyOf' => [
+                ['type' => 'array', 'items' => ['type' => 'boolean']],
+                ['type' => 'object', 'additionalProperties' => ['type' => 'boolean']],
             ],
         ], $schema, 'closure', 'return');
     }
@@ -3838,6 +3846,25 @@ final class ControlFlowAnalysisTest extends TestCase
             ],
             'required' => [
                 'n',
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function dynamicPropertyAssignmentOnNullKeysTheCreatedArrayByTheName(): void
+    {
+        $schema = $this->getClosureReturnSchema(function (string $name): mixed {
+            $data = null;
+
+            $data->{$name} = true;
+
+            return $data;
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'additionalProperties' => [
+                'type' => 'boolean',
             ],
         ], $schema, 'closure', 'return');
     }

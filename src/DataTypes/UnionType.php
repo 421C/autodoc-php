@@ -159,21 +159,6 @@ class UnionType extends Type
 
 
     /**
-     * @param TypeSchema $schema
-     * @return TypeSchema
-     */
-    private function withOwnMetadata(array $schema): array
-    {
-        return array_merge($schema, array_filter([
-            'description' => $this->description,
-            'examples' => $this->examples ? array_values($this->examples) : null,
-            'deprecated' => $this->deprecated,
-            'x-deprecated-description' => $this->deprecatedDescription,
-        ]));
-    }
-
-
-    /**
      * @template T
      *
      * @param array<T> $array

@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Analyzer\DocBlock;
 
+use AutoDoc\Analyzer\IntKeyOrder;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
@@ -187,7 +188,7 @@ class PhpDoc
          * array{items}
          */
         if ($node instanceof ArrayShapeNode) {
-            $arrayType = new ArrayType;
+            $shape = [];
 
             foreach ($node->items as $itemNode) {
                 $itemType = $this->resolveTypeFromNode($itemNode->valueType, $binding) ?? new UnknownType;
@@ -195,14 +196,20 @@ class PhpDoc
                 $itemType->required = $itemNode->optional === false;
 
                 if ($itemNode->keyName) {
-                    $arrayType->shape[$this->getUnquotedValue($itemNode->keyName)] = $itemType;
+                    $shape[$this->getUnquotedValue($itemNode->keyName)] = $itemType;
 
                 } else {
-                    $arrayType->shape[] = $itemType;
+                    $shape[] = $itemType;
                 }
             }
 
-            return $arrayType;
+            $isListKind = in_array($node->kind, [ArrayShapeNode::KIND_LIST, ArrayShapeNode::KIND_NON_EMPTY_LIST], true);
+            $hasOptionalEntries = array_any($shape, fn (Type $entry) => ! $entry->required);
+
+            return new ArrayType(
+                shape: $shape,
+                intKeyOrder: ! $isListKind && $hasOptionalEntries ? IntKeyOrder::MaybeSequential : IntKeyOrder::Sequential,
+            );
         }
 
         /**

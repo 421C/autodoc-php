@@ -171,6 +171,7 @@ class PhpCallable
         $parameterTypeResolver = new CallerParameterTypeResolver(
             scope: $functionScope,
             bindingAnalysis: $bindingAnalysis,
+            isPassedByReference: $param->byRef,
         );
 
         $exitTypes = array_map(

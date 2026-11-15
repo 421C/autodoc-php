@@ -19,4 +19,9 @@ enum ScopeEventType
      * Narrows a variable or a statically known property or array-key path within it.
      */
     case Narrow;
+
+    /**
+     * Removes an array key (`unset($x['key'])`), optionally on a nested value selected by `unsetPath`.
+     */
+    case Unset;
 }

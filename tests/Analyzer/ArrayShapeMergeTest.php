@@ -279,6 +279,42 @@ final class ArrayShapeMergeTest extends TestCase
 
 
     #[Test]
+    public function aKeylessItemAfterASpreadWithAMissingEntryMayTakeAnEarlierIndex(): void
+    {
+        $schema = $this->getClosureReturnSchema(
+            closure: function (): mixed {
+                /** @var array{int, ?string} */
+                $pair = [1, null];
+
+                return [...array_filter($pair), 'c'];
+            },
+            resolvePartialShapes: true,
+        );
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'array',
+            'prefixItems' => [
+                [
+                    'type' => [
+                        'integer',
+                        'string',
+                    ],
+                ],
+                [
+                    'type' => 'string',
+                ],
+                [
+                    'type' => 'string',
+                    'const' => 'c',
+                ],
+            ],
+            'minItems' => 1,
+            'maxItems' => 3,
+        ], $schema, 'closure', 'return');
+    }
+
+
+    #[Test]
     public function aKeyWithSeveralPossibleValuesKeepsTheLiteralsIntKeys(): void
     {
         $schema = $this->getClosureReturnSchema(function (bool $flag): mixed {

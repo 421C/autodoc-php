@@ -4,6 +4,7 @@ namespace AutoDoc\TypeScript;
 
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\PhpClass;
+use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
@@ -133,7 +134,7 @@ class TypeScriptGenerator
         $baseIndent = $tag->getDeclarationIndent();
         $outputFilePath = $tag->getConfig('save_types_in_single_file');
 
-        $structureType = ($this->isObjectOrArrayShape($type) && ! $outputFilePath)
+        $structureType = ($this->isObjectOrArrayShape($type, $tag->scope->config) && ! $outputFilePath)
             ? $tag->getExistingStructureType() ?? 'type'
             : 'type';
 
@@ -221,9 +222,9 @@ class TypeScriptGenerator
     }
 
 
-    private function isObjectOrArrayShape(Type $type): bool
+    private function isObjectOrArrayShape(Type $type, Config $config): bool
     {
-        return $type instanceof ObjectType || ($type instanceof ArrayType && $type->shape && ! $type->isTuple());
+        return $type instanceof ObjectType || ($type instanceof ArrayType && $type->shape && ! $type->mayEncodeAsList($config));
     }
 
     private function toPascalCase(string $input): string

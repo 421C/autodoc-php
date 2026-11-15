@@ -329,17 +329,30 @@ class BasicResponsesController
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            'type' => 'object',
-                            'properties' => [
-                                0 => [
-                                    'type' => 'integer',
+                            'anyOf' => [
+                                [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                    ],
+                                    'minItems' => 2,
+                                    'maxItems' => 2,
                                 ],
-                                1 => [
-                                    'type' => 'string',
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        0 => [
+                                            'type' => 'integer',
+                                        ],
+                                        1 => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        '1',
+                                    ],
                                 ],
-                            ],
-                            'required' => [
-                                '1',
                             ],
                         ],
                     ],

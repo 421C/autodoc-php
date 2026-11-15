@@ -113,7 +113,7 @@ final class TupleSchemaTest extends TestCase
         $tuple->deprecatedDescription = 'Use the point object.';
 
         $this->assertSame(
-            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"description":"A coordinate.","examples":[[5,"north"]],"minItems":2,"maxItems":2,"deprecated":true,"x-deprecated-description":"Use the point object."}',
+            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2,"maxItems":2,"description":"A coordinate.","examples":[[5,"north"]],"deprecated":true,"x-deprecated-description":"Use the point object."}',
             $this->encodeSchema($tuple),
         );
     }

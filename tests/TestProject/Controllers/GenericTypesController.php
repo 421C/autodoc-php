@@ -613,6 +613,148 @@ class GenericTypesController
 
 
     /**
+     * @return array{
+     *     independentEntries: array{0?: int, 1?: string},
+     *     severalOptionalEntries: array{0: int, 1?: string, 2?: bool},
+     *     trailingEntries: list{0: int, 1?: string, 2?: bool},
+     *     singleTrailingEntry: array{0: int, 1?: string},
+     *     optionalStringKey: array{0: int, label?: string},
+     *     optionalStringKeyFirst: array{label?: string, 0: int},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'independentEntries' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                                ['type' => 'string'],
+                                            ],
+                                            'maxItems' => 2,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                '1' => ['type' => 'string'],
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                                'severalOptionalEntries' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                                ['type' => 'string'],
+                                                ['type' => 'boolean'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 3,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                '1' => ['type' => 'string'],
+                                                '2' => ['type' => 'boolean'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                                'trailingEntries' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                        ['type' => 'boolean'],
+                                    ],
+                                    'minItems' => 1,
+                                    'maxItems' => 3,
+                                ],
+                                'singleTrailingEntry' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                    ],
+                                    'minItems' => 1,
+                                    'maxItems' => 2,
+                                ],
+                                'optionalStringKey' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 1,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                'label' => ['type' => 'string'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                                'optionalStringKeyFirst' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 1,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'label' => ['type' => 'string'],
+                                                '0' => ['type' => 'integer'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'independentEntries',
+                                'severalOptionalEntries',
+                                'trailingEntries',
+                                'singleTrailingEntry',
+                                'optionalStringKey',
+                                'optionalStringKeyFirst',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function arrayAndListShapeKinds(): array
+    {
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
+    }
+
+
+    /**
      * Conditional types
      *
      * Nothing decides the condition here, so both branches are documented.

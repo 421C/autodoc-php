@@ -8,6 +8,7 @@ use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\PhpCondition;
 use AutoDoc\Analyzer\Narrowing\BranchNarrowingEmitter;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
@@ -29,6 +30,9 @@ use PhpParser\Node\Expr\Variable;
 use PhpParser\NodeVisitor;
 use PhpParser\NodeVisitorAbstract;
 
+/**
+ * @phpstan-import-type PathKey from ArrayType
+ */
 class FunctionBodyVisitor extends NodeVisitorAbstract
 {
     public function __construct(
@@ -188,6 +192,10 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
 
         if ($node instanceof Node\Stmt\Foreach_) {
             $this->handleForeach($node);
+        }
+
+        if ($node instanceof Node\Stmt\Unset_) {
+            $this->handleUnset($node);
         }
 
         $this->handleBranchEnter($node);
@@ -373,6 +381,24 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
     }
 
 
+    private function handleUnset(Node\Stmt\Unset_ $node): void
+    {
+        foreach ($node->vars as $unsetNode) {
+            if (! $unsetNode instanceof Node\Expr\ArrayDimFetch) {
+                continue;
+            }
+
+            $nestedKeys = $this->getNestedAccessKeys($unsetNode);
+            $baseVariable = $nestedKeys['baseVariable'];
+            $path = $nestedKeys['mutationPath'];
+
+            if ($baseVariable instanceof Node\Expr\Variable && $path !== []) {
+                $this->scope->variables->unset($baseVariable, $path, $unsetNode);
+            }
+        }
+    }
+
+
     private function getCaughtExceptionType(Node\Stmt\Catch_ $node): Type
     {
         $caughtTypes = [];
@@ -420,18 +446,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
             );
 
         } else if ($varNode instanceof Node\Expr\ArrayDimFetch || $varNode instanceof Node\Expr\PropertyFetch) {
-            $assignedItemKey = $this->getRawArrayKeyValue($varNode instanceof Node\Expr\ArrayDimFetch ? $varNode->dim : $varNode->name);
-
-            if ($varNode->var instanceof Node\Expr\Variable) {
-                $this->scope->variables->mutate(
-                    varNode: $varNode->var,
-                    attributes: $assignedItemKey === null ? [] : [$assignedItemKey => $assignedType],
-                    dynamicAttribute: $assignedItemKey === null ? $assignedType : null,
-                );
-
-            } else if ($varNode->var instanceof Node\Expr\ArrayDimFetch || $varNode->var instanceof Node\Expr\PropertyFetch) {
-                $this->handleNestedAttributeAssignment($varNode, $assignedType);
-            }
+            $this->handleAttributeAssignment($varNode, $assignedType);
 
         } else if ($varNode instanceof Node\Expr\List_ || $varNode instanceof Node\Expr\Array_) {
             $sourceType = $assignedType;
@@ -449,24 +464,25 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
     }
 
 
-    private function handleNestedAttributeAssignment(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $varNode, Type $assignedType): void
+    private function handleAttributeAssignment(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $varNode, Type $assignedType): void
     {
         $nestedKeys = $this->getNestedAccessKeys($varNode);
-
         $baseVariable = $nestedKeys['baseVariable'];
-        $keyPath = $nestedKeys['keyPath'];
 
         if (! $baseVariable instanceof Node\Expr\Variable) {
             return;
         }
 
-        $lastKey = array_pop($keyPath);
+        $mutationPath = $nestedKeys['mutationPath'];
+        $lastKey = array_pop($mutationPath);
+        $isLiteralKey = is_int($lastKey) || is_string($lastKey);
 
         $this->scope->variables->mutate(
             varNode: $baseVariable,
-            attributes: $lastKey === null ? [] : [$lastKey => $assignedType],
-            path: $keyPath,
-            dynamicAttribute: $lastKey === null ? $assignedType : null,
+            attributes: $isLiteralKey ? [$lastKey => $assignedType] : [],
+            path: $mutationPath,
+            dynamicAttribute: $isLiteralKey ? null : $assignedType,
+            dynamicKey: $lastKey instanceof Type ? $lastKey : null,
         );
     }
 
@@ -512,22 +528,23 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
     /**
      * @return array{
      *     baseVariable: Node\Expr,
-     *     keyPath: list<int|string|null>,
+     *     mutationPath: list<PathKey>,
      * }
      */
     private function getNestedAccessKeys(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $arrayAccessNode): array
     {
-        $keyPath = [];
+        $mutationPath = [];
         $currentNode = $arrayAccessNode;
 
         while ($currentNode instanceof Node\Expr\ArrayDimFetch || $currentNode instanceof Node\Expr\PropertyFetch) {
-            $keyPath[] = $this->getRawArrayKeyValue($currentNode instanceof Node\Expr\ArrayDimFetch ? $currentNode->dim : $currentNode->name);
+            $keyNode = $currentNode instanceof Node\Expr\ArrayDimFetch ? $currentNode->dim : $currentNode->name;
+            $mutationPath[] = $this->getRawArrayKeyValue($keyNode) ?? ($keyNode === null ? null : new UnresolvedParserNodeType($keyNode, $this->scope));
             $currentNode = $currentNode->var;
         }
 
         return [
             'baseVariable' => $currentNode,
-            'keyPath' => array_reverse($keyPath),
+            'mutationPath' => array_reverse($mutationPath),
         ];
     }
 

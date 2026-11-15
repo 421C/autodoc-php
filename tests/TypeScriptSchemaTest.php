@@ -651,7 +651,7 @@ final class TypeScriptSchemaTest extends TestCase
     }
 
     #[Test]
-    public function interfaceDeclarationWithListKeyedObjectShapeStaysInterface(): void
+    public function interfaceDeclarationWithShapeThatMayEncodeAsAListBecomesType(): void
     {
         $this->assertTypeScriptGeneratedCorrectly(
             input: '
@@ -661,10 +661,76 @@ final class TypeScriptSchemaTest extends TestCase
             ',
             expected: '
             /** @autodoc array{0?: int, 1: string} */
-            interface ListKeyedShape {
+            type ListKeyedShape = [number, string]|{
                 \'0\'?: number
                 \'1\': string
             }
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithIntKeyedObjectShapeStaysInterface(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{1: int, 2?: string} */
+            interface IntKeyedShape {
+            }
+            ',
+            expected: '
+            /** @autodoc array{1: int, 2?: string} */
+            interface IntKeyedShape {
+                \'1\': number
+                \'2\'?: string
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function shapeWithIndependentOptionalEntriesIsATupleOrAnObject(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0?: int, 1?: string} */
+            type IndependentEntries = unknown
+            ',
+            expected: '
+            /** @autodoc array{0?: int, 1?: string} */
+            type IndependentEntries = [number?, string?]|{
+                \'0\'?: number
+                \'1\'?: string
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function listShapeWithTrailingOptionalEntriesStaysATuple(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc list{0: int, 1?: string, 2?: bool} */
+            type TrailingEntries = unknown
+            ',
+            expected: '
+            /** @autodoc list{0: int, 1?: string, 2?: bool} */
+            type TrailingEntries = [number, string?, boolean?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function filteredListIsAnArrayOrARecord(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc POST /api/test/arrayoperations/filtered-list */
+            ',
+            expected: '
+            /** @autodoc POST /api/test/arrayoperations/filtered-list */
+            type FilteredListResponse = number[]|Record<string, number>
             ',
         );
     }

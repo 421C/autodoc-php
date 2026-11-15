@@ -171,6 +171,21 @@ abstract class Type
 
 
     /**
+     * @param TypeSchema $schema
+     * @return TypeSchema
+     */
+    protected function withOwnMetadata(array $schema): array
+    {
+        return array_merge($schema, array_filter([
+            'description' => $this->description,
+            'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
+        ]));
+    }
+
+
+    /**
      * @param array<int|string, Type> $properties
      * @return array<string, TypeSchemaRecursive>
      */

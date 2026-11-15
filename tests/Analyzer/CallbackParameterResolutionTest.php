@@ -2,11 +2,14 @@
 
 namespace AutoDoc\Tests\Analyzer;
 
+use ArrayObject;
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Route;
+use AutoDoc\Tests\TestProject\Entities\ArrayPropertyHolder;
 use AutoDoc\Tests\TestProject\Entities\DeepMutationRoot;
 use AutoDoc\Tests\TestProject\Entities\NestedPropertyRoot;
+use AutoDoc\Tests\TestProject\Extensions\AsCollectionFuncExtension;
 use AutoDoc\Tests\TestProject\Extensions\EachCallbackExtension;
 use AutoDoc\Tests\TestProject\Extensions\SideEffectMethodExtension;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
@@ -362,6 +365,151 @@ final class CallbackParameterResolutionTest extends TestCase
     }
 
     #[Test]
+    public function unsetOfAKeyInAnArrayPropertyIsReported(): void
+    {
+        $schema = $this->analyze(function (ArrayPropertyHolder $model) {
+            // @phpstan-ignore method.notFound
+            return $model->eachItem(function (ArrayPropertyHolder $item): void {
+                unset($item->data['secret']);
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'data' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'name' => ['type' => 'string'],
+                    ],
+                    'required' => ['name'],
+                ],
+            ],
+            'required' => ['data'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function unsetInAnArrayArgumentIsReportedOnlyThroughAnObject(): void
+    {
+        $schema = $this->analyze(function (ArrayPropertyHolder $holder, string $note) {
+            $parts = ['holder' => $holder, 'note' => $note];
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (array $item): void {
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible, property.nonObject, property.nonObject
+                unset($item['note'], $item['holder']->data['secret']);
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'holder' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'data' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => ['type' => 'string'],
+                            ],
+                            'required' => ['name'],
+                        ],
+                    ],
+                    'required' => ['data'],
+                ],
+                'note' => ['type' => 'string'],
+            ],
+            'required' => ['holder', 'note'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function assignmentInAnArrayArgumentIsReportedOnlyThroughAnObject(): void
+    {
+        $schema = $this->analyze(function (ArrayPropertyHolder $holder, string $note) {
+            $parts = ['holder' => $holder, 'note' => $note];
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (array $item): void {
+                $item['extra'] = true;
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible, property.nonObject
+                $item['holder']->data['extra'] = 1;
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'holder' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'data' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => ['type' => 'string'],
+                                'secret' => ['type' => 'string'],
+                                'extra' => ['type' => 'integer'],
+                            ],
+                            'required' => ['name', 'extra'],
+                        ],
+                    ],
+                    'required' => ['data'],
+                ],
+                'note' => ['type' => 'string'],
+            ],
+            'required' => ['holder', 'note'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function changesToAByReferenceArrayArgumentAreReported(): void
+    {
+        $schema = $this->analyze(function (string $note, int $count) {
+            $parts = ['note' => $note, 'count' => $count];
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (array &$item): void {
+                $item['extra'] = true;
+                unset($item['count']);
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'note' => ['type' => 'string'],
+                'extra' => ['type' => 'boolean'],
+            ],
+            'required' => ['note', 'extra'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function changesToACollectionResolvedAsAnArrayAreReported(): void
+    {
+        $schema = $this->analyze(function (string $note, int $count) {
+            // @phpstan-ignore function.notFound
+            $parts = as_collection(['note' => $note, 'count' => $count]);
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (ArrayObject $item): void {
+                $item['extra'] = true;
+                unset($item['count']);
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'note' => ['type' => 'string'],
+                'extra' => ['type' => 'boolean'],
+            ],
+            'required' => ['note', 'extra'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
     public function nestedPathMutationDescendsThroughClassBackedProperty(): void
     {
         // A low `max_depth` leaves the intermediate `branch` resolved as a
@@ -422,6 +570,7 @@ final class CallbackParameterResolutionTest extends TestCase
         $config = self::loadConfig();
         $config->data['openapi']['show_values_for_scalar_types'] = false;
         $config->data['extensions'] = [
+            AsCollectionFuncExtension::class,
             EachCallbackExtension::class,
             SideEffectMethodExtension::class,
         ];

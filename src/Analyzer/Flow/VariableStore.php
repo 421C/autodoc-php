@@ -3,6 +3,7 @@
 namespace AutoDoc\Analyzer\Flow;
 
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnresolvedParserNodeType;
@@ -10,6 +11,9 @@ use AutoDoc\DataTypes\UnresolvedVariableType;
 use PhpParser\Comment;
 use PhpParser\Node;
 
+/**
+ * @phpstan-import-type PathKey from ArrayType
+ */
 final class VariableStore
 {
     public readonly ScopeEventLog $events;
@@ -71,13 +75,14 @@ final class VariableStore
 
     /**
      * @param array<int|string, Type> $attributes
-     * @param list<int|string|null> $path
+     * @param list<PathKey> $path
      */
     public function mutate(
         Node\Expr\Variable $varNode,
         array $attributes,
         array $path = [],
         ?Type $dynamicAttribute = null,
+        ?Type $dynamicKey = null,
     ): void {
 
         if (! is_string($varNode->name)) {
@@ -90,7 +95,34 @@ final class VariableStore
         /** @var int */
         $endFilePos = $varNode->getAttribute('endFilePos');
 
-        $this->events->mutate($varNode->name, $attributes, $startFilePos, $endFilePos, $path, $dynamicAttribute);
+        $this->events->mutate(
+            varName: $varNode->name,
+            attributes: $attributes,
+            startFilePos: $startFilePos,
+            endFilePos: $endFilePos,
+            path: $path,
+            dynamicAttribute: $dynamicAttribute,
+            dynamicKey: $dynamicKey,
+        );
+    }
+
+
+    /**
+     * @param non-empty-list<PathKey> $path
+     */
+    public function unset(Node\Expr\Variable $varNode, array $path, Node\Expr\ArrayDimFetch $unsetNode): void
+    {
+        if (! is_string($varNode->name)) {
+            return;
+        }
+
+        /** @var int */
+        $startFilePos = $unsetNode->getAttribute('startFilePos');
+
+        /** @var int */
+        $endFilePos = $unsetNode->getAttribute('endFilePos');
+
+        $this->events->unset($varNode->name, $path, $startFilePos, $endFilePos);
     }
 
 

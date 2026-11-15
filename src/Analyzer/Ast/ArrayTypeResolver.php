@@ -26,7 +26,10 @@ class ArrayTypeResolver
     /**
      * @return array{
      *     shape: array<int|string, Type>,
+     *     isTuple: bool,
      *     itemTypes: list<Type>,
+     *     keyTypes: list<Type>,
+     *     hasUnknownKeys: bool,
      * }
      */
     private function unpackArrayItems(Type $type): array
@@ -39,19 +42,28 @@ class ArrayTypeResolver
             if ($type->shape) {
                 return [
                     'shape' => $type->shape,
+                    'isTuple' => $type->isTuple(),
                     'itemTypes' => array_values($type->shape),
+                    'keyTypes' => $this->getShapeKeyTypes($type->shape),
+                    'hasUnknownKeys' => false,
                 ];
             }
 
             return [
                 'shape' => [],
+                'isTuple' => false,
                 'itemTypes' => $this->getListItemTypes($type),
+                'keyTypes' => $this->getPairKeyTypes($type),
+                'hasUnknownKeys' => $this->isTypedPair($type),
             ];
         }
 
         return [
             'shape' => [],
+            'isTuple' => false,
             'itemTypes' => [new UnknownType],
+            'keyTypes' => [],
+            'hasUnknownKeys' => false,
         ];
     }
 
@@ -59,12 +71,18 @@ class ArrayTypeResolver
     /**
      * @return array{
      *     shape: array<int|string, Type>,
+     *     isTuple: bool,
      *     itemTypes: list<Type>,
+     *     keyTypes: list<Type>,
+     *     hasUnknownKeys: bool,
      * }
      */
     private function unpackUnionItems(UnionType $type): array
     {
         $itemTypes = [];
+        $keyTypes = [];
+        $isTuple = true;
+        $hasUnknownKeys = false;
         $valueTypesByKey = [];
 
         foreach ($type->types as $typeInUnion) {
@@ -74,11 +92,18 @@ class ArrayTypeResolver
                     $valueTypesByKey[$key][] = $valueType;
                 }
 
+                $keyTypes = array_merge($keyTypes, $this->getShapeKeyTypes($typeInUnion->shape));
+                $isTuple = $isTuple && $typeInUnion->isTuple();
+
             } else if ($typeInUnion instanceof ArrayType) {
                 $itemTypes = array_merge($itemTypes, $this->getListItemTypes($typeInUnion));
+                $keyTypes = array_merge($keyTypes, $this->getPairKeyTypes($typeInUnion));
+                $isTuple = false;
+                $hasUnknownKeys = $hasUnknownKeys || $this->isTypedPair($typeInUnion);
 
             } else {
                 $itemTypes[] = $typeInUnion;
+                $isTuple = false;
             }
         }
 
@@ -95,7 +120,10 @@ class ArrayTypeResolver
 
         return [
             'shape' => $shape,
+            'isTuple' => $isTuple,
             'itemTypes' => $itemTypes,
+            'keyTypes' => $keyTypes,
+            'hasUnknownKeys' => $hasUnknownKeys,
         ];
     }
 
@@ -110,6 +138,38 @@ class ArrayTypeResolver
         }
 
         return [$type->itemType ?? new UnknownType];
+    }
+
+
+    /**
+     * @param array<int|string, Type> $shape
+     * @return list<Type>
+     */
+    private function getShapeKeyTypes(array $shape): array
+    {
+        return array_map(
+            callback: fn (int|string $key): Type => is_int($key) ? new IntegerType : new StringType($key),
+            array: array_keys($shape),
+        );
+    }
+
+
+    /**
+     * @return list<Type>
+     */
+    private function getPairKeyTypes(ArrayType $type): array
+    {
+        if (! $this->isTypedPair($type)) {
+            return [];
+        }
+
+        return [$type->getRenumberedKeyType($this->scope->config) ?? new IntegerType];
+    }
+
+
+    private function isTypedPair(ArrayType $type): bool
+    {
+        return $type->itemType !== null || $type->keyType !== null;
     }
 
 
@@ -136,7 +196,9 @@ class ArrayTypeResolver
                     $unpackedArray = $this->unpackArrayItems($this->scope->resolveType($arrayItemNode->value));
 
                     $itemTypes = array_merge($itemTypes, $unpackedArray['itemTypes']);
-                    $arrayType->mergeShape($unpackedArray['shape']);
+                    $keyTypes = array_merge($keyTypes, $unpackedArray['keyTypes']);
+                    $hasAtLeastOneUnknownKey = $hasAtLeastOneUnknownKey || $unpackedArray['hasUnknownKeys'];
+                    $arrayType->mergeShape($unpackedArray['shape'], isTuple: $unpackedArray['isTuple']);
 
                 } else {
                     $comments = $arrayItemNode->getComments();
@@ -196,7 +258,7 @@ class ArrayTypeResolver
                         $keyTypes[] = new StringType($arrayItemNode->key->value);
 
                     } else if ($resolvePartialArrayShapes && ! $arrayItemNode->key) {
-                        $arrayType->shape[] = $itemType;
+                        $arrayType->mergeShape([$itemType]);
 
                     } else {
                         $keyType = $arrayItemNode->key ? $this->scope->resolveType($arrayItemNode->key) : new IntegerType;

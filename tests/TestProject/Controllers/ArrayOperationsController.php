@@ -102,14 +102,29 @@ class ArrayOperationsController
                             'type' => 'object',
                             'properties' => [
                                 'flip' => [
-                                    'type' => 'array',
-                                    'items' => [
-                                        'enum' => [
-                                            'a',
-                                            'b',
-                                            'c',
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'items' => [
+                                                'enum' => [
+                                                    'a',
+                                                    'b',
+                                                    'c',
+                                                ],
+                                                'type' => 'string',
+                                            ],
                                         ],
-                                        'type' => 'string',
+                                        [
+                                            'type' => 'object',
+                                            'additionalProperties' => [
+                                                'enum' => [
+                                                    'a',
+                                                    'b',
+                                                    'c',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                        ],
                                     ],
                                 ],
                                 'flip2' => [
@@ -124,15 +139,30 @@ class ArrayOperationsController
                                     ],
                                 ],
                                 'filter' => [
-                                    'items' => [
-                                        'enum' => [
-                                            'x',
-                                            'c',
-                                            'y',
+                                    'anyOf' => [
+                                        [
+                                            'items' => [
+                                                'enum' => [
+                                                    'x',
+                                                    'c',
+                                                    'y',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                            'type' => 'array',
                                         ],
-                                        'type' => 'string',
+                                        [
+                                            'additionalProperties' => [
+                                                'enum' => [
+                                                    'x',
+                                                    'c',
+                                                    'y',
+                                                ],
+                                                'type' => 'string',
+                                            ],
+                                            'type' => 'object',
+                                        ],
                                     ],
-                                    'type' => 'array',
                                 ],
                                 'mergeItems' => [
                                     'type' => 'object',
@@ -503,6 +533,48 @@ class ArrayOperationsController
         ] : null;
 
         return $numbers ?? [];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function filteredList(): mixed
+    {
+        return array_filter($this->nullableScores());
+    }
+
+
+    /**
+     * @return list<int|null>
+     */
+    private function nullableScores(): array
+    {
+        return json_decode('[]', true);
     }
 
 
