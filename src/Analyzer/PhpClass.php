@@ -484,7 +484,11 @@ class PhpClass
 
     public function getMethod(string $name, ?ArgumentList $args = null): PhpCallable
     {
-        $childScope = $this->scope->createChildScope(className: $this->className, methodName: $name);
+        $childScope = $this->scope->createChildScope(
+            className: $this->className,
+            methodName: $name,
+            callableName: $this->className . '::' . $name,
+        );
 
         return new PhpCallable(
             scope: $childScope,

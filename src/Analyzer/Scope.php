@@ -78,6 +78,13 @@ class Scope
 
     private ?BranchBreakout $branchBreakout = null;
 
+    public private(set) bool $isRecursiveCall = false;
+
+    /**
+     * @var array<string, true>
+     */
+    private array $enclosingCallableNames = [];
+
     /**
      * Shared per scope so the body-entry breakout scan and every condition's
      * exit check reuse one per-statement cache.
@@ -1129,7 +1136,7 @@ class Scope
     /**
      * @param ?class-string $className
      */
-    public function createChildScope(?string $className = null, ?string $methodName = null): Scope
+    public function createChildScope(?string $className = null, ?string $methodName = null, ?string $callableName = null): Scope
     {
         $scope = new Scope(
             config: $this->config,
@@ -1138,6 +1145,13 @@ class Scope
             className: $className,
             methodName: $methodName,
         );
+
+        $scope->enclosingCallableNames = $this->enclosingCallableNames;
+
+        if ($callableName !== null) {
+            $scope->isRecursiveCall = isset($this->enclosingCallableNames[$callableName]);
+            $scope->enclosingCallableNames[$callableName] = true;
+        }
 
         if ($this->className && $this->className === $className) {
             $scope->constructorArgs = $this->constructorArgs;
