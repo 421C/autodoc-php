@@ -7,6 +7,7 @@ use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
 use AutoDoc\Tests\TestProject\Entities\ClassWithDeprecatedProperties;
 use AutoDoc\Tests\TestProject\Entities\ClassWithDocumentedDateAndEnumProperties;
 use AutoDoc\Tests\TestProject\Entities\ClassWithDocumentedVarTagProperties;
+use AutoDoc\Tests\TestProject\Entities\ClassWithEnumPropertiesDescribedLikeTheEnum;
 use AutoDoc\Tests\TestProject\Entities\PermissionEnum;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
@@ -981,6 +982,59 @@ class BasicResponsesController
     public function dateAndEnumPropertyDescriptions(): ClassWithDocumentedDateAndEnumProperties
     {
         return new ClassWithDocumentedDateAndEnumProperties;
+    }
+
+
+    // A property docblock repeating the enum summary is already shown as the link text.
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'viewType' => [
+                                    'type' => 'string',
+                                    'description' => '[View type \(HTML or PDF\)](#/schemas/DocumentViewType)',
+                                    'enum' => [
+                                        'html',
+                                        'pdf',
+                                    ],
+                                ],
+                                'nullableViewType' => [
+                                    'type' => ['string', 'null'],
+                                    'description' => '[View type \(HTML or PDF\)](#/schemas/DocumentViewType)',
+                                    'enum' => [
+                                        'html',
+                                        'pdf',
+                                        null,
+                                    ],
+                                ],
+                                'requestedViewType' => [
+                                    'type' => 'string',
+                                    'description' => '[View type \(HTML or PDF\)](#/schemas/DocumentViewType)' . "\n\n" . 'Requested view type',
+                                    'enum' => [
+                                        'html',
+                                        'pdf',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'viewType',
+                                'nullableViewType',
+                                'requestedViewType',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function enumPropertyDescriptionsRepeatingTheEnumSummary(): ClassWithEnumPropertiesDescribedLikeTheEnum
+    {
+        return new ClassWithEnumPropertiesDescribedLikeTheEnum;
     }
 
 
