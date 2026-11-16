@@ -6,6 +6,8 @@ use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\PhpClass;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\OpenApi\SchemaJson;
+use AutoDoc\Tests\TestProject\Entities\InheritedPropertyChild;
+use AutoDoc\Tests\TestProject\Entities\InheritedPropertyMiddle;
 use AutoDoc\Tests\TestProject\Entities\PropertyTypeSource;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use Closure;
@@ -25,6 +27,19 @@ final class SharedTypeIsolationTest extends TestCase
     protected function setUp(): void
     {
         PhpClass::$cache = [];
+    }
+
+
+    #[Test]
+    public function aSubclassPropertyDocblockLeavesTheInheritedPropertyUnchanged(): void
+    {
+        $readMiddle = fn (InheritedPropertyMiddle $middle) => $middle;
+        $declaredSchema = $this->closureReturnSchema($readMiddle);
+
+        $childSchema = $this->closureReturnSchema(fn (InheritedPropertyChild $child) => $child);
+
+        $this->assertStringContainsString('Receipt is available', $childSchema);
+        $this->assertSame($declaredSchema, $this->closureReturnSchema($readMiddle));
     }
 
 

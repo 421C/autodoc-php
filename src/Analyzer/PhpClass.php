@@ -432,7 +432,9 @@ class PhpClass
         }
 
         if ($parentClass->hasLoadedProperties()) {
-            return $parentClass->getProperty($propertyName)?->unwrapType($this->scope->config);
+            $parentPropertyType = $parentClass->getProperty($propertyName)?->unwrapType($this->scope->config);
+
+            return $parentPropertyType ? clone $parentPropertyType : null;
         }
 
         return $parentClass->resolvePropertyFromDocComments($propertyName);
