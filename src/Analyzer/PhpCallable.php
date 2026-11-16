@@ -45,6 +45,7 @@ use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\TypeNode;
 use PHPStan\PhpDocParser\Ast\Type\UnionTypeNode;
 use ReflectionException;
+use ReflectionFunction;
 use ReflectionFunctionAbstract;
 use ReflectionNamedType;
 
@@ -426,7 +427,7 @@ class PhpCallable
         bool $usePhpDocIfAvailable,
         bool $doNotAnalyzeBody,
     ): array {
-        if (! $this->phpClass || ! $this->methodName) {
+        if (! $this->phpClass || ! $this->methodName || $this->scope->isRecursiveCall) {
             return ['analyzedReturnType' => null, 'requestBodyType' => null];
         }
 
@@ -496,17 +497,21 @@ class PhpCallable
      */
     private function analyzeClosureBody(bool $analyzeReturnValue, bool $isOperationEntrypoint): array
     {
-        $node = $this->node;
+        $functionScope = $this->scope->createChildScope(
+            callableName: $this->reflection instanceof ReflectionFunction && ! $this->reflection->isClosure()
+                ? $this->reflection->getName()
+                : null,
+        );
 
-        if (! $node) {
-            $node = $this->getNodeFromReflection();
+        if ($functionScope->isRecursiveCall) {
+            return ['analyzedReturnType' => null, 'requestBodyType' => null];
         }
+
+        $node = $this->node ?? $this->getNodeFromReflection();
 
         if (! $node) {
             return ['analyzedReturnType' => null, 'requestBodyType' => null];
         }
-
-        $functionScope = $this->scope->createChildScope();
 
         $nodeVisitor = new FunctionBodyVisitor(
             scope: $functionScope,

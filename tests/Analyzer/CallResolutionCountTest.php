@@ -133,6 +133,60 @@ final class CallResolutionCountTest extends TestCase
         $this->assertSame(1, $this->resolutionCount('callResolutionCountHolder'));
     }
 
+    // Each level re-analyzed the body down to `max_depth`. When the merged list
+    // also joins the return union, as in Laravel's `data_get()`, every merge
+    // resolves the lazy item again and the analysis takes minutes.
+    #[Test]
+    public function aRecursiveCallWhoseResultsAreMergedElsewhereIsNotAnalyzedAgain(): void
+    {
+        $this->getClosureReturnSchema(fn () => [
+            'id' => \AutoDoc\Tests\Analyzer\callResolutionCountRecursiveRead(['id' => 1], 'id'),
+        ]);
+
+        $this->assertSame(2, $this->resolutionCount('callResolutionCountRecursiveRead'));
+    }
+
+    #[Test]
+    public function aRecursiveFunctionCallResolvesToTheDeclaredReturnTypeInsteadOfNestingItsBody(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn () => \AutoDoc\Tests\Analyzer\callResolutionCountNested(3));
+
+        $this->assertSchemaArraysMatch(self::NESTED_ONCE_SCHEMA, $schema, 'closure', 'return');
+    }
+
+    #[Test]
+    public function aRecursiveMethodCallResolvesToTheDeclaredReturnTypeInsteadOfNestingItsBody(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn () => CallResolutionCountTest::nestedByMethod(3));
+
+        $this->assertSchemaArraysMatch(self::NESTED_ONCE_SCHEMA, $schema, 'closure', 'return');
+    }
+
+    private const array NESTED_ONCE_SCHEMA = [
+        'type' => ['object', 'null'],
+        'properties' => [
+            'child' => [
+                'type' => ['array', 'null'],
+                'items' => [
+                    'type' => 'string',
+                ],
+            ],
+        ],
+        'required' => [
+            'child',
+        ],
+    ];
+
+    // @phpstan-ignore missingType.iterableValue
+    private static function nestedByMethod(int $levels): ?array
+    {
+        if ($levels === 0) {
+            return null;
+        }
+
+        return ['child' => self::nestedByMethod($levels - 1)];
+    }
+
     /**
      * Counts resolutions regardless of whether the analyzer saw the
      * qualified or unqualified function name.
@@ -192,4 +246,58 @@ function callResolutionCountShape(): array
 function callResolutionCountHolder(): CallCountHolder
 {
     return new CallCountHolder;
+}
+
+function callResolutionCountRecursiveRead(mixed $target, string $path): mixed
+{
+    foreach (explode('.', $path) as $segment) {
+        if ($segment === '*') {
+            if (! is_iterable($target)) {
+                return null;
+            }
+
+            $result = [];
+
+            foreach ($target as $item) {
+                $result[] = callResolutionCountRecursiveRead($item, $path);
+            }
+
+            return callResolutionCountCollapse($result);
+        }
+
+        if (! is_array($target) || ! array_key_exists($segment, $target)) {
+            return null;
+        }
+
+        $target = $target[$segment];
+    }
+
+    return $target;
+}
+
+function callResolutionCountCollapse(mixed $lists): mixed
+{
+    if (! is_iterable($lists)) {
+        return [];
+    }
+
+    $results = [];
+
+    foreach ($lists as $values) {
+        if (is_array($values)) {
+            $results[] = $values;
+        }
+    }
+
+    return array_merge([], ...$results);
+}
+
+// @phpstan-ignore missingType.iterableValue
+function callResolutionCountNested(int $levels): ?array
+{
+    if ($levels === 0) {
+        return null;
+    }
+
+    return ['child' => callResolutionCountNested($levels - 1)];
 }

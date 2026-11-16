@@ -132,7 +132,7 @@ abstract class Type
 
     public function addDescription(?string $description, bool $prepend = false): self
     {
-        $existingParagraphs = array_map(trim(...), explode("\n\n", $this->description ?? ''));
+        $existingParagraphs = self::getParagraphsWithSchemaLinkText($this->description);
 
         $description = implode("\n\n", array_filter(
             array: explode("\n\n", $description ?? ''),
@@ -147,6 +147,25 @@ abstract class Type
         }
 
         return $this;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function getParagraphsWithSchemaLinkText(?string $description): array
+    {
+        $paragraphs = [];
+
+        foreach (explode("\n\n", $description ?? '') as $paragraph) {
+            $paragraph = trim($paragraph);
+            $paragraphs[] = $paragraph;
+
+            if (preg_match('/^\[((?:\\\\.|[^\\\\\]])*)\]\(#\/schemas\/[^)]*\)$/', $paragraph, $schemaLink)) {
+                $paragraphs[] = (string) preg_replace('/\\\\(.)/', '$1', $schemaLink[1]);
+            }
+        }
+
+        return $paragraphs;
     }
 
     public function addDeprecatedDescription(?string $description): self
