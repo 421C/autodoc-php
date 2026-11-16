@@ -125,15 +125,17 @@ trait WithMergeableTypes
             && ($config->data['arrays']['remove_scalar_type_values_when_merging_with_unknown_types'] ?? true)
             && array_any($types, fn (Type $type) => $type instanceof UnknownType)
         ) {
-            foreach ($types as $type) {
+            foreach ($types as $index => $type) {
                 if ($type instanceof IntegerType
                     || $type instanceof FloatType
                     || $type instanceof NumberType
                     || $type instanceof StringType
                     || $type instanceof BoolType
                 ) {
+                    $type = clone $type;
                     $type->value = null;
                     $type->isEnum = false;
+                    $types[$index] = $type;
                 }
             }
         }
@@ -238,7 +240,7 @@ trait WithMergeableTypes
             };
 
             if ($objectType !== null) {
-                return $objectType->setRequired($this->required || $type1->required || $type2->required);
+                return (clone $objectType)->setRequired($this->required || $type1->required || $type2->required);
             }
         }
 
@@ -253,6 +255,7 @@ trait WithMergeableTypes
                 return null;
             }
 
+            $type1 = clone $type1;
             $type1->value = $mergeAsIntersection
                 ? ($type1->value ?? $type2->value)
                 : ($type1->value === $type2->value ? $type1->value : null);
@@ -264,17 +267,17 @@ trait WithMergeableTypes
         if ($type1 instanceof VoidType
             || $type1 instanceof NullType
         ) {
-            return $type1;
+            return clone $type1;
         }
 
         if ($type1 instanceof ArrayType) {
             /** @var ArrayType $type2 */
-            return $this->mergeArrayTypes($type1, $type2, $config, $mergeAsIntersection);
+            return $this->mergeArrayTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
         }
 
         if ($type1 instanceof ObjectType) {
             /** @var ObjectType $type2 */
-            return $this->mergeObjectTypes($type1, $type2, $config, $mergeAsIntersection);
+            return $this->mergeObjectTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
         }
 
         return null;
@@ -316,6 +319,10 @@ trait WithMergeableTypes
                 if ($keys1 !== $keys2) {
                     return null;
                 }
+            }
+
+            if (! $array1->tryMergeIntKeyOrder($array2, $mergeAsIntersection, $config)) {
+                return null;
             }
 
             foreach ($array1->shape as $key => $type1) {
@@ -371,10 +378,19 @@ trait WithMergeableTypes
                     return null;
                 }
 
-                $itemType = $this->mergeTypes($array1->itemType, $array2->itemType, $config, $mergeAsIntersection);
+                $itemType = $this->mergeTypes(
+                    type1: $array1->itemType->unwrapType($config),
+                    type2: $array2->itemType->unwrapType($config),
+                    config: $config,
+                    mergeAsIntersection: $mergeAsIntersection,
+                );
 
                 if ($itemType) {
-                    return new ArrayType($itemType);
+                    return new ArrayType(
+                        itemType: $itemType,
+                        keyType: $this->mergeArrayKeyTypes($array1->keyType, $array2->keyType, $config, $mergeAsIntersection),
+                        intKeyOrder: $array1->intKeyOrder->merge($array2->intKeyOrder, $mergeAsIntersection),
+                    );
                 }
 
             } else if ($array1->itemType) {
@@ -387,6 +403,19 @@ trait WithMergeableTypes
 
         return null;
     }
+
+
+    private function mergeArrayKeyTypes(?Type $keyType1, ?Type $keyType2, Config $config, bool $mergeAsIntersection): ?Type
+    {
+        if ($keyType1 === null || $keyType2 === null) {
+            return $mergeAsIntersection ? $keyType1 ?? $keyType2 : null;
+        }
+
+        return $mergeAsIntersection
+            ? new IntersectionType([$keyType1, $keyType2])->unwrapType($config)
+            : new UnionType([$keyType1, $keyType2])->unwrapType($config);
+    }
+
 
     private function mergeObjectTypes(ObjectType $object1, ObjectType $object2, Config $config, bool $mergeAsIntersection = false): ?ObjectType
     {

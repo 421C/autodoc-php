@@ -30,12 +30,18 @@ class RootSchema implements JsonSerializable
 
     public function jsonSerialize(): mixed
     {
+        $components = $this->components;
+
+        if (isset($components['schemas'])) {
+            $components['schemas'] = array_map(SchemaJson::castPropertiesToObjects(...), $components['schemas']);
+        }
+
         return array_filter([
             'openapi' => $this->openapi,
             'info' => $this->info,
             'servers' => $this->servers,
             'paths' => (object) $this->paths,
-            'components' => $this->components ?: null,
+            'components' => $components ?: null,
         ], fn ($value) => $value !== null);
     }
 }

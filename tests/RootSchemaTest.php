@@ -3,6 +3,8 @@
 namespace AutoDoc\Tests;
 
 use AutoDoc\Config;
+use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DocGenerator;
 use AutoDoc\Tests\Traits\LoadsConfig;
@@ -60,6 +62,21 @@ final class RootSchemaTest extends TestCase
 
         $this->assertStringContainsString(
             '"components":{"schemas":{"Status":{"type":"string","enum":["draft","published"]}}}',
+            $this->generate(self::loadConfig()),
+        );
+    }
+
+
+    #[Test]
+    public function schemaComponentPropertiesNamedLikeListIndexesEncodeAsAnObject(): void
+    {
+        Workspace::$schemaComponents['Pair'] = new ArrayType(shape: [
+            new IntegerType,
+            new StringType()->setRequired(true),
+        ]);
+
+        $this->assertStringContainsString(
+            '"components":{"schemas":{"Pair":{"type":"object","properties":{"0":{"type":"integer"},"1":{"type":"string"}},"required":["1"]}}}',
             $this->generate(self::loadConfig()),
         );
     }

@@ -3,6 +3,7 @@
 namespace AutoDoc\Extensions\BuiltIn;
 
 use AutoDoc\Analyzer\ArgumentList;
+use AutoDoc\Analyzer\IntKeyOrder;
 use AutoDoc\Analyzer\Narrowing\AllOf;
 use AutoDoc\Analyzer\Narrowing\AnyOf;
 use AutoDoc\Analyzer\Narrowing\IsFalsey;
@@ -48,6 +49,15 @@ class ArrayFuncCall extends FuncCallExtension
             'array_keys' => $this->handleArrayKeys($config, $argTypes),
             'array_flip' => $this->handleArrayFlip($config, $argTypes),
             'array_filter' => $this->handleArrayFilter($call->node, $call->scope, $argTypes),
+            'array_unique' => $this->handleEntryRemovingFunction($argTypes, keepsFirstEntry: true),
+            'array_diff', 'array_diff_assoc', 'array_diff_uassoc', 'array_diff_ukey',
+            'array_udiff', 'array_udiff_assoc', 'array_udiff_uassoc',
+            'array_intersect', 'array_intersect_assoc', 'array_intersect_uassoc', 'array_intersect_ukey',
+            'array_uintersect', 'array_uintersect_assoc', 'array_uintersect_uassoc' => $this->handleEntryRemovingFunction($argTypes, keepsFirstEntry: false),
+            'array_diff_key' => $this->handleKeyComparingFunction($config, $argTypes, keepsMatchingKeys: false),
+            'array_intersect_key' => $this->handleKeyComparingFunction($config, $argTypes, keepsMatchingKeys: true),
+            'array_slice' => $this->handleArraySlice($config, $argTypes),
+            'array_reverse' => $this->handleArrayReverse($config, $argTypes),
             'array_merge' => $this->handleArrayMerge($config, $argTypes),
             'array_search' => $this->addFalse($this->getKeyType($config, $argTypes, 1), $config),
             'array_first', 'array_last', 'array_find', 'array_pop', 'array_shift' => $this->addNull($this->getItemType($config, $argTypes), $config),
@@ -55,6 +65,38 @@ class ArrayFuncCall extends FuncCallExtension
             'end', 'current', 'next', 'prev', 'reset' => $this->addFalse($this->getItemType($config, $argTypes), $config),
             default => null,
         };
+    }
+
+    public function handleSideEffect(FuncCallContext $context): void
+    {
+        $preservesKeys = match ($context->functionName) {
+            'sort', 'rsort', 'usort', 'shuffle' => false,
+            'asort', 'arsort', 'uasort', 'uksort', 'krsort', 'natsort', 'natcasesort' => true,
+            default => null,
+        };
+
+        $arrayArg = $context->node->args[0] ?? null;
+
+        if ($preservesKeys === null
+            || ! $arrayArg instanceof Node\Arg
+            || ! $arrayArg->value instanceof Node\Expr\Variable
+            || ! is_string($arrayArg->value->name)
+        ) {
+            return;
+        }
+
+        $config = $context->scope->config;
+        $arrayType = $context->argTypes->get(0)->unwrapType($config);
+
+        if (! $arrayType instanceof ArrayType) {
+            return;
+        }
+
+        $sortedArrayType = $preservesKeys
+            ? (clone $arrayType)->reorderItems($config)
+            : (clone $arrayType)->toList($config);
+
+        $context->setVarType($arrayArg->value->name, $sortedArrayType);
     }
 
     public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void
@@ -74,7 +116,7 @@ class ArrayFuncCall extends FuncCallExtension
 
         $getVarNames = function (Type $argType) use ($call, &$getVarNames, &$varNames): void {
             if ($argType instanceof ArrayType) {
-                $getVarNames($argType->convertShapeToTypePair($call->scope->config)->itemType ?? new UnknownType);
+                $getVarNames((clone $argType)->convertShapeToTypePair($call->scope->config)->itemType ?? new UnknownType);
 
             } else if ($argType instanceof StringType && is_string($argType->value)) {
                 $varNames[] = $argType->value;
@@ -249,9 +291,9 @@ class ArrayFuncCall extends FuncCallExtension
             $argCount = count($argTypes);
 
             if ($argCount === 2) {
-                $arrayType = $argTypes->get(1);
+                $arrayType = $this->getArrayArgument($argTypes, 1);
 
-                if ($arrayType instanceof ArrayType) {
+                if ($arrayType !== null) {
                     $itemType = $arrayType->convertShapeToTypePair($config)->itemType ?? new UnknownType;
                     $keyType = $arrayType->keyType;
 
@@ -268,6 +310,7 @@ class ArrayFuncCall extends FuncCallExtension
                         callerNode: $funcCall,
                     ),
                     keyType: $keyType,
+                    intKeyOrder: $arrayType->intKeyOrder ?? IntKeyOrder::Sequential,
                 );
             }
 
@@ -277,7 +320,7 @@ class ArrayFuncCall extends FuncCallExtension
                 $argType = $argTypes->get($i)->unwrapType($config);
 
                 if ($argType instanceof ArrayType) {
-                    $closureArgTypes[] = $argType->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+                    $closureArgTypes[] = (clone $argType)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
 
                 } else {
                     $closureArgTypes[] = new UnknownType;
@@ -301,7 +344,7 @@ class ArrayFuncCall extends FuncCallExtension
                 $type = $argTypes->get($i)->unwrapType($config);
 
                 if ($type instanceof ArrayType) {
-                    $itemTypes[] = $type->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+                    $itemTypes[] = (clone $type)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
 
                 } else {
                     return new ArrayType;
@@ -321,24 +364,15 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function handleArrayValues(Config $config, ArgumentList $argTypes): Type
     {
-        $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
-
-        if ($arrayType instanceof ArrayType) {
-            $arrayType->convertShapeToTypePair($config);
-            $arrayType->keyType = null;
-
-            return $arrayType;
-        }
-
-        return new ArrayType;
+        return $this->getArrayArgument($argTypes)?->toList($config) ?? new ArrayType;
     }
 
 
     private function handleArrayKeys(Config $config, ArgumentList $argTypes): Type
     {
-        $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
+        $arrayType = $this->getArrayArgument($argTypes);
 
-        if ($arrayType instanceof ArrayType) {
+        if ($arrayType !== null) {
             return new ArrayType(
                 itemType: $arrayType->convertShapeToTypePair($config)->keyType,
             );
@@ -353,17 +387,10 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function handleArrayFlip(Config $config, ArgumentList $argTypes): Type
     {
-        $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
+        $arrayType = $this->getArrayArgument($argTypes);
 
-        if ($arrayType instanceof ArrayType) {
-            $arrayType = $arrayType->convertShapeToTypePair($config);
-
-            $keyType = $arrayType->itemType;
-
-            $arrayType->itemType = $arrayType->keyType;
-            $arrayType->keyType = $keyType;
-
-            return $arrayType;
+        if ($arrayType !== null) {
+            return $arrayType->flipKeysAndItems($config);
         }
 
         return new ArrayType(
@@ -382,9 +409,9 @@ class ArrayFuncCall extends FuncCallExtension
     private function handleArrayFilter(FuncCall $funcCall, Scope $scope, ArgumentList $argTypes): Type
     {
         $config = $scope->config;
-        $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
+        $arrayType = $this->getArrayArgument($argTypes);
 
-        if (! ($arrayType instanceof ArrayType)) {
+        if ($arrayType === null) {
             return new ArrayType;
         }
 
@@ -393,26 +420,27 @@ class ArrayFuncCall extends FuncCallExtension
             $falsey = new IsFalsey;
 
             if ($arrayType->shape) {
-                $shape = [];
-
                 foreach ($arrayType->shape as $key => $value) {
-                    $filteredValue = $truthy->apply($value, $scope);
+                    $truthyValue = $truthy->apply($value, $scope);
 
-                    if ($filteredValue instanceof NeverType) {
+                    if ($truthyValue instanceof NeverType) {
+                        $arrayType->removeItemFromArray($key);
+
                         continue;
                     }
 
-                    if (! ($falsey->apply($value, $scope) instanceof NeverType)) {
-                        $filteredValue = clone $filteredValue;
-                        $filteredValue->setRequired(false);
-                    }
+                    $arrayType->shape[$key] = $truthyValue;
 
-                    $shape[$key] = $filteredValue;
+                    if (! ($falsey->apply($value, $scope) instanceof NeverType)) {
+                        $arrayType->removeItemFromArray($key, isCertain: false);
+                    }
                 }
 
-                $arrayType->shape = $shape;
-
             } else if ($arrayType->itemType !== null) {
+                if (! ($falsey->apply($arrayType->itemType, $scope) instanceof NeverType)) {
+                    $arrayType->markItemsOptional();
+                }
+
                 $arrayType->itemType = $truthy->apply($arrayType->itemType, $scope);
             }
 
@@ -433,15 +461,18 @@ class ArrayFuncCall extends FuncCallExtension
                     );
 
                     if ($filteredValue instanceof NeverType) {
-                        unset($arrayType->shape[$key]);
+                        $arrayType->removeItemFromArray($key);
 
                         continue;
                     }
 
-                    $arrayType->shape[$key] = (clone $filteredValue)->setRequired(false);
+                    $arrayType->shape[$key] = $filteredValue;
+                    $arrayType->removeItemFromArray($key, isCertain: false);
                 }
 
             } else {
+                $arrayType->markItemsOptional();
+
                 $narrowedItemType = (($mode === 'value' || $mode === 'both') && $arrayType->itemType !== null)
                     ? $this->narrowFilteredArgumentType(
                         callbackType: $callbackType,
@@ -585,6 +616,142 @@ class ArrayFuncCall extends FuncCallExtension
     }
 
 
+    private function handleEntryRemovingFunction(ArgumentList $argTypes, bool $keepsFirstEntry): Type
+    {
+        $arrayType = $this->getArrayArgument($argTypes);
+
+        if ($arrayType === null) {
+            return new ArrayType;
+        }
+
+        $minItems = $keepsFirstEntry && $arrayType->minItems !== null ? min($arrayType->minItems, 1) : null;
+
+        if ($arrayType->shape === []) {
+            $arrayType->markItemsOptional();
+
+        } else {
+            $keptKey = $keepsFirstEntry ? array_key_first($arrayType->shape) : null;
+
+            foreach (array_keys($arrayType->shape) as $key) {
+                if ($key !== $keptKey) {
+                    $arrayType->removeItemFromArray($key, isCertain: false);
+                }
+            }
+        }
+
+        $arrayType->minItems = $minItems;
+
+        return $arrayType;
+    }
+
+
+    private function handleKeyComparingFunction(Config $config, ArgumentList $argTypes, bool $keepsMatchingKeys): Type
+    {
+        $arrayType = $this->getArrayArgument($argTypes);
+
+        if ($arrayType === null) {
+            return new ArrayType;
+        }
+
+        if ($arrayType->shape === []) {
+            return $arrayType->markItemsOptional();
+        }
+
+        $comparedArrays = [];
+        $counter = count($argTypes);
+
+        for ($i = 1; $i < $counter; $i++) {
+            $comparedArray = $argTypes->get($i)->unwrapType($config);
+            $comparedArrays[] = $comparedArray instanceof ArrayType ? $comparedArray : new ArrayType;
+        }
+
+        foreach (array_keys($arrayType->shape) as $key) {
+            $presences = array_map(fn (ArrayType $comparedArray): ?bool => $this->getKeyPresence($comparedArray, $key), $comparedArrays);
+
+            $isRemoved = in_array(! $keepsMatchingKeys, $presences, true);
+            $isKept = array_all($presences, fn (?bool $presence) => $presence === $keepsMatchingKeys);
+
+            if ($isRemoved || ! $isKept) {
+                $arrayType->removeItemFromArray($key, isCertain: $isRemoved);
+            }
+        }
+
+        return $arrayType;
+    }
+
+
+    /**
+     * True when the key is always present, false when it never is, null when it may be.
+     */
+    private function getKeyPresence(ArrayType $arrayType, int|string $key): ?bool
+    {
+        if ($arrayType->shape === []) {
+            return null;
+        }
+
+        if (! isset($arrayType->shape[$key])) {
+            return false;
+        }
+
+        return $arrayType->shape[$key]->required ? true : null;
+    }
+
+
+    private function handleArraySlice(Config $config, ArgumentList $argTypes): Type
+    {
+        $arrayType = $this->getArrayArgument($argTypes);
+
+        if ($arrayType === null) {
+            return new ArrayType;
+        }
+
+        $typePair = $arrayType->convertShapeToTypePair($config)->markItemsOptional();
+
+        return $this->getBoolArgument($argTypes, 'preserve_keys', 3, $config, default: false) === false
+            ? $typePair->renumberKeys($config)
+            : $typePair;
+    }
+
+
+    private function handleArrayReverse(Config $config, ArgumentList $argTypes): Type
+    {
+        $arrayType = $this->getArrayArgument($argTypes);
+
+        if ($arrayType === null) {
+            return new ArrayType;
+        }
+
+        $preservesKeys = $this->getBoolArgument($argTypes, 'preserve_keys', 1, $config, default: false);
+
+        if ($preservesKeys !== null
+            && $arrayType->shape !== []
+            && array_all($arrayType->shape, fn (Type $entry) => $entry->required)
+        ) {
+            $arrayType->shape = array_reverse($arrayType->shape, preserve_keys: true);
+
+            return $preservesKeys ? $arrayType : $arrayType->renumberKeys($config);
+        }
+
+        $arrayType->convertShapeToTypePair($config);
+
+        return $preservesKeys === false ? $arrayType->renumberKeys($config) : $arrayType->reorderItems($config);
+    }
+
+
+    private function getBoolArgument(ArgumentList $argTypes, string $name, int $position, Config $config, bool $default): ?bool
+    {
+        $index = $argTypes->indexForParameter($name, $position);
+
+        if ($index === null) {
+            return $default;
+        }
+
+        $argType = $argTypes->get($index)->unwrapType($config);
+
+        return $argType instanceof BoolType ? $argType->value : null;
+    }
+
+
     private function handleArrayMerge(Config $config, ArgumentList $argTypes): Type
     {
         $mergedArray = new ArrayType;
@@ -594,14 +761,14 @@ class ArrayFuncCall extends FuncCallExtension
         $counter = count($argTypes);
 
         for ($i = 0; $i < $counter; $i++) {
-            $argType = $argTypes->get($i);
+            $argType = $this->getArrayArgument($argTypes, $i);
 
-            if (! ($argType instanceof ArrayType)) {
+            if ($argType === null) {
                 return new ArrayType;
             }
 
             if ($argType->shape && $hasShape) {
-                $mergedArray->mergeShape($argType->shape);
+                $mergedArray->mergeShape($argType->shape, isTuple: $argType->isTuple());
 
             } else {
                 $hasShape = false;
@@ -610,7 +777,7 @@ class ArrayFuncCall extends FuncCallExtension
             $typePair = $argType->convertShapeToTypePair($config);
 
             $itemTypes[] = $typePair->itemType ?? new UnknownType;
-            $keyTypes[] = $typePair->keyType ?? new UnknownType;
+            $keyTypes[] = $typePair->getRenumberedKeyType($config) ?? new IntegerType;
         }
 
         if ($hasShape) {
@@ -624,23 +791,28 @@ class ArrayFuncCall extends FuncCallExtension
     }
 
 
+    /**
+     * Argument types are shared with the scope that resolved them, so a handler changes only this copy.
+     */
+    private function getArrayArgument(ArgumentList $argTypes, int $index = 0): ?ArrayType
+    {
+        $argType = $argTypes->has($index) ? $argTypes->get($index) : null;
+
+        return $argType instanceof ArrayType ? clone $argType : null;
+    }
+
+
     private function getItemType(Config $config, ArgumentList $argTypes): Type
     {
-        $arrayType = $argTypes->has(0) ? $argTypes->get(0) : null;
-
-        if ($arrayType instanceof ArrayType) {
-            return $arrayType->convertShapeToTypePair($config)->itemType ?? new UnknownType;
-        }
-
-        return new UnknownType;
+        return $this->getArrayArgument($argTypes)?->convertShapeToTypePair($config)->itemType ?? new UnknownType;
     }
 
 
     private function getKeyType(Config $config, ArgumentList $argTypes, int $arrayArgPosition = 0): Type
     {
-        $arrayType = $argTypes->has($arrayArgPosition) ? $argTypes->get($arrayArgPosition) : null;
+        $arrayType = $this->getArrayArgument($argTypes, $arrayArgPosition);
 
-        if ($arrayType instanceof ArrayType) {
+        if ($arrayType !== null) {
             return $arrayType->convertShapeToTypePair($config)->keyType ?? new IntegerType;
         }
 

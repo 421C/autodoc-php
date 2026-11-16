@@ -4,6 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
+use ArrayObject;
 use ReflectionIntersectionType;
 use ReflectionNamedType;
 use ReflectionType;
@@ -168,6 +169,47 @@ abstract class Type
         return $this;
     }
 
+
+    /**
+     * @param TypeSchema $schema
+     * @return TypeSchema
+     */
+    protected function withOwnMetadata(array $schema): array
+    {
+        return array_merge($schema, array_filter([
+            'description' => $this->description,
+            'examples' => $this->examples ? array_values($this->examples) : null,
+            'deprecated' => $this->deprecated,
+            'x-deprecated-description' => $this->deprecatedDescription,
+        ]));
+    }
+
+
+    /**
+     * @param array<int|string, Type> $properties
+     * @return array<string, TypeSchemaRecursive>
+     */
+    protected static function propertySchemas(array $properties, Config $config): array
+    {
+        return array_combine(
+            array_map(fn ($name) => (string) $name, array_keys($properties)),
+            array_map(fn (Type $property) => $property->toSchema($config), $properties),
+        );
+    }
+
+    /**
+     * @param array<int|string, Type> $properties
+     * @return list<string>
+     */
+    protected static function requiredPropertyNames(array $properties): array
+    {
+        return array_map(
+            fn ($name) => (string) $name,
+            array_keys(array_filter($properties, fn (Type $property) => $property->required)),
+        );
+    }
+
+
     public function getContentType(): string
     {
         if ($this->contentType) {
@@ -250,6 +292,14 @@ abstract class Type
 
     public function isSubTypeOf(Type $superType, Config $config): bool
     {
+        if ($this instanceof UnresolvedType) {
+            return $this->unwrapType($config)->isSubTypeOf($superType, $config);
+        }
+
+        if ($superType instanceof UnresolvedType) {
+            return $this->isSubTypeOf($superType->unwrapType($config), $config);
+        }
+
         if ($this instanceof NeverType) {
             return true;
         }
@@ -260,6 +310,10 @@ abstract class Type
 
         if ($this instanceof UnknownType) {
             return false;
+        }
+
+        if ($this instanceof UnionType) {
+            return $this->types !== [] && array_all($this->types, fn (Type $type) => $type->isSubTypeOf($superType, $config));
         }
 
         if ($superType instanceof UnionType) {
@@ -875,16 +929,23 @@ abstract class Type
     /**
      * Build a Type from a literal PHP value, such as a parameter's default value.
      */
-    public static function fromValue(mixed $value): Type
+    public static function fromValue(mixed $value, ?Config $config = null): Type
     {
         if (is_array($value)) {
-            $arrayType = new ArrayType;
+            $itemTypes = array_map(fn (mixed $item) => self::fromValue($item, $config)->setRequired(true), $value);
 
-            foreach ($value as $key => $item) {
-                $arrayType->shape[$key] = self::fromValue($item)->setRequired(true);
+            $resolvePartialShapes = $config->data['arrays']['resolve_partial_shapes'] ?? false;
+
+            if ($itemTypes && array_is_list($itemTypes) && ! $resolvePartialShapes) {
+                $itemType = new UnionType($itemTypes);
+
+                return new ArrayType(
+                    itemType: $config ? $itemType->unwrapType($config) : $itemType,
+                    keyType: new IntegerType,
+                );
             }
 
-            return $arrayType;
+            return new ArrayType(shape: $itemTypes);
         }
 
         return match (true) {

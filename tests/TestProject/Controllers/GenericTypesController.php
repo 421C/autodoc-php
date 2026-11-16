@@ -11,6 +11,8 @@ use AutoDoc\Tests\TestProject\Entities\GenericContainerChild;
 use AutoDoc\Tests\TestProject\Entities\GenericSubClass;
 use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 use AutoDoc\Tests\TestProject\Entities\StateEnum;
+use Closure;
+use LogicException;
 
 /**
  * Tests for generic types, class-string, templates.
@@ -195,8 +197,8 @@ class GenericTypesController
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            'type' => 'object',
-                            'properties' => [
+                            'type' => 'array',
+                            'prefixItems' => [
                                 [
                                     'type' => 'integer',
                                     'enum' => [
@@ -208,10 +210,8 @@ class GenericTypesController
                                     'type' => 'string',
                                 ],
                             ],
-                            'required' => [
-                                '0',
-                                '1',
-                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
                         ],
                     ],
                 ],
@@ -498,10 +498,8 @@ class GenericTypesController
     ])]
     public function offsetAccess(): array
     {
-        return [
-            'literalOffset' => 1,
-            'typeOffset' => 'first',
-        ];
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
     }
 
 
@@ -609,14 +607,150 @@ class GenericTypesController
     ])]
     public function nullableDocTypes(): array
     {
-        return [
-            'stringList' => null,
-            'stringArray' => null,
-            'shape' => null,
-            'literal' => null,
-            'literals' => null,
-            'state' => null,
-        ];
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
+    }
+
+
+    /**
+     * @return array{
+     *     independentEntries: array{0?: int, 1?: string},
+     *     severalOptionalEntries: array{0: int, 1?: string, 2?: bool},
+     *     trailingEntries: list{0: int, 1?: string, 2?: bool},
+     *     singleTrailingEntry: array{0: int, 1?: string},
+     *     optionalStringKey: array{0: int, label?: string},
+     *     optionalStringKeyFirst: array{label?: string, 0: int},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'independentEntries' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                                ['type' => 'string'],
+                                            ],
+                                            'maxItems' => 2,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                '1' => ['type' => 'string'],
+                                            ],
+                                        ],
+                                    ],
+                                ],
+                                'severalOptionalEntries' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                                ['type' => 'string'],
+                                                ['type' => 'boolean'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 3,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                '1' => ['type' => 'string'],
+                                                '2' => ['type' => 'boolean'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                                'trailingEntries' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                        ['type' => 'boolean'],
+                                    ],
+                                    'minItems' => 1,
+                                    'maxItems' => 3,
+                                ],
+                                'singleTrailingEntry' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                    ],
+                                    'minItems' => 1,
+                                    'maxItems' => 2,
+                                ],
+                                'optionalStringKey' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 1,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                '0' => ['type' => 'integer'],
+                                                'label' => ['type' => 'string'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                                'optionalStringKeyFirst' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'array',
+                                            'prefixItems' => [
+                                                ['type' => 'integer'],
+                                            ],
+                                            'minItems' => 1,
+                                            'maxItems' => 1,
+                                        ],
+                                        [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'label' => ['type' => 'string'],
+                                                '0' => ['type' => 'integer'],
+                                            ],
+                                            'required' => ['0'],
+                                        ],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'independentEntries',
+                                'severalOptionalEntries',
+                                'trailingEntries',
+                                'singleTrailingEntry',
+                                'optionalStringKey',
+                                'optionalStringKeyFirst',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function arrayAndListShapeKinds(): array
+    {
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
     }
 
 
@@ -710,14 +844,8 @@ class GenericTypesController
     ])]
     public function conditionalTypes(mixed $value): array
     {
-        return [
-            'templateSubject' => 1,
-            'negatedSubject' => 1,
-            'thisSubject' => 'value',
-            'nullableBranch' => null,
-            'parameterSubject' => 1,
-            'nested' => ['value' => 'value'],
-        ];
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
     }
 
 
@@ -815,6 +943,122 @@ class GenericTypesController
 
 
     /**
+     * Template bindings from argument positions
+     *
+     * `valueOrClosure` binds nothing, since the argument could match either union member.
+     *
+     * @phpstan-ignore missingType.iterableValue
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Template bindings from argument positions',
+        'description' => '`valueOrClosure` binds nothing, since the argument could match either union member.',
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'arrayKeys' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'string',
+                                        'enum' => ['a', 'b'],
+                                    ],
+                                ],
+                                'nonNullItems' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                        'const' => 1,
+                                    ],
+                                ],
+                                'nullable' => [
+                                    'type' => 'integer',
+                                    'const' => 5,
+                                ],
+                                'bracketArrayItem' => [
+                                    'type' => 'integer',
+                                    'enum' => [1, 2],
+                                ],
+                                'nestedListItem' => [
+                                    'type' => 'integer',
+                                    'enum' => [1, 2],
+                                ],
+                                'valueOrClosure' => [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'required' => ['arrayKeys', 'nonNullItems', 'nullable', 'bracketArrayItem', 'nestedListItem', 'valueOrClosure'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function templateBindingPositions(): array
+    {
+        return [
+            'arrayKeys' => $this->templateArrayKeys(['a' => 1, 'b' => 2]),
+            'nonNullItems' => $this->templateWithoutNullItems(['a' => 1, 'b' => null]),
+            'nullable' => $this->templateNullable(rand(0, 1) ? 5 : null),
+            'bracketArrayItem' => $this->templateBracketArrayItem([1, 2]),
+            'nestedListItem' => $this->templateNestedListItem(['a' => [1, 2]]),
+            'valueOrClosure' => $this->templateValueOrClosure(5),
+        ];
+    }
+
+
+    /**
+     * Template binding from a variable
+     *
+     * The variable keeps its shape after the call binds a template from it.
+     *
+     * @phpstan-ignore missingType.iterableValue
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Template binding from a variable',
+        'description' => 'The variable keeps its shape after the call binds a template from it.',
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'keys' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'string',
+                                        'enum' => ['a', 'b'],
+                                    ],
+                                ],
+                                'variableAfterCall' => [
+                                    'type' => 'integer',
+                                    'const' => 1,
+                                ],
+                            ],
+                            'required' => ['keys', 'variableAfterCall'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function templateBindingFromVariable(): array
+    {
+        $items = ['a' => 1, 'b' => 'x'];
+
+        return [
+            'keys' => $this->templateArrayKeys($items),
+            'variableAfterCall' => $items['a'],
+        ];
+    }
+
+
+    /**
      * @template TClass of GenericClass
      * @template TParam
      *
@@ -832,5 +1076,104 @@ class GenericTypesController
     private function getGenericClassInstanceWithoutPhpDoc(string $className, mixed $classConstructorParam): mixed
     {
         return new $className($classConstructorParam);
+    }
+
+
+    /**
+     * An unknown analyzed type leaves a route's PHPDoc `@return` type in place.
+     */
+    private function opaquePayload(): mixed
+    {
+        return json_decode('null', true);
+    }
+
+
+    /**
+     * @template TKey of array-key
+     *
+     * @param array<TKey, mixed> $items
+     *
+     * @return list<TKey>
+     */
+    private function templateArrayKeys(array $items): array
+    {
+        return array_keys($items);
+    }
+
+
+    /**
+     * @template TKey of array-key
+     * @template TValue
+     *
+     * @param array<TKey, TValue|null> $items
+     *
+     * @return array<TKey, TValue>
+     */
+    private function templateWithoutNullItems(array $items): array
+    {
+        return array_filter($items, fn ($item) => $item !== null);
+    }
+
+
+    /**
+     * @template T
+     *
+     * @param ?T $value
+     *
+     * @return T
+     */
+    private function templateNullable(mixed $value): mixed
+    {
+        return $value ?? throw new LogicException;
+    }
+
+
+    /**
+     * @template T
+     *
+     * @param T[] $items
+     *
+     * @return T
+     */
+    private function templateBracketArrayItem(array $items): mixed
+    {
+        foreach ($items as $item) {
+            return $item;
+        }
+
+        throw new LogicException;
+    }
+
+
+    /**
+     * @template K of array-key
+     * @template V
+     *
+     * @param array<K, list<V>> $groups
+     *
+     * @return V
+     */
+    private function templateNestedListItem(array $groups): mixed
+    {
+        foreach ($groups as $group) {
+            foreach ($group as $item) {
+                return $item;
+            }
+        }
+
+        throw new LogicException;
+    }
+
+
+    /**
+     * @template T
+     *
+     * @param T|(Closure(): T) $value
+     *
+     * @return T
+     */
+    private function templateValueOrClosure(mixed $value): mixed
+    {
+        return $value instanceof Closure ? $value() : $value;
     }
 }

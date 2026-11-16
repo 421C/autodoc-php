@@ -3,8 +3,12 @@
 namespace AutoDoc\Analyzer\Flow;
 
 use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 
+/**
+ * @phpstan-import-type PathKey from ArrayType
+ */
 class ScopeEventLog
 {
     /** @var ScopeEvent[] */
@@ -97,7 +101,7 @@ class ScopeEventLog
      * Add attributes to the variable's type or to the nested type at `$path`.
      *
      * @param array<int|string, Type> $attributes
-     * @param list<int|string|null> $path
+     * @param list<PathKey> $path
      */
     public function mutate(
         string $varName,
@@ -106,6 +110,7 @@ class ScopeEventLog
         int $endFilePos = 0,
         array $path = [],
         ?Type $dynamicAttribute = null,
+        ?Type $dynamicKey = null,
     ): void {
         $changes = ['attributes' => $attributes, 'mutationPath' => $path];
 
@@ -113,11 +118,30 @@ class ScopeEventLog
             $changes['dynamicAttribute'] = $dynamicAttribute;
         }
 
+        if ($dynamicKey !== null) {
+            $changes['dynamicKey'] = $dynamicKey;
+        }
+
         $this->events[] = new ScopeEvent(
             type: ScopeEventType::Mutate,
             varName: $varName,
             branchPath: $this->getBranchPathAtPosition($startFilePos),
             changes: $changes,
+            startFilePos: $startFilePos,
+            endFilePos: max($endFilePos, $startFilePos),
+        );
+    }
+
+    /**
+     * @param non-empty-list<PathKey> $path
+     */
+    public function unset(string $varName, array $path, int $startFilePos, int $endFilePos): void
+    {
+        $this->events[] = new ScopeEvent(
+            type: ScopeEventType::Unset,
+            varName: $varName,
+            branchPath: $this->getBranchPathAtPosition($startFilePos),
+            changes: ['unsetPath' => $path],
             startFilePos: $startFilePos,
             endFilePos: max($endFilePos, $startFilePos),
         );

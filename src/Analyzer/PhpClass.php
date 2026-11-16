@@ -6,10 +6,6 @@ use AutoDoc\Analyzer\Ast\SymbolNameResolver;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
 use AutoDoc\Analyzer\DocBlock\PhpDocBinding;
 use AutoDoc\DataTypes\ArrayType;
-use AutoDoc\DataTypes\BoolType;
-use AutoDoc\DataTypes\FloatType;
-use AutoDoc\DataTypes\IntegerType;
-use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -363,33 +359,7 @@ class PhpClass
             return new UnknownType;
         }
 
-        $value = $classConstants[$name];
-
-        if (is_string($value)) {
-            return new StringType($value);
-        }
-
-        if (is_int($value)) {
-            return new IntegerType($value);
-        }
-
-        if (is_float($value)) {
-            return new FloatType($value);
-        }
-
-        if (is_array($value)) {
-            return new ArrayType;
-        }
-
-        if (is_bool($value)) {
-            return new BoolType($value);
-        }
-
-        if ($value === null) {
-            return new NullType;
-        }
-
-        return new UnknownType;
+        return Type::fromValue($classConstants[$name], $this->scope->config);
     }
 
 

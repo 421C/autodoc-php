@@ -585,6 +585,157 @@ final class TypeScriptSchemaTest extends TestCase
     }
 
     #[Test]
+    public function tupleWithOptionalTrailingElement(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1?: string} */
+            type OptionalTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1?: string} */
+            type OptionalTuple = [number, string?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function optionalTupleElementWithUnionTypeIsParenthesized(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1?: int|string} */
+            type OptionalUnionTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1?: int|string} */
+            type OptionalUnionTuple = [number, (number|string)?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function multilineTupleWithOptionalTrailingElement(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0: int, 1: string, 2: bool, 3?: int|string} */
+            type LongOptionalTuple = unknown
+            ',
+            expected: '
+            /** @autodoc array{0: int, 1: string, 2: bool, 3?: int|string} */
+            type LongOptionalTuple = [
+                number,
+                string,
+                boolean,
+                (number|string)?,
+            ]
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithOptionalTupleResponseBecomesType(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc POST /api/test/basicresponses/tuple-with-trailing-optional-entry */
+            interface OptionalTupleResponse {
+            }
+            ',
+            expected: '
+            /** @autodoc POST /api/test/basicresponses/tuple-with-trailing-optional-entry */
+            type OptionalTupleResponse = [number, string?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithShapeThatMayEncodeAsAListBecomesType(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0?: int, 1: string} */
+            interface ListKeyedShape {
+            }
+            ',
+            expected: '
+            /** @autodoc array{0?: int, 1: string} */
+            type ListKeyedShape = [number, string]|{
+                \'0\'?: number
+                \'1\': string
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function interfaceDeclarationWithIntKeyedObjectShapeStaysInterface(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{1: int, 2?: string} */
+            interface IntKeyedShape {
+            }
+            ',
+            expected: '
+            /** @autodoc array{1: int, 2?: string} */
+            interface IntKeyedShape {
+                \'1\': number
+                \'2\'?: string
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function shapeWithIndependentOptionalEntriesIsATupleOrAnObject(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc array{0?: int, 1?: string} */
+            type IndependentEntries = unknown
+            ',
+            expected: '
+            /** @autodoc array{0?: int, 1?: string} */
+            type IndependentEntries = [number?, string?]|{
+                \'0\'?: number
+                \'1\'?: string
+            }
+            ',
+        );
+    }
+
+    #[Test]
+    public function listShapeWithTrailingOptionalEntriesStaysATuple(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc list{0: int, 1?: string, 2?: bool} */
+            type TrailingEntries = unknown
+            ',
+            expected: '
+            /** @autodoc list{0: int, 1?: string, 2?: bool} */
+            type TrailingEntries = [number, string?, boolean?]
+            ',
+        );
+    }
+
+    #[Test]
+    public function filteredListIsAnArrayOrARecord(): void
+    {
+        $this->assertTypeScriptGeneratedCorrectly(
+            input: '
+            /** @autodoc POST /api/test/arrayoperations/filtered-list */
+            ',
+            expected: '
+            /** @autodoc POST /api/test/arrayoperations/filtered-list */
+            type FilteredListResponse = number[]|Record<string, number>
+            ',
+        );
+    }
+
+    #[Test]
     public function controllerMethodWithIntersectionType(): void
     {
         $this->assertTypeScriptGeneratedCorrectly(

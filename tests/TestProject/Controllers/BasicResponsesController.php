@@ -17,6 +17,13 @@ use Traversable;
  */
 class BasicResponsesController
 {
+    private const array PLANET = [
+        'name' => 'Mars',
+        'moons' => ['Phobos', 'Deimos'],
+    ];
+
+    private const array IDS = [1, 2, 3];
+
     /**
      * Array shape from return tag
      *
@@ -223,8 +230,8 @@ class BasicResponsesController
                 'content' => [
                     'application/json' => [
                         'schema' => [
-                            'type' => 'object',
-                            'properties' => [
+                            'type' => 'array',
+                            'prefixItems' => [
                                 [
                                     'type' => 'boolean',
                                 ],
@@ -235,11 +242,8 @@ class BasicResponsesController
                                     'type' => 'null',
                                 ],
                             ],
-                            'required' => [
-                                '0',
-                                '1',
-                                '2',
-                            ],
+                            'minItems' => 3,
+                            'maxItems' => 3,
                         ],
                     ],
                 ],
@@ -248,6 +252,296 @@ class BasicResponsesController
         ],
     ])]
     public function tupleWithBoolsAndNull() {}
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'const' => 'a',
+                                    'type' => 'string',
+                                ],
+                                [
+                                    'const' => 2,
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function tupleWithExplicitListKeys(): mixed
+    {
+        return [0 => 'a', 1 => 2];
+    }
+
+
+    /**
+     * @return array{0: int, 1?: string}
+     *
+     * @phpstan-ignore return.missing
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'string',
+                                ],
+                            ],
+                            'minItems' => 1,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function tupleWithTrailingOptionalEntry() {}
+
+
+    /**
+     * @return array{0?: int, 1: string}
+     *
+     * @phpstan-ignore return.missing
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'anyOf' => [
+                                [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        ['type' => 'integer'],
+                                        ['type' => 'string'],
+                                    ],
+                                    'minItems' => 2,
+                                    'maxItems' => 2,
+                                ],
+                                [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        0 => [
+                                            'type' => 'integer',
+                                        ],
+                                        1 => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        '1',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function listKeyedShapeWithOptionalFirstEntry() {}
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'anyOf' => [
+                                    [
+                                        'const' => 'a',
+                                        'type' => 'string',
+                                    ],
+                                    [
+                                        'const' => 2,
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'string',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 2,
+                            'maxItems' => 2,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function keylessArrayLiteral(): mixed
+    {
+        return ['a', 2];
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => [
+                                    'type' => 'string',
+                                    'const' => 'Mars',
+                                ],
+                                'moons' => [
+                                    'type' => 'array',
+                                    'items' => [
+                                        'type' => 'string',
+                                        'enum' => ['Phobos', 'Deimos'],
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'name',
+                                'moons',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'name' => [
+                                    'type' => 'string',
+                                ],
+                                'moons' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'minItems' => 2,
+                                    'maxItems' => 2,
+                                ],
+                            ],
+                            'required' => [
+                                'name',
+                                'moons',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function associativeArrayConstant(): mixed
+    {
+        return self::PLANET;
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'integer',
+                                'enum' => [1, 2, 3],
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    #[ExpectedOperationSchema('resolvePartialArrayShapes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'array',
+                            'prefixItems' => [
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                                [
+                                    'type' => 'integer',
+                                ],
+                            ],
+                            'minItems' => 3,
+                            'maxItems' => 3,
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function listArrayConstant(): mixed
+    {
+        return self::IDS;
+    }
 
 
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
@@ -453,10 +747,73 @@ class BasicResponsesController
     ])]
     public function arrayKeyDocType(): array
     {
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
+    }
+
+
+    /**
+     * Literal refining the return shape
+     *
+     * The returned literal fits the `@return` shape, so its values are documented, as for a scalar return.
+     *
+     * @return array{
+     *     status: string,
+     *     state: int|string,
+     *     nested: array{count: int},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Literal refining the return shape',
+        'description' => 'The returned literal fits the `@return` shape, so its values are documented, as for a scalar return.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'status' => [
+                                    'type' => 'string',
+                                    'const' => 'ok',
+                                ],
+                                'state' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'integer',
+                                            'const' => 0,
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                            'const' => 'off',
+                                        ],
+                                    ],
+                                ],
+                                'nested' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'count' => [
+                                            'type' => 'integer',
+                                            'const' => 2,
+                                        ],
+                                    ],
+                                    'required' => ['count'],
+                                ],
+                            ],
+                            'required' => ['status', 'state', 'nested'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function literalRefiningReturnShape(): array
+    {
         return [
-            'key' => 'id',
-            'nullableKey' => null,
-            'keyed' => ['id' => 'first'],
+            'status' => 'ok',
+            'state' => rand(0, 1) ? 0 : 'off',
+            'nested' => ['count' => 2],
         ];
     }
 
@@ -674,5 +1031,14 @@ class BasicResponsesController
     public function deprecatedPropertyMessages(): ClassWithDeprecatedProperties
     {
         return new ClassWithDeprecatedProperties;
+    }
+
+
+    /**
+     * An unknown analyzed type leaves a route's PHPDoc `@return` type in place.
+     */
+    private function opaquePayload(): mixed
+    {
+        return json_decode('null', true);
     }
 }

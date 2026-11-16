@@ -11,6 +11,8 @@ use AutoDoc\DataTypes\UnionType;
 
 /**
  * Applies attribute mutations to a resolved variable type.
+ *
+ * @phpstan-import-type PathKey from ArrayType
  */
 final readonly class AttributeMutationApplier
 {
@@ -19,11 +21,9 @@ final readonly class AttributeMutationApplier
     ) {}
 
     /**
-     * Merge attributes into `$baseType`, optionally at `$mutationPath`.
-     * Mutations to a shared `itemType` stay certain only when `$readPath`
-     * targets the same element.
+     * A write through a shared `itemType` stays certain only when `$readPath` reads that same element.
      *
-     * @param list<int|string|null> $mutationPath
+     * @param list<PathKey> $mutationPath
      * @param array<int|string, Type> $attributes
      * @param list<int|string> $readPath
      */
@@ -34,6 +34,7 @@ final readonly class AttributeMutationApplier
         bool $isCertain,
         array $readPath = [],
         ?Type $dynamicAttribute = null,
+        ?Type $dynamicKey = null,
     ): ?Type {
         if ($attributes === [] && $dynamicAttribute === null) {
             return $baseType;
@@ -49,6 +50,7 @@ final readonly class AttributeMutationApplier
                 isCertain: true,
                 readPath: $readPath,
                 dynamicAttribute: $dynamicAttribute,
+                dynamicKey: $dynamicKey,
             );
 
             if ($mutatedArrayType === null) {
@@ -81,6 +83,7 @@ final readonly class AttributeMutationApplier
                     isCertain: $isCertain,
                     readPath: $readPath,
                     dynamicAttribute: $dynamicAttribute,
+                    dynamicKey: $dynamicKey,
                 ) ?? $typeVariant,
                 $baseType->types,
             );
@@ -93,7 +96,7 @@ final readonly class AttributeMutationApplier
                 $baseType = $this->mergeAttribute($baseType, $key, $attributeType, $isCertain, $readPath);
             }
 
-            $baseType = $this->mergeDynamicAttribute($baseType, $dynamicAttribute, $isCertain);
+            $baseType = $this->mergeDynamicAttribute($baseType, $dynamicAttribute, $isCertain, $dynamicKey);
 
             return $baseType;
         }
@@ -101,13 +104,15 @@ final readonly class AttributeMutationApplier
         $pathKey = $mutationPath[0];
         $remainingPath = array_slice($mutationPath, 1);
 
-        if ($pathKey === null) {
+        if ($pathKey === null || $pathKey instanceof Type) {
             return $this->applyAtDynamicPath(
                 baseType: $baseType,
+                pathKey: $pathKey,
                 remainingPath: $remainingPath,
                 attributes: $attributes,
                 isCertain: $isCertain,
                 dynamicAttribute: $dynamicAttribute,
+                dynamicKey: $dynamicKey,
             );
         }
 
@@ -125,6 +130,7 @@ final readonly class AttributeMutationApplier
                     isCertain: $isCertain,
                     readPath: $readPathTail,
                     dynamicAttribute: $dynamicAttribute,
+                    dynamicKey: $dynamicKey,
                 );
 
                 if ($createdPropertyType === null) {
@@ -146,6 +152,7 @@ final readonly class AttributeMutationApplier
                 isCertain: $isCertain,
                 readPath: $readPathTail,
                 dynamicAttribute: $dynamicAttribute,
+                dynamicKey: $dynamicKey,
             );
 
             if ($mergedPropertyType === null) {
@@ -169,6 +176,7 @@ final readonly class AttributeMutationApplier
                     isCertain: $isCertain,
                     readPath: $readPathTail,
                     dynamicAttribute: $dynamicAttribute,
+                    dynamicKey: $dynamicKey,
                 );
 
                 if ($createdElementType === null) {
@@ -191,6 +199,7 @@ final readonly class AttributeMutationApplier
                 isCertain: $isCertain && (! $isSharedItemType || $readPathIsAligned),
                 readPath: $readPathTail,
                 dynamicAttribute: $dynamicAttribute,
+                dynamicKey: $dynamicKey,
             );
 
             if ($mergedElementType === null) {
@@ -214,15 +223,17 @@ final readonly class AttributeMutationApplier
 
 
     /**
-     * @param list<int|string|null> $remainingPath
+     * @param list<PathKey> $remainingPath
      * @param array<int|string, Type> $attributes
      */
     private function applyAtDynamicPath(
         Type $baseType,
+        ?Type $pathKey,
         array $remainingPath,
         array $attributes,
         bool $isCertain,
         ?Type $dynamicAttribute,
+        ?Type $dynamicKey,
     ): Type {
         if ($baseType instanceof ArrayType || $baseType instanceof ObjectType) {
             $baseType = $this->mapElements($baseType, fn (Type $elementType): ?Type => $this->apply(
@@ -231,19 +242,23 @@ final readonly class AttributeMutationApplier
                 attributes: $attributes,
                 isCertain: false,
                 dynamicAttribute: $dynamicAttribute,
+                dynamicKey: $dynamicKey,
             ));
 
-            if ($baseType instanceof ArrayType && $baseType->shape === [] && $baseType->itemType === null) {
+            if ($baseType instanceof ArrayType
+                && ($this->hasNoEntries($baseType) || $this->makesListAMap($baseType, $pathKey))
+            ) {
                 $createdElementType = $this->apply(
                     baseType: null,
                     mutationPath: $remainingPath,
                     attributes: $attributes,
                     isCertain: true,
                     dynamicAttribute: $dynamicAttribute,
+                    dynamicKey: $dynamicKey,
                 );
 
                 if ($createdElementType !== null) {
-                    $baseType->addItemToArray(null, $createdElementType->setRequired($isCertain), $this->scope->config);
+                    $baseType->addItemToArray($pathKey, $createdElementType->setRequired($isCertain), $this->scope->config);
                 }
             }
 
@@ -256,6 +271,7 @@ final readonly class AttributeMutationApplier
             attributes: $attributes,
             isCertain: true,
             dynamicAttribute: $dynamicAttribute,
+            dynamicKey: $dynamicKey,
         );
 
         if ($createdType === null || $isCertain) {
@@ -266,7 +282,7 @@ final readonly class AttributeMutationApplier
     }
 
 
-    private function mergeDynamicAttribute(Type $baseType, Type $attributeType, bool $isCertain): Type
+    private function mergeDynamicAttribute(Type $baseType, Type $attributeType, bool $isCertain, ?Type $key): Type
     {
         $attributeType = clone $attributeType;
 
@@ -276,21 +292,37 @@ final readonly class AttributeMutationApplier
                 $attributeType,
             ])->unwrapType($this->scope->config));
 
-            if ($baseType instanceof ArrayType && $baseType->shape === [] && $baseType->itemType === null) {
-                $baseType->addItemToArray(null, $attributeType->setRequired($isCertain), $this->scope->config);
+            if ($baseType instanceof ArrayType
+                && ($this->hasNoEntries($baseType) || $this->makesListAMap($baseType, $key))
+            ) {
+                $baseType->addItemToArray($key, $attributeType->setRequired($isCertain), $this->scope->config);
             }
 
             return $baseType;
         }
 
         $arrayType = new ArrayType;
-        $arrayType->addItemToArray(null, $attributeType->setRequired($isCertain), $this->scope->config);
+        $arrayType->addItemToArray($key, $attributeType->setRequired($isCertain), $this->scope->config);
 
         if ($isCertain) {
             return $arrayType;
         }
 
         return new UnionType([$baseType, $arrayType])->unwrapType($this->scope->config);
+    }
+
+
+    private function hasNoEntries(ArrayType $arrayType): bool
+    {
+        return $arrayType->shape === [] && $arrayType->itemType === null;
+    }
+
+
+    private function makesListAMap(ArrayType $arrayType, ?Type $key): bool
+    {
+        return $key !== null
+            && ArrayType::mayBeStoredAsStringKey($key, $this->scope->config)
+            && $arrayType->mayEncodeAsList($this->scope->config);
     }
 
 

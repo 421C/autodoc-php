@@ -2,6 +2,7 @@
 
 namespace AutoDoc\DataTypes;
 
+use AutoDoc\Analyzer\Flow\ArrayKeyUnsetApplier;
 use AutoDoc\Analyzer\Flow\AttributeMutationApplier;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\ScopeEvent;
@@ -111,7 +112,7 @@ class UnresolvedVariableType extends UnresolvedType
                     $pendingMutations[] = [$event, false];
                 }
 
-            } else if ($event->type === ScopeEventType::Mutate) {
+            } else if ($event->type === ScopeEventType::Mutate || $event->type === ScopeEventType::Unset) {
                 $pendingMutations[] = [$event, $isCertain];
 
             } else if ($isCertain) {
@@ -123,6 +124,7 @@ class UnresolvedVariableType extends UnresolvedType
         $resolvedType = $baseType?->unwrapType($this->scope->config);
         $narrowingApplier = new TypeNarrowingApplier($this->scope);
         $mutationApplier = new AttributeMutationApplier($this->scope);
+        $unsetApplier = new ArrayKeyUnsetApplier($this->scope);
 
         foreach ($pendingMutations as [$event, $isCertain]) {
             if ($event->type === ScopeEventType::Assign && isset($event->changes['type'])) {
@@ -147,6 +149,7 @@ class UnresolvedVariableType extends UnresolvedType
                         isCertain: $isCertain,
                         readPath: $readPath,
                         dynamicAttribute: $event->changes['dynamicAttribute'] ?? null,
+                        dynamicKey: $event->changes['dynamicKey'] ?? null,
                     );
                 });
 
@@ -157,6 +160,11 @@ class UnresolvedVariableType extends UnresolvedType
                         path: $event->changes['narrowingPath'] ?? [],
                         narrowing: $event->changes['narrowing'],
                     );
+                }
+
+            } else if ($event->type === ScopeEventType::Unset && isset($event->changes['unsetPath'])) {
+                if ($resolvedType !== null) {
+                    $resolvedType = $unsetApplier->apply($resolvedType, $event->changes['unsetPath'], $isCertain);
                 }
             }
         }

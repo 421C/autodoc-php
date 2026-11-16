@@ -40,7 +40,7 @@ class MediaType implements JsonSerializable
     public function jsonSerialize(): mixed
     {
         return array_filter([
-            'schema' => $this->type->toSchema($this->config),
+            'schema' => SchemaJson::castPropertiesToObjects($this->type->toSchema($this->config)),
             'encoding' => $this->encoding,
             'examples' => $this->examples,
             'example' => $this->example,

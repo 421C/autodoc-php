@@ -14,6 +14,11 @@ class ConstFetchDocTypesHolder
 
     public const int LIMIT = 10;
 
+    public const array PLANET = [
+        'name' => 'Mars',
+        'moons' => ['Phobos', 'Deimos'],
+    ];
+
     /**
      * @return array{
      *     classConstant: self::STATUS_ACTIVE,
@@ -24,6 +29,7 @@ class ConstFetchDocTypesHolder
      *     enumCase: State::One,
      *     enumWildcard: State::*,
      *     className: State::class,
+     *     arrayConstant: self::PLANET,
      * }
      */
     public function docTypes(): mixed
@@ -37,6 +43,7 @@ class ConstFetchDocTypesHolder
             'enumCase' => State::One,
             'enumWildcard' => State::Two,
             'className' => State::class,
+            'arrayConstant' => self::PLANET,
         ];
     }
 }

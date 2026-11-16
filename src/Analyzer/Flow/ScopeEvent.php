@@ -3,16 +3,21 @@
 namespace AutoDoc\Analyzer\Flow;
 
 use AutoDoc\Analyzer\Narrowing\Narrowing;
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\Type;
 
 /**
+ * @phpstan-import-type PathKey from ArrayType
+ *
  * @phpstan-type ScopeEventChanges array{
  *     type?: Type,
  *     attributes?: array<int|string, Type>,
  *     narrowing?: Narrowing,
  *     narrowingPath?: list<int|string>,
- *     mutationPath?: list<int|string|null>,
+ *     mutationPath?: list<PathKey>,
  *     dynamicAttribute?: Type,
+ *     dynamicKey?: Type,
+ *     unsetPath?: non-empty-list<PathKey>,
  * }
  */
 class ScopeEvent

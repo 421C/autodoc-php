@@ -18,7 +18,7 @@ class UnresolvedArrayKeyType extends UnresolvedType
         $type = $this->potentialArrayType->unwrapType($this->scope->config);
 
         if ($type instanceof ArrayType) {
-            return $type->convertShapeToTypePair($this->scope->config)->keyType ?? new UnionType([
+            return (clone $type)->convertShapeToTypePair($this->scope->config)->keyType ?? new UnionType([
                 new IntegerType,
                 new StringType,
             ]);

@@ -74,6 +74,23 @@ final class ConstFetchDocTypeTest extends TestCase
                     'type' => 'string',
                     'const' => StateEnum::class,
                 ],
+                'arrayConstant' => [
+                    'type' => 'object',
+                    'properties' => [
+                        'name' => [
+                            'type' => 'string',
+                            'const' => 'Mars',
+                        ],
+                        'moons' => [
+                            'type' => 'array',
+                            'items' => [
+                                'type' => 'string',
+                                'enum' => ['Phobos', 'Deimos'],
+                            ],
+                        ],
+                    ],
+                    'required' => ['name', 'moons'],
+                ],
             ],
             'required' => [
                 'classConstant',
@@ -84,6 +101,7 @@ final class ConstFetchDocTypeTest extends TestCase
                 'enumCase',
                 'enumWildcard',
                 'className',
+                'arrayConstant',
             ],
         ], $schema, 'docTypes', 'return');
     }
