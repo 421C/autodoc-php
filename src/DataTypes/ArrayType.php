@@ -217,6 +217,7 @@ class ArrayType extends Type
                 'type' => 'object',
                 'properties' => self::propertySchemas($this->shape, $config),
                 'required' => self::requiredPropertyNames($this->shape),
+                'additionalProperties' => $this->hasEntriesOutsideShape() ? $this->schemaOfEntriesOutsideShape($config) : null,
             ]);
         }
 
@@ -226,6 +227,21 @@ class ArrayType extends Type
             'minProperties' => $this->minItems,
             'maxProperties' => $this->maxItems,
         ]);
+    }
+
+
+    /**
+     * @return TypeSchema|true
+     */
+    private function schemaOfEntriesOutsideShape(Config $config): array|true
+    {
+        $itemType = $this->itemType?->unwrapType($config);
+
+        if ($itemType === null || $itemType instanceof UnknownType) {
+            return true;
+        }
+
+        return $itemType->toSchema($config);
     }
 
 
@@ -298,7 +314,7 @@ class ArrayType extends Type
     public function convertShapeToTypePair(Config $config, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
-            $hasEntriesOutsideShape = $this->hasKnownEntries();
+            $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
 
             if (! $hasEntriesOutsideShape) {
                 $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
@@ -377,7 +393,7 @@ class ArrayType extends Type
 
             $this->convertShapeToTypePair($config);
             $this->keyType = new UnionType(array_values(array_filter([
-                $this->hasKnownEntries() ? $this->keyType ?? new IntegerType : null,
+                $this->hasEntriesOutsideShape() ? $this->keyType ?? new IntegerType : null,
                 self::toStoredKeyType($key, $config),
             ])))->unwrapType($config);
             $this->itemType = $this->itemType === null ? $itemType : new UnionType([$this->itemType, $itemType])->unwrapType($config);
@@ -454,7 +470,7 @@ class ArrayType extends Type
 
         $this->minItems = null;
 
-        if ($this->hasKnownEntries()) {
+        if ($this->hasEntriesOutsideShape()) {
             $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
         }
 
@@ -473,7 +489,7 @@ class ArrayType extends Type
 
         $this->convertShapeToTypePair($config);
 
-        if ($this->hasKnownEntries()) {
+        if ($this->hasEntriesOutsideShape()) {
             $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
         }
 
@@ -543,7 +559,7 @@ class ArrayType extends Type
     }
 
 
-    private function hasKnownEntries(): bool
+    private function hasEntriesOutsideShape(): bool
     {
         return $this->itemType !== null || $this->keyType !== null;
     }
