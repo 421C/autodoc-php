@@ -298,13 +298,17 @@ class ArrayType extends Type
     public function convertShapeToTypePair(Config $config, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
-            $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
+            $hasEntriesOutsideShape = $this->hasKnownEntries();
 
-            $this->intKeyOrder = match (true) {
-                ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
-                $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
-                default => IntKeyOrder::NonSequential,
-            };
+            if (! $hasEntriesOutsideShape) {
+                $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
+
+                $this->intKeyOrder = match (true) {
+                    ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
+                    $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
+                    default => IntKeyOrder::NonSequential,
+                };
+            }
 
             $keyTypes = [];
             $itemTypes = [];
@@ -320,6 +324,11 @@ class ArrayType extends Type
                 }
 
                 $itemTypes[] = $value->unwrapType($config);
+            }
+
+            if ($hasEntriesOutsideShape) {
+                $keyTypes[] = $this->keyType ?? new IntegerType;
+                $itemTypes[] = $this->itemType ?? new UnknownType;
             }
 
             $this->keyType = new UnionType($keyTypes)->unwrapType($config);
