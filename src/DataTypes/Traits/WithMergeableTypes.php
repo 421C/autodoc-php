@@ -325,6 +325,8 @@ trait WithMergeableTypes
                 return null;
             }
 
+            $array1->mergeEntriesOutsideShape($array2, $mergeAsIntersection, $config);
+
             foreach ($array1->shape as $key => $type1) {
                 if (! isset($array2->shape[$key])) {
                     if (! $mergeAsIntersection) {

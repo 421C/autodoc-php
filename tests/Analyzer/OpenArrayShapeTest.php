@@ -4,6 +4,7 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
 use AutoDoc\OpenApi\SchemaJson;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use AutoDoc\TypeScript\TypeConverter;
@@ -26,6 +27,10 @@ final class OpenArrayShapeTest extends TestCase
     private const string NULLABLE_INTEGER_LIST_OR_MAP = '{"anyOf":[' . self::NULLABLE_INTEGER_LIST . ',' . self::NULLABLE_INTEGER_MAP . ']}';
     private const string ERROR_WITH_INTEGER_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}';
     private const string NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]}}';
+    private const string ERROR_WITH_ANY_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}';
+    private const string ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","boolean"]}}';
+    private const string ID_AND_NAME_BEFORE_BOOLEANS = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":"boolean"},"minItems":2}';
+    private const string ID_AND_NAME_BEFORE_ANY_ENTRIES = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2}';
 
     #[Test]
     public function valuesOfAMapWithANarrowedKeyIncludeItsOtherEntries(): void
@@ -1459,9 +1464,367 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
-    private function closureReturnSchema(Closure $closure): string
+    #[Test]
+    public function aUnionOfShapesDocumentsTheOtherEntriesOfEveryMember(): void
     {
+        $closures = [
+            'ternary' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithFlags(),
+            'reversedTernary' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithFlags() : OpenArrayShapeTest::errorWithCounts(),
+            'earlyReturn' => function (bool $flag) {
+                if ($flag) {
+                    return OpenArrayShapeTest::errorWithCounts();
+                }
+
+                return OpenArrayShapeTest::errorWithFlags();
+            },
+            'reassignment' => function (bool $flag) {
+                $payload = OpenArrayShapeTest::errorWithCounts();
+
+                if ($flag) {
+                    $payload = OpenArrayShapeTest::errorWithFlags();
+                }
+
+                return $payload;
+            },
+            'declaredUnion' => function () {
+                /** @var array{error: string, ...<string, int>}|array{error: string, ...<string, bool>} */
+                $payload = json_decode('{"error":"failed"}', true);
+
+                return $payload;
+            },
+            'threeMembers' => fn (int $kind) => match ($kind) {
+                1 => OpenArrayShapeTest::errorOnly(),
+                2 => OpenArrayShapeTest::errorWithCounts(),
+                default => OpenArrayShapeTest::errorWithFlags(),
+            },
+            'nullable' => fn (bool $flag, bool $other) => $flag
+                ? OpenArrayShapeTest::errorWithCounts()
+                : ($other ? OpenArrayShapeTest::errorWithFlags() : null),
+        ];
+
+        $this->assertSame(
+            [
+                'ternary' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'reversedTernary' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["boolean","integer"]}}',
+                'earlyReturn' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'reassignment' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'declaredUnion' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'threeMembers' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'nullable' => '{"type":["object","null"],"properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","boolean"]}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeWithoutOtherEntriesAddsNoneToAUnion(): void
+    {
+        $closures = [
+            'closedFirst' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorOnly() : OpenArrayShapeTest::errorWithCounts(),
+            'closedSecond' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorOnly(),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::ERROR_WITH_INTEGER_ENTRIES),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function otherEntriesOfAnyTypeStayOfAnyTypeInAUnion(): void
+    {
+        $closures = [
+            'afterIntegers' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithUnknownEntries(),
+            'beforeIntegers' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithUnknownEntries() : OpenArrayShapeTest::errorWithCounts(),
+            'afterStrings' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithNames() : OpenArrayShapeTest::errorWithUnknownEntries(),
+            'beforeStrings' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithUnknownEntries() : OpenArrayShapeTest::errorWithNames(),
+            'afterAClosedShape' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorOnly() : OpenArrayShapeTest::errorWithUnknownEntries(),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::ERROR_WITH_ANY_ENTRIES),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aUnionOfListsDocumentsTheOtherEntriesOfEveryMember(): void
+    {
+        $closures = [
+            'booleansThenStrings' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndFlags() : OpenArrayShapeTest::idNameAndLabels(),
+            'stringsThenBooleans' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndLabels() : OpenArrayShapeTest::idNameAndFlags(),
+            'closedTupleFirst' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idAndName() : OpenArrayShapeTest::idNameAndFlags(),
+            'closedTupleSecond' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndFlags() : OpenArrayShapeTest::idAndName(),
+            'anyTypeFirst' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndUnknownEntries() : OpenArrayShapeTest::idNameAndFlags(),
+            'anyTypeSecond' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndFlags() : OpenArrayShapeTest::idNameAndUnknownEntries(),
+        ];
+
+        $this->assertSame(
+            [
+                'booleansThenStrings' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":["boolean","string"]},"minItems":2}',
+                'stringsThenBooleans' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":["string","boolean"]},"minItems":2}',
+                'closedTupleFirst' => self::ID_AND_NAME_BEFORE_BOOLEANS,
+                'closedTupleSecond' => self::ID_AND_NAME_BEFORE_BOOLEANS,
+                'anyTypeFirst' => self::ID_AND_NAME_BEFORE_ANY_ENTRIES,
+                'anyTypeSecond' => self::ID_AND_NAME_BEFORE_ANY_ENTRIES,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aUnionOfShapesHasOneIndexSignatureOrRestElementInTypeScript(): void
+    {
+        $closures = [
+            'typedEntries' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithFlags(),
+            'unknownEntries' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithUnknownEntries(),
+            'openLists' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndFlags() : OpenArrayShapeTest::idNameAndLabels(),
+            'openListOfUnknown' => fn (bool $flag) => $flag ? OpenArrayShapeTest::idNameAndFlags() : OpenArrayShapeTest::idNameAndUnknownEntries(),
+        ];
+
+        $this->assertSame(
+            [
+                'typedEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: string|number|boolean',
+                    '}',
+                ]),
+                'unknownEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: unknown',
+                    '}',
+                ]),
+                'openLists' => '[number, string, ...Array<boolean|string>]',
+                'openListOfUnknown' => '[number, string, ...unknown[]]',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function readingAUnionOfShapesSeesTheOtherEntriesOfEveryMember(): void
+    {
+        $closures = [
+            'aKeyOutsideTheShape' => function (bool $flag) {
+                $payload = $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithFlags();
+
+                // @phpstan-ignore offsetAccess.notFound
+                return $payload['count'];
+            },
+            'everyValue' => function (bool $flag) {
+                $payload = $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithFlags();
+
+                return array_values($payload);
+            },
+            'everyKey' => function (bool $flag) {
+                $payload = $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithIntKeyedFlags();
+
+                return array_keys($payload);
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'aKeyOutsideTheShape' => '{"type":["integer","boolean"]}',
+                'everyValue' => '{"type":"array","items":{"type":["string","integer","boolean"]}}',
+                'everyKey' => '{"type":"array","items":{"type":["string","integer"]}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function otherEntriesOfAUnionOfShapesMergeTheWayAKnownEntryDoes(): void
+    {
+        $closures = [
+            'shapesWithTheSameKey' => fn (bool $flag) => $flag
+                ? OpenArrayShapeTest::errorWithRowsOfIntegerIds()
+                : OpenArrayShapeTest::errorWithRowsOfStringIds(),
+            'shapesInsideAKnownEntry' => fn (bool $flag) => $flag
+                ? ['data' => OpenArrayShapeTest::errorWithCounts()]
+                : ['data' => OpenArrayShapeTest::errorWithFlags()],
+            'equalTypes' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithCountsFromAlias(),
+        ];
+
+        $this->assertSame(
+            [
+                'shapesWithTheSameKey' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"object","properties":{"id":{"type":["integer","string"]}},"required":["id"]}}',
+                'shapesInsideAKnownEntry' => '{"type":"object","properties":{"data":' . self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES . '},"required":["data"]}',
+                'equalTypes' => self::ERROR_WITH_INTEGER_ENTRIES,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aUnionOfNarrowedMapsOrListsDocumentsTheOtherEntriesOfEveryMember(): void
+    {
+        $closures = [
+            'maps' => function (bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $labels = OpenArrayShapeTest::intsOrStringsByName();
+
+                if (isset($scores['total'], $labels['total'])) {
+                    return $flag ? $scores : $labels;
+                }
+
+                return null;
+            },
+            'lists' => function (bool $flag) {
+                $scores = OpenArrayShapeTest::nullableInts();
+                $labels = OpenArrayShapeTest::intsOrStrings();
+
+                if (isset($scores[0], $labels[0])) {
+                    return $flag ? $scores : $labels;
+                }
+
+                return null;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'maps' => '{"type":["object","null"],"properties":{"total":{"type":["integer","string"]}},"required":["total"],"additionalProperties":{"type":["integer","string","null"]}}',
+                'lists' => '{"type":["array","null"],"prefixItems":[{"type":["integer","string"]}],"items":{"type":["integer","string","null"]},"minItems":1}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function shapesWithDifferentKeysUniteTheirOtherEntriesOnlyWhenTheShapesAreMerged(): void
+    {
+        $closures = [
+            'extraKeyInTheSecondMember' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithNames() : OpenArrayShapeTest::errorAndCodeWithFlags(),
+            'extraKeyInTheFirstMember' => fn (bool $flag) => $flag ? OpenArrayShapeTest::errorAndCodeWithFlags() : OpenArrayShapeTest::errorWithNames(),
+        ];
+
+        $errorWithStrings = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"string"}}';
+        $errorAndCodeWithBooleans = '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"boolean"}}';
+
+        $this->assertSame(
+            [
+                'extraKeyInTheSecondMember' => '{"anyOf":[' . $errorWithStrings . ',' . $errorAndCodeWithBooleans . ']}',
+                'extraKeyInTheFirstMember' => '{"anyOf":[' . $errorAndCodeWithBooleans . ',' . $errorWithStrings . ']}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+
         $config = self::loadConfig();
+        $config->data['arrays']['merge_shapes_in_type_unions'] = true;
+
+        $this->assertSame(
+            [
+                'extraKeyInTheSecondMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error"],"additionalProperties":{"type":["string","boolean"]}}',
+                'extraKeyInTheFirstMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error"],"additionalProperties":{"type":["boolean","string"]}}',
+            ],
+            array_map(fn (Closure $closure) => $this->closureReturnSchema($closure, $config), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anIntersectionOfShapesKeepsTheOtherEntriesEveryMemberAllows(): void
+    {
+        $closures = [
+            'shapes' => function () {
+                /** @var array{error: string|int, ...<string, int|string>}&array{error: string, ...<string, int|bool>} */
+                $payload = json_decode('{"error":"failed"}', true);
+
+                return $payload;
+            },
+            'lists' => function () {
+                /** @var list{int, ...<int|string>}&list{int, ...<int|bool>} */
+                $payload = json_decode('[1]', true);
+
+                return $payload;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'shapes' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'lists' => '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"integer"},"minItems":1}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            [
+                'shapes' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: string|number',
+                    '}',
+                ]),
+                'lists' => '[number, ...number[]]',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anIntersectionOfShapesKeepsOtherEntriesThatOnlyOneMemberDescribes(): void
+    {
+        $closures = [
+            'closedFirstMember' => function () {
+                /** @var array{code: int}&array{error: string, ...<string, int>} */
+                $payload = json_decode('{"error":"failed","code":1}', true);
+
+                return $payload;
+            },
+            'anyTypeInTheFirstMember' => function () {
+                /** @var array{code: int, ...}&array{error: string, ...<string, int>} */
+                $payload = json_decode('{"error":"failed","code":1}', true);
+
+                return $payload;
+            },
+            'anyTypeInTheSecondMember' => function () {
+                /** @var array{error: string, ...<string, int>}&array{code: int, ...} */
+                $payload = json_decode('{"error":"failed","code":1}', true);
+
+                return $payload;
+            },
+        ];
+
+        $codeThenError = '{"type":"object","properties":{"code":{"type":"integer"},"error":{"type":"string"}},"required":["code","error"],"additionalProperties":{"type":"integer"}}';
+
+        $this->assertSame(
+            [
+                'closedFirstMember' => $codeThenError,
+                'anyTypeInTheFirstMember' => $codeThenError,
+                'anyTypeInTheSecondMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeNextToAMapStaysASeparateUnionMember(): void
+    {
+        $closure = fn (bool $flag) => $flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::countsByName();
+
+        $this->assertSame(
+            '{"anyOf":[' . self::ERROR_WITH_INTEGER_ENTRIES . ',{"type":"object","additionalProperties":{"type":"integer"}}]}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    private function closureReturnSchema(Closure $closure, ?Config $config = null): string
+    {
+        $config ??= self::loadConfig();
 
         $type = new PhpCallable(
             scope: new Scope($config),
@@ -1714,6 +2077,105 @@ final class OpenArrayShapeTest extends TestCase
      * @return array{int, string, ...<bool>}
      */
     private static function idNameAndFlagsUnderAnyKey(): array
+    {
+        return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return array<string, int>
+     */
+    private static function countsByName(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array{error: string}
+     */
+    private static function errorOnly(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, bool>}
+     */
+    private static function errorWithFlags(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, string>}
+     */
+    private static function errorWithNames(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<int, bool>}
+     */
+    private static function errorWithIntKeyedFlags(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, code: int, ...<string, bool>}
+     */
+    private static function errorAndCodeWithFlags(): array
+    {
+        return json_decode('{"error":"failed","code":1}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, array{id: int}>}
+     */
+    private static function errorWithRowsOfIntegerIds(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, array{id: string}>}
+     */
+    private static function errorWithRowsOfStringIds(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return list{int, string}
+     */
+    private static function idAndName(): array
+    {
+        return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return list{int, string, ...<string>}
+     */
+    private static function idNameAndLabels(): array
+    {
+        return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return list{int, string, ...}
+     */
+    private static function idNameAndUnknownEntries(): array
     {
         return json_decode('[1,"first"]', true);
     }

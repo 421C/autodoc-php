@@ -8,6 +8,7 @@ use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\IntegerType;
+use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
@@ -840,6 +841,234 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $this->assertSame([], $array->shape);
         $this->assertFalse($array->hasEntriesOutsideShape());
         $this->assertSame(IntKeyOrder::Sequential, $array->intKeyOrder);
+    }
+
+
+    #[Test]
+    public function aUnionOfShapesAllowsTheKeysOfTheOtherEntriesOfEveryMember(): void
+    {
+        $withIntKeyedBooleans = fn () => new ArrayType(
+            itemType: new BoolType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $intKeysFirst = $this->mergedArray(new UnionType([$withIntKeyedBooleans(), $this->errorWithIntegerEntries()]));
+        $stringKeysFirst = $this->mergedArray(new UnionType([$this->errorWithIntegerEntries(), $withIntKeyedBooleans()]));
+
+        $this->assertNotNull($intKeysFirst->keyType);
+        $this->assertNotNull($stringKeysFirst->keyType);
+        $this->assertSame('{"type":["integer","string"]}', $this->encodeSchema($intKeysFirst->keyType));
+        $this->assertSame('{"type":["string","integer"]}', $this->encodeSchema($stringKeysFirst->keyType));
+    }
+
+
+    #[Test]
+    public function aUnionOfOpenTuplesWithoutKeyTypesKeepsIntKeys(): void
+    {
+        $openTuple = fn (Type $itemType) => new ArrayType(
+            itemType: $itemType,
+            shape: [new IntegerType()->setRequired(true)],
+        );
+
+        $merged = $this->mergedArray(new UnionType([$openTuple(new BoolType), $openTuple(new StringType)]));
+
+        $this->assertNull($merged->keyType);
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["boolean","string"]},"minItems":1}',
+            $this->encodeSchema($merged),
+        );
+    }
+
+
+    #[Test]
+    public function aUnionWithOtherEntriesOfAnUndeclaredTypeAllowsAnyOtherEntry(): void
+    {
+        $withEntriesOfAnUndeclaredType = fn () => new ArrayType(
+            keyType: new StringType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $unions = [
+            'undeclaredFirst' => new UnionType([$withEntriesOfAnUndeclaredType(), $this->errorWithIntegerEntries()]),
+            'undeclaredSecond' => new UnionType([$this->errorWithIntegerEntries(), $withEntriesOfAnUndeclaredType()]),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($unions),
+                '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}',
+            ),
+            array_map($this->encodeSchema(...), $unions),
+        );
+    }
+
+
+    #[Test]
+    public function anIntersectionOfShapesNarrowsTheKeysAndTypesOfTheirOtherEntries(): void
+    {
+        $withBooleansUnderAnyKey = fn () => new ArrayType(
+            itemType: new BoolType,
+            keyType: new UnionType([new IntegerType, new StringType]),
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+        $withAnyTypeUnderIntKeys = fn () => new ArrayType(
+            keyType: new IntegerType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $intersections = [
+            'typedFirst' => new IntersectionType([$withBooleansUnderAnyKey(), $withAnyTypeUnderIntKeys()]),
+            'typedSecond' => new IntersectionType([$withAnyTypeUnderIntKeys(), $withBooleansUnderAnyKey()]),
+        ];
+
+        foreach ($intersections as $intersection) {
+            $merged = $this->mergedArray($intersection);
+
+            $this->assertInstanceOf(IntegerType::class, $merged->keyType);
+            $this->assertInstanceOf(BoolType::class, $merged->itemType);
+        }
+    }
+
+
+    #[Test]
+    public function anIntersectionOfShapesWhoseOtherEntriesExcludeEachOtherLeavesAClosedShape(): void
+    {
+        $errorWith = fn (Type $itemType, ?Type $keyType) => new ArrayType(
+            itemType: $itemType,
+            keyType: $keyType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $idBefore = fn (Type $itemType) => new ArrayType(
+            itemType: $itemType,
+            keyType: new IntegerType,
+            shape: [new IntegerType()->setRequired(true)],
+        );
+
+        $merged = array_map($this->mergedArray(...), [
+            'valueTypes' => new IntersectionType([$this->errorWithIntegerEntries(), $errorWith(new BoolType, new StringType)]),
+            'keyTypes' => new IntersectionType([$this->errorWithIntegerEntries(), $errorWith(new IntegerType, new IntegerType)]),
+            'keyTypesOfAMemberWithoutOne' => new IntersectionType([$this->errorWithIntegerEntries(), $errorWith(new IntegerType, null)]),
+            'valueTypesOfTuples' => new IntersectionType([$idBefore(new IntegerType), $idBefore(new BoolType)]),
+        ]);
+
+        $errorOnly = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"]}';
+        $errorOnlyInTypeScript = implode("\n", [
+            '{',
+            '    error: string',
+            '}',
+        ]);
+
+        $this->assertSame(
+            array_fill_keys(array_keys($merged), false),
+            array_map(fn (ArrayType $array) => $array->hasEntriesOutsideShape(), $merged),
+        );
+        $this->assertSame(
+            [
+                'valueTypes' => $errorOnly,
+                'keyTypes' => $errorOnly,
+                'keyTypesOfAMemberWithoutOne' => $errorOnly,
+                'valueTypesOfTuples' => '{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1,"maxItems":1}',
+            ],
+            array_map($this->encodeSchema(...), $merged),
+        );
+        $this->assertSame(
+            [
+                'valueTypes' => $errorOnlyInTypeScript,
+                'keyTypes' => $errorOnlyInTypeScript,
+                'keyTypesOfAMemberWithoutOne' => $errorOnlyInTypeScript,
+                'valueTypesOfTuples' => '[number]',
+            ],
+            array_map(fn (ArrayType $array) => $this->toTypeScript($array), $merged),
+        );
+    }
+
+
+    #[Test]
+    public function anIntersectionOfShapesWithDifferentKeysKeepsTheTypeOfEachKey(): void
+    {
+        $errorWithIntegersOrStrings = new ArrayType(
+            itemType: new UnionType([new IntegerType, new StringType]),
+            keyType: new StringType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+        $codeWithIntegers = new ArrayType(
+            itemType: new IntegerType,
+            keyType: new StringType,
+            shape: ['code' => new IntegerType()->setRequired(true)],
+        );
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema(new IntersectionType([$errorWithIntegersOrStrings, $codeWithIntegers])),
+        );
+    }
+
+
+    #[Test]
+    public function anIntersectionWithAClosedShapeKeepsTheOtherEntriesOfTheOtherMember(): void
+    {
+        $code = fn () => new ArrayType(shape: ['code' => new IntegerType()->setRequired(true)]);
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema(new IntersectionType([$this->errorWithIntegerEntries(), $code()])),
+        );
+        $this->assertSame(
+            '{"type":"object","properties":{"code":{"type":"integer"},"error":{"type":"string"}},"required":["code","error"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema(new IntersectionType([$code(), $this->errorWithIntegerEntries()])),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeIntersectedWithAMapStaysASeparateMember(): void
+    {
+        $integersByName = new ArrayType(itemType: new IntegerType, keyType: new StringType);
+
+        $this->assertSame(
+            '{"allOf":['
+                . '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}},'
+                . '{"type":"object","additionalProperties":{"type":"integer"}}'
+                . ']}',
+            $this->encodeSchema(new IntersectionType([$this->errorWithIntegerEntries(), $integersByName])),
+        );
+    }
+
+
+    #[Test]
+    public function mergingShapesLeavesTheOtherEntriesOfEachMemberUntouched(): void
+    {
+        $withIntegers = $this->errorWithIntegerEntries();
+        $withIntegersOrStrings = new ArrayType(
+            itemType: new UnionType([new IntegerType, new StringType]),
+            keyType: new StringType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $this->mergedArray(new UnionType([$withIntegers, $withIntegersOrStrings]));
+        $this->mergedArray(new UnionType([$withIntegersOrStrings, $withIntegers]));
+        $this->mergedArray(new IntersectionType([$withIntegers, $withIntegersOrStrings]));
+        $this->mergedArray(new IntersectionType([$withIntegersOrStrings, $withIntegers]));
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema($withIntegers),
+        );
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","string"]}}',
+            $this->encodeSchema($withIntegersOrStrings),
+        );
+    }
+
+
+    private function mergedArray(UnionType|IntersectionType $type): ArrayType
+    {
+        $merged = $type->unwrapType(self::loadConfig());
+
+        $this->assertInstanceOf(ArrayType::class, $merged);
+
+        return $merged;
     }
 
 

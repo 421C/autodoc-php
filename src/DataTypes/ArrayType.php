@@ -594,6 +594,57 @@ class ArrayType extends Type
     }
 
 
+    public function mergeEntriesOutsideShape(self $other, bool $asIntersection, Config $config): void
+    {
+        if (! $other->hasEntriesOutsideShape()) {
+            return;
+        }
+
+        if (! $this->hasEntriesOutsideShape()) {
+            $this->itemType = $other->itemType;
+            $this->keyType = $other->keyType;
+
+            return;
+        }
+
+        $neitherDeclaresAKeyType = $this->keyType === null && $other->keyType === null;
+        $itemTypes = [$this->itemType ?? new UnknownType, $other->itemType ?? new UnknownType];
+        $keyTypes = [$this->keyType ?? new IntegerType, $other->keyType ?? new IntegerType];
+
+        $itemType = $asIntersection
+            ? new IntersectionType($itemTypes)->unwrapType($config)
+            : self::unionUnlessAnyIsUnknown($itemTypes, $config);
+        $keyType = $asIntersection
+            ? new IntersectionType($keyTypes)->unwrapType($config)
+            : new UnionType($keyTypes)->unwrapType($config);
+
+        if ($itemType instanceof NeverType || $keyType instanceof NeverType) {
+            $this->itemType = null;
+            $this->keyType = null;
+
+            return;
+        }
+
+        $this->itemType = $itemType;
+        $this->keyType = $neitherDeclaresAKeyType ? null : $keyType;
+    }
+
+
+    /**
+     * @param list<Type> $types
+     */
+    private static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
+    {
+        $types = array_map(fn (Type $type) => $type->unwrapType($config), $types);
+
+        if (array_any($types, fn (Type $type) => $type instanceof UnknownType)) {
+            return new UnknownType;
+        }
+
+        return new UnionType($types)->unwrapType($config);
+    }
+
+
     /**
      * @param array<int|string, Type> $shape
      */
