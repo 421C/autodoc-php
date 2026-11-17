@@ -47,8 +47,8 @@ class ArrayType extends Type
 
     public function mayEncodeAsList(Config $config): bool
     {
-        if ($this->shape === []) {
-            return $this->intKeyOrder !== IntKeyOrder::NonSequential && ! self::includesStringKeys($this->keyType, $config);
+        if (! $this->isClosedShape()) {
+            return $this->intKeyOrder !== IntKeyOrder::NonSequential && ! $this->mayHaveStringKeys($config);
         }
 
         [$listEntries, $otherEntries] = self::splitListEntries($this->shape);
@@ -59,11 +59,24 @@ class ArrayType extends Type
 
     public function mayEncodeAsObject(Config $config): bool
     {
-        if ($this->shape === []) {
+        if (! $this->isClosedShape()) {
             return $this->intKeyOrder !== IntKeyOrder::Sequential || ! $this->mayEncodeAsList($config);
         }
 
         return ! $this->isTuple();
+    }
+
+
+    private function isClosedShape(): bool
+    {
+        return $this->shape !== [] && ! $this->hasEntriesOutsideShape();
+    }
+
+
+    private function mayHaveStringKeys(Config $config): bool
+    {
+        return array_any(array_keys($this->shape), fn (int|string $key) => is_string($key))
+            || self::includesStringKeys($this->keyType, $config);
     }
 
 
@@ -121,6 +134,10 @@ class ArrayType extends Type
     {
         if ($listEntries === []) {
             return false;
+        }
+
+        if ($this->hasEntriesOutsideShape()) {
+            return $this->intKeyOrder !== IntKeyOrder::NonSequential && $otherEntries === [];
         }
 
         return match ($this->intKeyOrder) {
@@ -202,9 +219,11 @@ class ArrayType extends Type
             ]);
         }
 
+        $typeOfEveryEntry = (clone $this)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+
         return array_filter([
             'type' => 'array',
-            'items' => ($this->itemType ?? new UnknownType)->toSchema($config),
+            'items' => $typeOfEveryEntry->toSchema($config),
             'minItems' => $this->minItems,
             'maxItems' => $this->maxItems,
         ]);

@@ -2,6 +2,7 @@
 
 namespace AutoDoc\Tests\DataTypes;
 
+use AutoDoc\Analyzer\IntKeyOrder;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
@@ -10,6 +11,7 @@ use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
+use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\OpenApi\SchemaJson;
 use AutoDoc\Tests\Traits\LoadsConfig;
@@ -462,6 +464,236 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $array = new ArrayType(shape: [new IntegerType()->setRequired(true), new StringType]);
 
         $this->assertSame('[number, string?]', $this->toTypeScript($array));
+    }
+
+
+    #[Test]
+    public function theKeyOrderDecidesWhetherAnOpenTupleIsAListOrAnObject(): void
+    {
+        $openTuple = fn (IntKeyOrder $intKeyOrder) => new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: [new IntegerType()->setRequired(true)],
+            intKeyOrder: $intKeyOrder,
+        );
+
+        $list = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"},"minItems":1}';
+        $object = '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":"boolean"}}';
+        $tsList = '[number, ...boolean[]]';
+        $tsObject = implode("\n", [
+            '{',
+            "    '0': number",
+            '    [key: string]: number|boolean',
+            '}',
+        ]);
+
+        $this->assertSame($list, $this->encodeSchema($openTuple(IntKeyOrder::Sequential)));
+        $this->assertSame($tsList, $this->toTypeScript($openTuple(IntKeyOrder::Sequential)));
+
+        $this->assertSame('{"anyOf":[' . $list . ',' . $object . ']}', $this->encodeSchema($openTuple(IntKeyOrder::MaybeSequential)));
+        $this->assertSame($tsList . '|' . $tsObject, $this->toTypeScript($openTuple(IntKeyOrder::MaybeSequential)));
+
+        $this->assertSame($object, $this->encodeSchema($openTuple(IntKeyOrder::NonSequential)));
+        $this->assertSame($tsObject, $this->toTypeScript($openTuple(IntKeyOrder::NonSequential)));
+    }
+
+
+    #[Test]
+    public function aStringKeyNextToIntKeyedEntriesOutsideTheShapeMakesAnObject(): void
+    {
+        $array = new ArrayType(
+            itemType: new IntegerType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema($array),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    error: string',
+                '    [key: string]: string|number',
+                '}',
+            ]),
+            $this->toTypeScript($array),
+        );
+    }
+
+
+    #[Test]
+    public function aTupleNextToEntriesOutsideTheShapeWhoseKeysMayBeStringsMakesAnObject(): void
+    {
+        $tupleWithKeysOutsideShape = fn (Type $keyType) => new ArrayType(
+            itemType: new BoolType,
+            keyType: $keyType,
+            shape: [new IntegerType()->setRequired(true), new StringType()->setRequired(true)],
+        );
+
+        $arrays = [
+            'stringKeys' => $tupleWithKeysOutsideShape(new StringType),
+            'intOrStringKeys' => $tupleWithKeysOutsideShape(new UnionType([new IntegerType, new StringType])),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($arrays),
+                '{"type":"object","properties":{"0":{"type":"integer"},"1":{"type":"string"}},"required":["0","1"],"additionalProperties":{"type":"boolean"}}',
+            ),
+            array_map($this->encodeSchema(...), $arrays),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($arrays), implode("\n", [
+                '{',
+                "    '0': number",
+                "    '1': string",
+                '    [key: string]: number|string|boolean',
+                '}',
+            ])),
+            array_map(fn (ArrayType $array) => $this->toTypeScript($array), $arrays),
+        );
+    }
+
+
+    #[Test]
+    public function aKnownEntryAfterAnUnknownOneJoinsTheItemsOfAPlainList(): void
+    {
+        $arrays = [
+            'sixthEntry' => new ArrayType(
+                itemType: new BoolType,
+                keyType: new IntegerType,
+                shape: [5 => new IntegerType()->setRequired(true)],
+            ),
+            'firstAndThirdEntry' => new ArrayType(
+                itemType: new BoolType,
+                keyType: new IntegerType,
+                shape: [0 => new IntegerType()->setRequired(true), 2 => new IntegerType()->setRequired(true)],
+            ),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($arrays), '{"type":"array","items":{"type":["integer","boolean"]}}'),
+            array_map($this->encodeSchema(...), $arrays),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($arrays), 'Array<number|boolean>'),
+            array_map(fn (ArrayType $array) => $this->toTypeScript($array), $arrays),
+        );
+    }
+
+
+    #[Test]
+    public function aPlainListWithAKnownEntryKeepsItsMinimumLength(): void
+    {
+        $array = new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: [5 => new IntegerType()->setRequired(true)],
+            minItems: 2,
+        );
+
+        $this->assertSame('{"type":"array","items":{"type":["integer","boolean"]},"minItems":2}', $this->encodeSchema($array));
+    }
+
+
+    #[Test]
+    public function theEncodingHelpersFollowTheKeysInsideAndOutsideTheShape(): void
+    {
+        $config = self::loadConfig();
+
+        $leadingEntry = fn (IntKeyOrder $intKeyOrder) => new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: [new IntegerType()->setRequired(true)],
+            intKeyOrder: $intKeyOrder,
+        );
+
+        $arrays = [
+            'sequential' => $leadingEntry(IntKeyOrder::Sequential),
+            'maybeSequential' => $leadingEntry(IntKeyOrder::MaybeSequential),
+            'nonSequential' => $leadingEntry(IntKeyOrder::NonSequential),
+            'laterEntry' => new ArrayType(itemType: new BoolType, shape: [5 => new IntegerType()->setRequired(true)]),
+            'stringKeyInShape' => new ArrayType(itemType: new BoolType, shape: ['name' => new StringType()->setRequired(true)]),
+            'optionalStringKeyInShape' => new ArrayType(itemType: new BoolType, shape: ['name' => new StringType]),
+            'stringKeysOutsideShape' => new ArrayType(itemType: new BoolType, keyType: new StringType, shape: [new IntegerType()->setRequired(true)]),
+        ];
+
+        $this->assertSame(
+            [
+                'sequential' => ['list' => true, 'object' => false],
+                'maybeSequential' => ['list' => true, 'object' => true],
+                'nonSequential' => ['list' => false, 'object' => true],
+                'laterEntry' => ['list' => true, 'object' => false],
+                'stringKeyInShape' => ['list' => false, 'object' => true],
+                'optionalStringKeyInShape' => ['list' => false, 'object' => true],
+                'stringKeysOutsideShape' => ['list' => false, 'object' => true],
+            ],
+            array_map(
+                fn (ArrayType $array) => ['list' => $array->mayEncodeAsList($config), 'object' => $array->mayEncodeAsObject($config)],
+                $arrays,
+            ),
+        );
+    }
+
+
+    #[Test]
+    public function tupleEntriesOfAnOpenShapeAreItsLeadingEntriesWhenItHasNoOtherKnownKey(): void
+    {
+        $leadingEntries = $this->intKeyedOpenShape([new IntegerType()->setRequired(true), new StringType])->getTupleEntries();
+        $optionalBeforeRequired = $this->intKeyedOpenShape([new IntegerType, new StringType()->setRequired(true)])->getTupleEntries();
+
+        $this->assertNotNull($leadingEntries);
+        $this->assertCount(2, $leadingEntries);
+
+        $this->assertNotNull($optionalBeforeRequired);
+        $this->assertSame([true, true], array_map(fn (Type $entry) => $entry->required, $optionalBeforeRequired));
+
+        $this->assertNull($this->intKeyedOpenShape([5 => new IntegerType])->getTupleEntries());
+        $this->assertNull($this->intKeyedOpenShape([0 => new IntegerType, 2 => new IntegerType])->getTupleEntries());
+        $this->assertNull($this->intKeyedOpenShape([new IntegerType], IntKeyOrder::NonSequential)->getTupleEntries());
+    }
+
+
+    #[Test]
+    public function reorderingAnOpenTupleWithItsKeysFoldsItIntoAListOrAMap(): void
+    {
+        $array = new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: [new IntegerType()->setRequired(true)],
+        );
+
+        $this->assertSame(
+            '{"anyOf":[{"type":"array","items":{"type":["integer","boolean"]}},{"type":"object","additionalProperties":{"type":["integer","boolean"]}}]}',
+            $this->encodeSchema($array->reorderItems(self::loadConfig())),
+        );
+    }
+
+
+    #[Test]
+    public function reorderingAnOpenShapeThatIsNeverAListKeepsItsKnownKeys(): void
+    {
+        $array = $this->errorWithIntegerEntries()->reorderItems(self::loadConfig());
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema($array),
+        );
+    }
+
+
+    /**
+     * @param array<int|string, Type> $shape
+     */
+    private function intKeyedOpenShape(array $shape, IntKeyOrder $intKeyOrder = IntKeyOrder::Sequential): ArrayType
+    {
+        return new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: $shape,
+            intKeyOrder: $intKeyOrder,
+        );
     }
 
 

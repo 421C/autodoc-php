@@ -143,19 +143,31 @@ class TypeConverter
 
     private function toTsShape(ArrayType $type, TypeScriptRenderContext $context): string
     {
-        $tupleEntries = $type->getTupleEntries();
+        $config = $context->scope->config;
         $typeOfEntriesOutsideShape = $type->hasEntriesOutsideShape() ? $type->itemType ?? new UnknownType : null;
         $tsTypes = [];
 
-        if ($tupleEntries !== null) {
-            $tsTypes[] = $this->toTsTuple($tupleEntries, $context, $typeOfEntriesOutsideShape);
+        if ($type->mayEncodeAsList($config)) {
+            $tupleEntries = $type->getTupleEntries();
+
+            $tsTypes[] = $tupleEntries !== null
+                ? $this->toTsTuple($tupleEntries, $context, $typeOfEntriesOutsideShape)
+                : $this->toTsListOfEveryEntry($type, $context);
         }
 
-        if ($type->mayEncodeAsObject($context->scope->config)) {
+        if ($type->mayEncodeAsObject($config)) {
             $tsTypes[] = $this->toTsObject($type->shape, $context, $typeOfEntriesOutsideShape);
         }
 
         return implode('|', $tsTypes);
+    }
+
+
+    private function toTsListOfEveryEntry(ArrayType $type, TypeScriptRenderContext $context): string
+    {
+        $typeOfEveryEntry = (clone $type)->convertShapeToTypePair($context->scope->config)->itemType ?? new UnknownType;
+
+        return $this->toTsList($this->convertToTypeScriptType($typeOfEveryEntry, $context->nested()));
     }
 
 

@@ -817,6 +817,272 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function aListWithANarrowedEntryAfterAnUnknownOneStaysAPlainList(): void
+    {
+        $closures = [
+            'secondEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[1] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+            'sixthEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[5] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+            'firstAndThirdEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[0] !== null && $scores[2] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::NULLABLE_INTEGER_LIST),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), 'Array<number|null>'),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aListThatMayHaveGapsWithANarrowedFirstEntryMayBeAListOrAMap(): void
+    {
+        $closure = function () {
+            $scores = array_filter(OpenArrayShapeTest::nullableInts(), fn (?int $score) => $score !== 3);
+
+            if ($scores[0] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"anyOf":['
+                . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                . ']}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '[number?, ...Array<number|null>]|{',
+                "    '0'?: number",
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListThatMayHaveGapsWithANarrowedLaterEntryMayBeAListOrAMap(): void
+    {
+        $closure = function () {
+            $scores = array_filter(OpenArrayShapeTest::nullableInts(), fn (?int $score) => $score !== 3);
+
+            if ($scores[5] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"anyOf":['
+                . self::NULLABLE_INTEGER_LIST . ','
+                . '{"type":"object","properties":{"5":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                . ']}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                'Array<number|null>|{',
+                "    '5'?: number",
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapWhoseKeysMayBeStringsStaysAnObjectAfterItsFirstIntKeyIsNarrowed(): void
+    {
+        $closures = [
+            'intOrStringKeys' => function () {
+                $scores = OpenArrayShapeTest::arrayKeyedNullableInts();
+
+                if ($scores[0] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+            'stringKeys' => function () {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                // @phpstan-ignore offsetAccess.notFound
+                if ($scores[0] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($closures),
+                '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}',
+            ),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), implode("\n", [
+                '{',
+                "    '0'?: number",
+                '    [key: string]: number|null|undefined',
+                '}',
+            ])),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aMapWhoseKeysMayBeIntsStaysAnObjectAfterAStringKeyIsNarrowed(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::arrayKeyedNullableInts();
+
+            if ($scores['alice'] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"object","properties":{"alice":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyPreservingSortOfAListWithANarrowedEntryMayLeaveAMap(): void
+    {
+        $closures = [
+            'firstEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[0] !== null) {
+                    asort($scores);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+            'sixthEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[5] !== null) {
+                    asort($scores);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($closures),
+                '{"anyOf":[' . self::NULLABLE_INTEGER_LIST . ',{"type":"object","additionalProperties":{"type":["integer","null"]}}]}',
+            ),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), 'Array<number|null>|Record<string, number|null>'),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function writingUnderAStringKeyMakesAListWithANarrowedEntryAMap(): void
+    {
+        $closure = function (string $name) {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[5] !== null) {
+                $scores[$name] = 5;
+
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"object","additionalProperties":{"type":["integer","null"]}}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame('Record<string, number|null>', $this->closureReturnTypeScript($closure));
+    }
+
+
+    #[Test]
+    public function aListNestedInAShapeStaysAPlainListAfterALaterEntryIsNarrowed(): void
+    {
+        $closure = function () {
+            $ranking = OpenArrayShapeTest::ranking();
+
+            if ($ranking['scores'][5] !== null) {
+                return $ranking;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            '{"type":["object","null"],"properties":{"scores":' . self::NULLABLE_INTEGER_LIST . ',"total":{"type":"integer"}},"required":["scores","total"]}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    scores: Array<number|null>',
+                '    total: number',
+                '}|null',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure): string
     {
         $config = self::loadConfig();
@@ -979,6 +1245,15 @@ final class OpenArrayShapeTest extends TestCase
     private static function nullableIntAndString(): array
     {
         /** @phpstan-ignore return.type */
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<array-key, int|null>
+     */
+    private static function arrayKeyedNullableInts(): array
+    {
         return json_decode('[]', true);
     }
 }
