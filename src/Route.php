@@ -55,6 +55,13 @@ class Route
     /** @var list<Type> */
     private array $requestBodyTypes = [];
 
+    /**
+     * Tracked per route because each scope has its own ExtensionDispatcher.
+     *
+     * @var array<string, true>
+     */
+    private array $classesRecordedAsRequestBody = [];
+
 
     public function addResponse(int $status, string $contentType, Type $body): void
     {
@@ -78,6 +85,24 @@ class Route
     public function addRequestBodyType(Type $type): void
     {
         $this->requestBodyTypes[] = $type;
+    }
+
+    /**
+     * @internal
+     */
+    public function hasRequestBodyTypeFromClass(string $className): bool
+    {
+        return isset($this->classesRecordedAsRequestBody[$className]);
+    }
+
+    /**
+     * @internal
+     */
+    public function addRequestBodyTypeFromClass(string $className, Type $type): void
+    {
+        $this->classesRecordedAsRequestBody[$className] = true;
+
+        $this->addRequestBodyType($type);
     }
 
     public function getRequestBodyType(Scope $scope): ?Type
