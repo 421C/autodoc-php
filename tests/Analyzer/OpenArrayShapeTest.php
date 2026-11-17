@@ -516,10 +516,10 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             [
-                'nullableIntegers' => '{"type":["array","null"],"items":{"type":["integer","null"]},"minItems":1}',
-                'integers' => '{"type":["array","null"],"items":{"type":"integer"},"minItems":1}',
-                'shapes' => '{"type":["array","null"],"items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]},"minItems":1}',
-                'unknownValues' => '{"type":["array","null"],"items":{"type":"string","description":"mixed"},"minItems":1}',
+                'nullableIntegers' => '{"type":["array","null"],"items":{"type":["integer","null"]}}',
+                'integers' => '{"type":["array","null"],"items":{"type":"integer"}}',
+                'shapes' => '{"type":["array","null"],"items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}}',
+                'unknownValues' => '{"type":["array","null"],"items":{"type":"string","description":"mixed"}}',
                 'returnedFromBothBranches' => self::NULLABLE_INTEGER_LIST,
             ],
             array_map($this->closureReturnSchema(...), $closures),
@@ -543,11 +543,64 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function anIndexCheckDoesNotSetTheMinimumLengthOfAList(): void
+    {
+        $closures = [
+            'isset' => function () {
+                $scores = OpenArrayShapeTest::ints();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return $scores;
+            },
+            'arrayKeyExists' => function () {
+                $scores = OpenArrayShapeTest::ints();
+
+                if (array_key_exists(0, $scores)) {
+                    return $scores;
+                }
+
+                return [];
+            },
+            'twoIndexes' => function () {
+                $scores = OpenArrayShapeTest::ints();
+
+                if (! isset($scores[0], $scores[1])) {
+                    throw new RuntimeException;
+                }
+
+                return $scores;
+            },
+            'nextToAnUncheckedList' => function () {
+                $scores = OpenArrayShapeTest::ints();
+
+                if (isset($scores[0])) {
+                    return $scores;
+                }
+
+                return OpenArrayShapeTest::ints();
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"array","items":{"type":"integer"}}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), 'number[]'),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function aDeclaredListWhoseLeadingEntryTheOtherEntriesAllowIsAPlainList(): void
     {
         $closure = fn () => OpenArrayShapeTest::idAndNullableInts();
 
-        $this->assertSame('{"type":"array","items":{"type":["integer","null"]},"minItems":1}', $this->closureReturnSchema($closure));
+        $this->assertSame('{"type":"array","items":{"type":["integer","null"]}}', $this->closureReturnSchema($closure));
         $this->assertSame('Array<number|null>', $this->closureReturnTypeScript($closure));
     }
 
@@ -1564,6 +1617,108 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function reversingAnArrayWithEntriesOutsideItsShapeLeavesNoEntryAtAKnownIndex(): void
+    {
+        $closures = [
+            'declaredList' => fn () => array_reverse(OpenArrayShapeTest::idNameAndFlags()),
+            'firstEntryOfANarrowedList' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return array_reverse($scores)[0];
+            },
+            'intKeyNextToAStringKey' => fn () => array_reverse(OpenArrayShapeTest::idErrorAndIntKeyedFlags()),
+            'intKeysNextToEntriesUnderAnyKey' => fn () => array_reverse(OpenArrayShapeTest::idNameAndFlagsUnderAnyKey()),
+        ];
+
+        $this->assertSame(
+            [
+                'declaredList' => '{"type":"array","items":{"type":["integer","string","boolean"]}}',
+                'firstEntryOfANarrowedList' => '{"type":["integer","null"]}',
+                'intKeyNextToAStringKey' => '{"type":"object","additionalProperties":{"type":["integer","string","boolean"]}}',
+                'intKeysNextToEntriesUnderAnyKey' => '{"type":"object","additionalProperties":{"type":["integer","string","boolean"]}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            [
+                'declaredList' => 'Array<number|string|boolean>',
+                'firstEntryOfANarrowedList' => 'number|null',
+                'intKeyNextToAStringKey' => 'Record<string, number|string|boolean>',
+                'intKeysNextToEntriesUnderAnyKey' => 'Record<string, number|string|boolean>',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function reversingAListWithEntriesOutsideItsShapeAndKeepingItsKeysMayLeaveAMap(): void
+    {
+        $closures = [
+            'declaredList' => fn () => array_reverse(OpenArrayShapeTest::idNameAndFlags(), true),
+            'declaredListWithAnUnknownFlag' => fn (bool $preservesKeys) => array_reverse(OpenArrayShapeTest::idNameAndFlags(), $preservesKeys),
+            'narrowedList' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return array_reverse($scores, true);
+            },
+        ];
+
+        $listOrMapOfEveryType = '{"anyOf":['
+            . '{"type":"array","items":{"type":["integer","string","boolean"]}},'
+            . '{"type":"object","additionalProperties":{"type":["integer","string","boolean"]}}'
+            . ']}';
+
+        $this->assertSame(
+            [
+                'declaredList' => $listOrMapOfEveryType,
+                'declaredListWithAnUnknownFlag' => $listOrMapOfEveryType,
+                'narrowedList' => self::NULLABLE_INTEGER_LIST_OR_MAP,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            [
+                'declaredList' => 'Array<number|string|boolean>|Record<string, number|string|boolean>',
+                'declaredListWithAnUnknownFlag' => 'Array<number|string|boolean>|Record<string, number|string|boolean>',
+                'narrowedList' => 'Array<number|null>|Record<string, number|null>',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function reversingAShapeWithOnlyStringKeysKeepsItsKnownKeys(): void
+    {
+        $closures = [
+            'stringKeyedEntriesOutsideTheShape' => fn () => array_reverse(OpenArrayShapeTest::errorAndCodeWithFlags()),
+            'keepingTheKeys' => fn () => array_reverse(OpenArrayShapeTest::errorAndCodeWithFlags(), true),
+            'intKeyedEntriesOutsideTheShape' => fn () => array_reverse(OpenArrayShapeTest::errorWithIntKeyedFlags()),
+        ];
+
+        $codeThenError = '{"type":"object","properties":{"code":{"type":"integer"},"error":{"type":"string"}},"required":["code","error"],"additionalProperties":{"type":"boolean"}}';
+
+        $this->assertSame(
+            [
+                'stringKeyedEntriesOutsideTheShape' => $codeThenError,
+                'keepingTheKeys' => $codeThenError,
+                'intKeyedEntriesOutsideTheShape' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"boolean"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function aUnionOfShapesDocumentsTheOtherEntriesOfEveryMember(): void
     {
         $closures = [
@@ -1793,7 +1948,7 @@ final class OpenArrayShapeTest extends TestCase
         $this->assertSame(
             [
                 'maps' => '{"type":["object","null"],"properties":{"total":{"type":["integer","string"]}},"required":["total"],"additionalProperties":{"type":["integer","string","null"]}}',
-                'lists' => '{"type":["array","null"],"items":{"type":["integer","string","null"]},"minItems":1}',
+                'lists' => '{"type":["array","null"],"items":{"type":["integer","string","null"]}}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -1853,7 +2008,7 @@ final class OpenArrayShapeTest extends TestCase
         $this->assertSame(
             [
                 'shapes' => self::ERROR_WITH_INTEGER_ENTRIES,
-                'lists' => '{"type":"array","items":{"type":"integer"},"minItems":1}',
+                'lists' => '{"type":"array","items":{"type":"integer"}}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -2304,5 +2459,14 @@ final class OpenArrayShapeTest extends TestCase
     private static function nameIdAndCounts(): array
     {
         return json_decode('["first",1]', true);
+    }
+
+
+    /**
+     * @return array{0: int, error: string, ...<int, bool>}
+     */
+    private static function idErrorAndIntKeyedFlags(): array
+    {
+        return json_decode('{"0":1,"error":"failed"}', true);
     }
 }

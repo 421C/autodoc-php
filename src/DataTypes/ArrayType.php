@@ -233,17 +233,17 @@ class ArrayType extends Type
      */
     private function listSchema(Config $config): array
     {
-        $requiredTupleEntryCount = count(array_filter($this->getTupleEntries() ?? [], fn (Type $entry) => $entry->required));
         $documentedTupleEntries = $this->getDocumentedTupleEntries($config);
 
         if ($documentedTupleEntries !== null) {
             $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
+            $requiredEntryCount = count(array_filter($documentedTupleEntries, fn (Type $entry) => $entry->required));
 
             return array_filter([
                 'type' => 'array',
                 'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $documentedTupleEntries),
                 'items' => $this->schemaOfEntriesOutsideShape($config),
-                'minItems' => $hasEntriesOutsideShape ? max($requiredTupleEntryCount, $this->minItems ?? 0) : $requiredTupleEntryCount,
+                'minItems' => $hasEntriesOutsideShape ? max($requiredEntryCount, $this->minItems ?? 0) : $requiredEntryCount,
                 'maxItems' => $hasEntriesOutsideShape ? null : count($documentedTupleEntries),
             ]);
         }
@@ -253,7 +253,7 @@ class ArrayType extends Type
         return array_filter([
             'type' => 'array',
             'items' => $typeOfEveryEntry->toSchema($config),
-            'minItems' => max($requiredTupleEntryCount, $this->minItems ?? 0),
+            'minItems' => $this->minItems,
             'maxItems' => $this->maxItems,
         ]);
     }

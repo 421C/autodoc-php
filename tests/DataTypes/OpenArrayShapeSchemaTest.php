@@ -141,7 +141,7 @@ final class OpenArrayShapeSchemaTest extends TestCase
         );
 
         $this->assertNull($array->getDocumentedTupleEntries(self::loadConfig()));
-        $this->assertSame('{"type":"array","items":{"type":["integer","null"]},"minItems":1}', $this->encodeSchema($array));
+        $this->assertSame('{"type":"array","items":{"type":["integer","null"]}}', $this->encodeSchema($array));
         $this->assertSame('Array<number|null>', $this->toTypeScript($array));
     }
 
@@ -191,22 +191,23 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $this->assertSame('{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1}', $this->encodeSchema($knownBeforeUnknown));
         $this->assertSame('[number, ...unknown[]]', $this->toTypeScript($knownBeforeUnknown));
 
-        $this->assertSame('{"type":"array","items":{"type":"string"},"minItems":1}', $this->encodeSchema($unknownBeforeUnknown));
+        $this->assertSame('{"type":"array","items":{"type":"string"}}', $this->encodeSchema($unknownBeforeUnknown));
         $this->assertSame('unknown[]', $this->toTypeScript($unknownBeforeUnknown));
     }
 
 
     #[Test]
-    public function aPlainListKeepsTheLargerOfItsMinimumLengthAndItsRequiredLeadingEntries(): void
+    public function aPlainListKeepsItsOwnMinimumLengthWhateverItsRequiredLeadingEntriesAre(): void
     {
-        $listOfIntegers = fn (int $requiredEntryCount, int $minItems) => new ArrayType(
+        $listOfIntegers = fn (int $requiredEntryCount, ?int $minItems) => new ArrayType(
             itemType: new IntegerType,
             shape: array_fill(0, $requiredEntryCount, new IntegerType()->setRequired(true)),
             minItems: $minItems,
         );
 
         $this->assertSame('{"type":"array","items":{"type":"integer"},"minItems":3}', $this->encodeSchema($listOfIntegers(1, 3)));
-        $this->assertSame('{"type":"array","items":{"type":"integer"},"minItems":2}', $this->encodeSchema($listOfIntegers(2, 1)));
+        $this->assertSame('{"type":"array","items":{"type":"integer"},"minItems":1}', $this->encodeSchema($listOfIntegers(2, 1)));
+        $this->assertSame('{"type":"array","items":{"type":"integer"}}', $this->encodeSchema($listOfIntegers(2, null)));
     }
 
 
@@ -222,7 +223,7 @@ final class OpenArrayShapeSchemaTest extends TestCase
 
         $this->assertSame(
             '{"anyOf":['
-                . '{"type":"array","items":{"type":["integer","null"]},"minItems":1},'
+                . '{"type":"array","items":{"type":["integer","null"]}},'
                 . '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":["integer","null"]}}'
                 . ']}',
             $this->encodeSchema($array),

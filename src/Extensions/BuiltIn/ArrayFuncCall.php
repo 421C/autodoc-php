@@ -723,10 +723,7 @@ class ArrayFuncCall extends FuncCallExtension
 
         $preservesKeys = $this->getBoolArgument($argTypes, 'preserve_keys', 1, $config, default: false);
 
-        if ($preservesKeys !== null
-            && $arrayType->shape !== []
-            && array_all($arrayType->shape, fn (Type $entry) => $entry->required)
-        ) {
+        if ($preservesKeys !== null && $this->knownEntriesStayAtKnownKeysWhenReversed($arrayType)) {
             $arrayType->shape = array_reverse($arrayType->shape, preserve_keys: true);
 
             return $preservesKeys ? $arrayType : $arrayType->renumberKeys($config);
@@ -735,6 +732,15 @@ class ArrayFuncCall extends FuncCallExtension
         $arrayType->convertShapeToTypePair($config);
 
         return $preservesKeys === false ? $arrayType->renumberKeys($config) : $arrayType->reorderItems($config);
+    }
+
+
+    private function knownEntriesStayAtKnownKeysWhenReversed(ArrayType $arrayType): bool
+    {
+        $everyKnownEntryExists = $arrayType->shape !== [] && array_all($arrayType->shape, fn (Type $entry) => $entry->required);
+        $hasKnownIntKey = array_any(array_keys($arrayType->shape), fn (int|string $key) => is_int($key));
+
+        return $everyKnownEntryExists && ! ($hasKnownIntKey && $arrayType->hasEntriesOutsideShape());
     }
 
 
