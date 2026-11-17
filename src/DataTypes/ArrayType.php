@@ -190,11 +190,15 @@ class ArrayType extends Type
         $tupleEntries = $this->getTupleEntries();
 
         if ($tupleEntries !== null) {
+            $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
+            $requiredEntryCount = count(array_filter($tupleEntries, fn (Type $entry) => $entry->required));
+
             return array_filter([
                 'type' => 'array',
                 'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $tupleEntries),
-                'minItems' => count(array_filter($tupleEntries, fn (Type $entry) => $entry->required)),
-                'maxItems' => count($tupleEntries),
+                'items' => $this->schemaOfEntriesOutsideShape($config),
+                'minItems' => $hasEntriesOutsideShape ? max($requiredEntryCount, $this->minItems ?? 0) : $requiredEntryCount,
+                'maxItems' => $hasEntriesOutsideShape ? null : count($tupleEntries),
             ]);
         }
 
@@ -217,7 +221,7 @@ class ArrayType extends Type
                 'type' => 'object',
                 'properties' => self::propertySchemas($this->shape, $config),
                 'required' => self::requiredPropertyNames($this->shape),
-                'additionalProperties' => $this->hasEntriesOutsideShape() ? $this->schemaOfEntriesOutsideShape($config) : null,
+                'additionalProperties' => $this->hasEntriesOutsideShape() ? $this->schemaOfEntriesOutsideShape($config) ?? true : null,
             ]);
         }
 
@@ -231,14 +235,14 @@ class ArrayType extends Type
 
 
     /**
-     * @return TypeSchema|true
+     * @return ?TypeSchema
      */
-    private function schemaOfEntriesOutsideShape(Config $config): array|true
+    private function schemaOfEntriesOutsideShape(Config $config): ?array
     {
         $itemType = $this->itemType?->unwrapType($config);
 
         if ($itemType === null || $itemType instanceof UnknownType) {
-            return true;
+            return null;
         }
 
         return $itemType->toSchema($config);

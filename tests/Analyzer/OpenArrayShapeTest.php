@@ -16,6 +16,7 @@ final class OpenArrayShapeTest extends TestCase
     use LoadsConfig;
 
     private const string NULLABLE_INTEGER_LIST = '{"type":"array","items":{"type":["integer","null"]}}';
+    private const string NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]}}';
 
     #[Test]
     public function valuesOfAMapWithANarrowedKeyIncludeItsOtherEntries(): void
@@ -271,6 +272,215 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function aListWithANarrowedFirstEntryDocumentsItsOtherEntries(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[0] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER, $this->closureReturnSchema($closure));
+    }
+
+
+    #[Test]
+    public function aListWithTwoNarrowedLeadingEntriesDocumentsItsOtherEntries(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[0] !== null && $scores[1] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"integer"}],"items":{"type":["integer","null"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListWithAFirstEntryNarrowedByATypeCheckDocumentsItsOtherEntries(): void
+    {
+        $closure = function () {
+            $values = OpenArrayShapeTest::intsOrStrings();
+
+            if (is_string($values[0])) {
+                return $values;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"string"}],"items":{"type":["integer","string"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function declaredIntKeyedArraysWithANarrowedFirstEntryDocumentTheirOtherEntries(): void
+    {
+        $closures = [
+            'withAnIntKeyType' => function () {
+                $scores = OpenArrayShapeTest::intKeyedNullableInts();
+
+                if ($scores[0] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+            'withoutAKeyType' => function () {
+                $scores = OpenArrayShapeTest::nullableIntItems();
+
+                if ($scores[0] !== null) {
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aListOfUnknownValuesWithANarrowedFirstEntryAllowsAnyOtherEntry(): void
+    {
+        $closure = function () {
+            $values = OpenArrayShapeTest::mixedList();
+
+            if (is_int($values[0])) {
+                return $values;
+            }
+
+            return [];
+        };
+
+        $this->assertSame('{"type":"array","prefixItems":[{"type":"integer"}]}', $this->closureReturnSchema($closure));
+    }
+
+
+    #[Test]
+    public function aListWithAFirstEntryKnownToExistDocumentsItsOtherEntries(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if (array_key_exists(0, $scores)) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":["integer","null"]}],"items":{"type":["integer","null"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListOfShapesWithANarrowedFirstEntryDocumentsItsOtherEntries(): void
+    {
+        $closure = function () {
+            $users = OpenArrayShapeTest::users();
+
+            if ($users[0]['email'] !== null) {
+                return $users;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"type":"array",'
+                . '"prefixItems":[{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":"string"}},"required":["id","email"]}],'
+                . '"items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListNestedInAShapeDocumentsItsOtherEntriesAfterItsFirstEntryIsNarrowed(): void
+    {
+        $closure = function () {
+            $ranking = OpenArrayShapeTest::ranking();
+
+            if ($ranking['scores'][0] !== null) {
+                return $ranking;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            '{"type":["object","null"],'
+                . '"properties":{"scores":' . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ',"total":{"type":"integer"}},'
+                . '"required":["scores","total"]}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aNonEmptyListWithANarrowedFirstEntryStaysNonEmpty(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nonEmptyNullableInts();
+
+            if ($scores[0] !== null) {
+                return $scores;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            '{"type":["array","null"],"prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]},"minItems":1}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aTupleWithANarrowedEntryAllowsNoOtherEntries(): void
+    {
+        $closure = function () {
+            $pair = OpenArrayShapeTest::nullableIntAndString();
+
+            if ($pair[0] !== null) {
+                return $pair;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            '{"type":["array","null"],"prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2,"maxItems":2}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure): string
     {
         $config = self::loadConfig();
@@ -343,6 +553,80 @@ final class OpenArrayShapeTest extends TestCase
      * @return array{alice: int|null, bob: int}
      */
     private static function closedScores(): array
+    {
+        /** @phpstan-ignore return.type */
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list<int|string>
+     */
+    private static function intsOrStrings(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<int, int|null>
+     */
+    private static function intKeyedNullableInts(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<int|null>
+     */
+    private static function nullableIntItems(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list<mixed>
+     */
+    private static function mixedList(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list<array{id: int, email: string|null}>
+     */
+    private static function users(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array{scores: list<int|null>, total: int}
+     */
+    private static function ranking(): array
+    {
+        /** @phpstan-ignore return.type */
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return non-empty-list<int|null>
+     */
+    private static function nonEmptyNullableInts(): array
+    {
+        return json_decode('[1]', true);
+    }
+
+
+    /**
+     * @return array{int|null, string}
+     */
+    private static function nullableIntAndString(): array
     {
         /** @phpstan-ignore return.type */
         return json_decode('[]', true);
