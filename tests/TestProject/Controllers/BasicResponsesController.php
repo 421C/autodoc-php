@@ -894,6 +894,281 @@ class BasicResponsesController
     }
 
 
+    /**
+     * Unsealed array shapes
+     *
+     * An unsealed part without a key type has `int|string` keys in `array{}` and int keys in `list{}`.
+     *
+     * @return array{
+     *     unknownEntries: array{error: string, ...},
+     *     typedEntries: array{error: string, ...<string, int>},
+     *     valueTypedEntries: array{error: string, ...<int>},
+     *     optionalKnownKey: array{error: string, details?: string, ...<string, int>},
+     *     openList: list{int, string, ...<bool>},
+     *     openListOfUnknown: list{int, ...},
+     *     positionalWithIntKeys: array{int, string, ...<int, bool>},
+     *     positionalWithAnyKeys: array{int, string, ...<bool>},
+     *     nonEmptyArray: non-empty-array{error: string, ...<int>},
+     *     nonEmptyList: non-empty-list{int, ...<bool>},
+     *     withoutKnownKeys: array{...<string, int>},
+     *     nested: array{meta: array{page: int, ...<string, string>}, ...},
+     *     sealed: array{error: string},
+     * }
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Unsealed array shapes',
+        'description' => 'An unsealed part without a key type has `int|string` keys in `array{}` and int keys in `list{}`.',
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'unknownEntries' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                    'additionalProperties' => true,
+                                ],
+                                'typedEntries' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'valueTypedEntries' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'optionalKnownKey' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                        'details' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'openList' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'integer',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'items' => [
+                                        'type' => 'boolean',
+                                    ],
+                                    'minItems' => 2,
+                                ],
+                                'openListOfUnknown' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'minItems' => 1,
+                                ],
+                                'positionalWithIntKeys' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'integer',
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'items' => [
+                                        'type' => 'boolean',
+                                    ],
+                                    'minItems' => 2,
+                                ],
+                                'positionalWithAnyKeys' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        '0' => [
+                                            'type' => 'integer',
+                                        ],
+                                        '1' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        '0',
+                                        '1',
+                                    ],
+                                    'additionalProperties' => [
+                                        'type' => 'boolean',
+                                    ],
+                                ],
+                                'nonEmptyArray' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'nonEmptyList' => [
+                                    'type' => 'array',
+                                    'prefixItems' => [
+                                        [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'items' => [
+                                        'type' => 'boolean',
+                                    ],
+                                    'minItems' => 1,
+                                ],
+                                'withoutKnownKeys' => [
+                                    'type' => 'object',
+                                    'additionalProperties' => [
+                                        'type' => 'integer',
+                                    ],
+                                ],
+                                'nested' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'meta' => [
+                                            'type' => 'object',
+                                            'properties' => [
+                                                'page' => [
+                                                    'type' => 'integer',
+                                                ],
+                                            ],
+                                            'required' => [
+                                                'page',
+                                            ],
+                                            'additionalProperties' => [
+                                                'type' => 'string',
+                                            ],
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'meta',
+                                    ],
+                                    'additionalProperties' => true,
+                                ],
+                                'sealed' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'error' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'error',
+                                    ],
+                                ],
+                            ],
+                            'required' => [
+                                'unknownEntries',
+                                'typedEntries',
+                                'valueTypedEntries',
+                                'optionalKnownKey',
+                                'openList',
+                                'openListOfUnknown',
+                                'positionalWithIntKeys',
+                                'positionalWithAnyKeys',
+                                'nonEmptyArray',
+                                'nonEmptyList',
+                                'withoutKnownKeys',
+                                'nested',
+                                'sealed',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function unsealedArrayShapes(): array
+    {
+        /** @phpstan-ignore return.type */
+        return $this->opaquePayload();
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, int>}
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            '200' => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'error' => [
+                                    'type' => 'string',
+                                    'const' => 'failed',
+                                ],
+                            ],
+                            'required' => [
+                                'error',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function literalRefiningAnUnsealedReturnShape(): array
+    {
+        return [
+            'error' => 'failed',
+        ];
+    }
+
+
     #[ExpectedOperationSchema('showValuesForScalarTypes', [
         'responses' => [
             '200' => [

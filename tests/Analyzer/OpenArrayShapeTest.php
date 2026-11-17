@@ -14,6 +14,9 @@ use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
 use RuntimeException;
 
+/**
+ * @phpstan-type ErrorWithCounts array{error: string, ...<string, int>}
+ */
 final class OpenArrayShapeTest extends TestCase
 {
     use LoadsConfig;
@@ -21,6 +24,7 @@ final class OpenArrayShapeTest extends TestCase
     private const string NULLABLE_INTEGER_LIST = '{"type":"array","items":{"type":["integer","null"]}}';
     private const string NULLABLE_INTEGER_MAP = '{"type":"object","additionalProperties":{"type":["integer","null"]}}';
     private const string NULLABLE_INTEGER_LIST_OR_MAP = '{"anyOf":[' . self::NULLABLE_INTEGER_LIST . ',' . self::NULLABLE_INTEGER_MAP . ']}';
+    private const string ERROR_WITH_INTEGER_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}';
     private const string NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]}}';
 
     #[Test]
@@ -1308,6 +1312,153 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function anUnsealedShapeIsReadWhereverItIsDeclared(): void
+    {
+        $closures = [
+            'returnTag' => fn () => OpenArrayShapeTest::errorWithCounts(),
+            'varTag' => function () {
+                /** @var array{error: string, ...<string, int>} */
+                $payload = json_decode('{"error":"failed"}', true);
+
+                return $payload;
+            },
+            'paramTag' => fn () => OpenArrayShapeTest::passThrough(['error' => 'failed']),
+            'typeAlias' => fn () => OpenArrayShapeTest::errorWithCountsFromAlias(),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::ERROR_WITH_INTEGER_ENTRIES),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anUnsealedShapeSpanningLinesKeepsItsOptionalKeyAndOtherEntries(): void
+    {
+        $closure = fn () => OpenArrayShapeTest::errorDetailsAndCounts();
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"},"details":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    error: string',
+                '    details?: string',
+                '    [key: string]: string|number|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListOfUnsealedShapesKeepsTheOtherEntriesOfEachItem(): void
+    {
+        $closure = fn () => OpenArrayShapeTest::rowsWithLabels();
+
+        $this->assertSame(
+            '{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"],"additionalProperties":{"type":"string"}}}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                'Array<{',
+                '    id: number',
+                '    [key: string]: number|string',
+                '}>',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function unsealedShapesHaveAnIndexSignatureOrARestElementInTypeScript(): void
+    {
+        $closures = [
+            'unknownEntries' => fn () => OpenArrayShapeTest::errorWithUnknownEntries(),
+            'typedEntries' => fn () => OpenArrayShapeTest::errorWithCounts(),
+            'openList' => fn () => OpenArrayShapeTest::idNameAndFlags(),
+            'openListOfUnknown' => fn () => OpenArrayShapeTest::idAndUnknownEntries(),
+            'positionalWithAnyKeys' => fn () => OpenArrayShapeTest::idNameAndFlagsUnderAnyKey(),
+        ];
+
+        $this->assertSame(
+            [
+                'unknownEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: unknown',
+                    '}',
+                ]),
+                'typedEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: string|number',
+                    '}',
+                ]),
+                'openList' => '[number, string, ...boolean[]]',
+                'openListOfUnknown' => '[number, ...unknown[]]',
+                'positionalWithAnyKeys' => implode("\n", [
+                    '{',
+                    "    '0': number",
+                    "    '1': string",
+                    '    [key: string]: number|string|boolean',
+                    '}',
+                ]),
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function readingAnUnsealedShapeSeesItsOtherEntries(): void
+    {
+        $closures = [
+            'aKeyOutsideTheShape' => function () {
+                // @phpstan-ignore offsetAccess.notFound
+                return OpenArrayShapeTest::errorWithCounts()['count'];
+            },
+            'aKnownKey' => fn () => OpenArrayShapeTest::errorWithCounts()['error'],
+            'everyValue' => fn () => array_values(OpenArrayShapeTest::errorWithCounts()),
+            'everyKey' => fn () => array_keys(OpenArrayShapeTest::errorWithCounts()),
+            'eachValue' => function () {
+                $values = [];
+
+                foreach (OpenArrayShapeTest::errorWithCounts() as $value) {
+                    $values[] = $value;
+                }
+
+                return $values;
+            },
+            'withoutItsKnownKey' => function () {
+                $payload = OpenArrayShapeTest::errorWithCounts();
+                unset($payload['error']);
+
+                return $payload;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'aKeyOutsideTheShape' => '{"type":"integer"}',
+                'aKnownKey' => '{"type":"string"}',
+                'everyValue' => '{"type":"array","items":{"type":["string","integer"]}}',
+                'everyKey' => '{"type":"array","items":{"type":"string"}}',
+                'eachValue' => '{"type":"array","items":{"type":["string","integer"]}}',
+                'withoutItsKnownKey' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure): string
     {
         $config = self::loadConfig();
@@ -1480,5 +1631,90 @@ final class OpenArrayShapeTest extends TestCase
     private static function arrayKeyedNullableInts(): array
     {
         return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...}
+     */
+    private static function errorWithUnknownEntries(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, int>}
+     */
+    private static function errorWithCounts(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return ErrorWithCounts
+     */
+    private static function errorWithCountsFromAlias(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{
+     *     error: string,
+     *     details?: string,
+     *     ...<string, int>,
+     * }
+     */
+    private static function errorDetailsAndCounts(): array
+    {
+        return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @param array{error: string, ...<string, int>} $payload
+     */
+    private static function passThrough(array $payload): mixed
+    {
+        return $payload;
+    }
+
+
+    /**
+     * @return list<array{id: int, ...<string, string>}>
+     */
+    private static function rowsWithLabels(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list{int, string, ...<bool>}
+     */
+    private static function idNameAndFlags(): array
+    {
+        return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return list{int, ...}
+     */
+    private static function idAndUnknownEntries(): array
+    {
+        return json_decode('[1]', true);
+    }
+
+
+    /**
+     * @return array{int, string, ...<bool>}
+     */
+    private static function idNameAndFlagsUnderAnyKey(): array
+    {
+        return json_decode('[1,"first"]', true);
     }
 }
