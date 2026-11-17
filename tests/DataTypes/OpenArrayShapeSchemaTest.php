@@ -24,6 +24,8 @@ final class OpenArrayShapeSchemaTest extends TestCase
 {
     use LoadsConfig;
 
+    private const string BOOLEAN_LIST_OR_MAP = '{"anyOf":[{"type":"array","items":{"type":"boolean"}},{"type":"object","additionalProperties":{"type":"boolean"}}]}';
+
     #[Test]
     public function requiredKnownEntriesSetTheMinimumLengthOfAnOpenTuple(): void
     {
@@ -680,6 +682,164 @@ final class OpenArrayShapeSchemaTest extends TestCase
             '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
             $this->encodeSchema($array),
         );
+    }
+
+
+    #[Test]
+    public function removingTheOnlyKnownEntryOfAnOpenTupleLeavesAListThatMayHaveGaps(): void
+    {
+        $array = $this->intKeyedOpenShape([new IntegerType()->setRequired(true)])->removeItemFromArray(0);
+
+        $this->assertSame(self::BOOLEAN_LIST_OR_MAP, $this->encodeSchema($array));
+        $this->assertSame(IntKeyOrder::MaybeSequential, $array->intKeyOrder);
+    }
+
+
+    #[Test]
+    public function removingOneOfTwoKnownEntriesOfAnOpenTupleKeepsTheOther(): void
+    {
+        $array = $this->intKeyedOpenShape([new IntegerType()->setRequired(true), new StringType()->setRequired(true)])->removeItemFromArray(0);
+
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"array","items":{"type":["string","boolean"]}},'
+                . '{"type":"object","properties":{"1":{"type":"string"}},"required":["1"],"additionalProperties":{"type":"boolean"}}'
+                . ']}',
+            $this->encodeSchema($array),
+        );
+    }
+
+
+    #[Test]
+    public function anEntryOfAnOpenTupleThatMayBeRemovedBecomesOptional(): void
+    {
+        $array = $this->intKeyedOpenShape([new IntegerType()->setRequired(true)])->removeItemFromArray(0, isCertain: false);
+
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"}},'
+                . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":"boolean"}}'
+                . ']}',
+            $this->encodeSchema($array),
+        );
+    }
+
+
+    #[Test]
+    public function removingAKeyOutsideTheShapeOfAnOpenTupleMayLeaveAGapAndKeepsTheKnownEntries(): void
+    {
+        $removals = [
+            'certain' => $this->intKeyedOpenShape([new IntegerType()->setRequired(true)])->removeItemFromArray(3),
+            'uncertain' => $this->intKeyedOpenShape([new IntegerType()->setRequired(true)])->removeItemFromArray(3, isCertain: false),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($removals),
+                '{"anyOf":['
+                    . '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"},"minItems":1},'
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":"boolean"}}'
+                    . ']}',
+            ),
+            array_map($this->encodeSchema(...), $removals),
+        );
+    }
+
+
+    #[Test]
+    public function removingAKeyDropsTheMinimumLengthOfAnArrayWithEntriesOutsideItsShape(): void
+    {
+        $nonEmpty = fn () => new ArrayType(
+            itemType: new BoolType,
+            keyType: new IntegerType,
+            shape: [new IntegerType],
+            minItems: 3,
+        );
+
+        $this->assertSame(
+            [
+                'aKnownKey' => null,
+                'aKnownKeyThatMayStay' => null,
+                'aKeyOutsideTheShape' => null,
+                'everyKeyThatMayGo' => null,
+            ],
+            [
+                'aKnownKey' => $nonEmpty()->removeItemFromArray(0)->minItems,
+                'aKnownKeyThatMayStay' => $nonEmpty()->removeItemFromArray(0, isCertain: false)->minItems,
+                'aKeyOutsideTheShape' => $nonEmpty()->removeItemFromArray(3)->minItems,
+                'everyKeyThatMayGo' => $nonEmpty()->markItemsOptional()->minItems,
+            ],
+        );
+    }
+
+
+    #[Test]
+    public function removingAKeyOfAnOpenShapeThatIsNeverAListKeepsItsKeyOrder(): void
+    {
+        $neverAList = fn () => $this->intKeyedOpenShape([new IntegerType()->setRequired(true)], IntKeyOrder::NonSequential);
+
+        $this->assertSame(IntKeyOrder::NonSequential, $neverAList()->removeItemFromArray(0)->intKeyOrder);
+        $this->assertSame(IntKeyOrder::NonSequential, $neverAList()->removeItemFromArray(3)->intKeyOrder);
+    }
+
+
+    #[Test]
+    public function removingAKeyOfAStringKeyedOpenShapeKeepsItAnObject(): void
+    {
+        $this->assertSame(
+            [
+                'theKnownKey' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+                'theKnownKeyThatMayStay' => '{"type":"object","properties":{"error":{"type":"string"}},"additionalProperties":{"type":"integer"}}',
+                'aKeyOutsideTheShape' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->encodeSchema(...), [
+                'theKnownKey' => $this->errorWithIntegerEntries()->removeItemFromArray('error'),
+                'theKnownKeyThatMayStay' => $this->errorWithIntegerEntries()->removeItemFromArray('error', isCertain: false),
+                'aKeyOutsideTheShape' => $this->errorWithIntegerEntries()->removeItemFromArray('other'),
+            ]),
+        );
+    }
+
+
+    #[Test]
+    public function makingEveryEntryOfAnOpenTupleOptionalMayLeaveGaps(): void
+    {
+        $array = $this->intKeyedOpenShape([new IntegerType()->setRequired(true)])->markItemsOptional();
+
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"}},'
+                . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":"boolean"}}'
+                . ']}',
+            $this->encodeSchema($array),
+        );
+    }
+
+
+    #[Test]
+    public function aClosedShapeIgnoresTheRemovalOfAKeyItDoesNotList(): void
+    {
+        $tuple = new ArrayType(shape: [new IntegerType()->setRequired(true), new StringType()->setRequired(true)], minItems: 2);
+        $tuple->removeItemFromArray(5);
+
+        $this->assertSame(IntKeyOrder::Sequential, $tuple->intKeyOrder);
+        $this->assertSame(2, $tuple->minItems);
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2,"maxItems":2}',
+            $this->encodeSchema($tuple),
+        );
+    }
+
+
+    #[Test]
+    public function removingEveryEntryOfAClosedShapeLeavesTheEmptyArray(): void
+    {
+        $array = new ArrayType(shape: [5 => new IntegerType()->setRequired(true)], intKeyOrder: IntKeyOrder::NonSequential);
+        $array->removeItemFromArray(5);
+
+        $this->assertSame([], $array->shape);
+        $this->assertFalse($array->hasEntriesOutsideShape());
+        $this->assertSame(IntKeyOrder::Sequential, $array->intKeyOrder);
     }
 
 

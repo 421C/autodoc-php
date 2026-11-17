@@ -12,12 +12,15 @@ use Closure;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
+use RuntimeException;
 
 final class OpenArrayShapeTest extends TestCase
 {
     use LoadsConfig;
 
     private const string NULLABLE_INTEGER_LIST = '{"type":"array","items":{"type":["integer","null"]}}';
+    private const string NULLABLE_INTEGER_MAP = '{"type":"object","additionalProperties":{"type":["integer","null"]}}';
+    private const string NULLABLE_INTEGER_LIST_OR_MAP = '{"anyOf":[' . self::NULLABLE_INTEGER_LIST . ',' . self::NULLABLE_INTEGER_MAP . ']}';
     private const string NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]}}';
 
     #[Test]
@@ -1079,6 +1082,228 @@ final class OpenArrayShapeTest extends TestCase
                 '}|null',
             ]),
             $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function unsettingTheNarrowedEntryOfAListMayLeaveAGap(): void
+    {
+        $closures = [
+            'firstEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[0] !== null) {
+                    unset($scores[0]);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+            'sixthEntry' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[5] !== null) {
+                    unset($scores[5]);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::NULLABLE_INTEGER_LIST_OR_MAP),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), 'Array<number|null>|Record<string, number|null>'),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function unsettingAnotherEntryOfAListWithANarrowedFirstEntryMayLeaveAGap(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[0] !== null) {
+                unset($scores[3]);
+
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            '{"anyOf":['
+                . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                . ']}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '[number?, ...Array<number|null>]|{',
+                "    '0'?: number",
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function unsettingAnEntryOfANonEmptyListWithANarrowedEntryMayLeaveItEmpty(): void
+    {
+        $closures = [
+            'theNarrowedEntry' => function () {
+                $scores = OpenArrayShapeTest::nonEmptyNullableInts();
+
+                if ($scores[0] === null) {
+                    throw new RuntimeException;
+                }
+
+                unset($scores[0]);
+
+                return $scores;
+            },
+            'anotherEntry' => function () {
+                $scores = OpenArrayShapeTest::nonEmptyNullableInts();
+
+                if ($scores[0] === null) {
+                    throw new RuntimeException;
+                }
+
+                unset($scores[3]);
+
+                return $scores;
+            },
+            'oneOfTwoNarrowedEntries' => function () {
+                $scores = OpenArrayShapeTest::nonEmptyNullableInts();
+
+                if ($scores[0] === null || $scores[1] === null) {
+                    throw new RuntimeException;
+                }
+
+                unset($scores[0]);
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'theNarrowedEntry' => self::NULLABLE_INTEGER_LIST_OR_MAP,
+                'anotherEntry' => '{"anyOf":['
+                    . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                    . ']}',
+                'oneOfTwoNarrowedEntries' => '{"anyOf":['
+                    . self::NULLABLE_INTEGER_LIST . ','
+                    . '{"type":"object","properties":{"1":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                    . ']}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function unsettingAnEntryThatMayStayKeepsItKnown(): void
+    {
+        $closures = [
+            'inABranch' => function (bool $flag) {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[0] !== null) {
+                    if ($flag) {
+                        unset($scores[0]);
+                    }
+
+                    return $scores;
+                }
+
+                return [];
+            },
+            'underADynamicKey' => function (int $index) {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if ($scores[0] !== null) {
+                    unset($scores[$index]);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($closures),
+                '{"anyOf":['
+                    . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
+                    . ']}',
+            ),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function unsettingAKeyOfAMapWithANarrowedKeyKeepsItAnObject(): void
+    {
+        $closures = [
+            'theNarrowedKey' => function () {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                if ($scores['alice'] !== null) {
+                    unset($scores['alice']);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+            'anotherKey' => function () {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                if ($scores['alice'] !== null) {
+                    unset($scores['bob']);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+            'oneOfTwoNarrowedKeys' => function () {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                if ($scores['alice'] !== null && $scores['bob'] !== null) {
+                    unset($scores['alice']);
+
+                    return $scores;
+                }
+
+                return [];
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'theNarrowedKey' => self::NULLABLE_INTEGER_MAP,
+                'anotherKey' => '{"type":"object","properties":{"alice":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}',
+                'oneOfTwoNarrowedKeys' => '{"type":"object","properties":{"bob":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
         );
     }
 

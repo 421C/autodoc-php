@@ -458,12 +458,8 @@ class ArrayType extends Type
 
     public function removeItemFromArray(int|string $key, bool $isCertain = true): self
     {
-        if ($this->shape === []) {
-            return $this->markItemsOptional();
-        }
-
         if (! isset($this->shape[$key])) {
-            return $this;
+            return $this->isClosedShape() ? $this : $this->markEntriesOutsideShapeOptional();
         }
 
         if ($isCertain) {
@@ -471,6 +467,10 @@ class ArrayType extends Type
 
         } else {
             $this->shape[$key] = (clone $this->shape[$key])->setRequired(false);
+        }
+
+        if ($this->hasEntriesOutsideShape()) {
+            return $this->markEntriesOutsideShapeOptional();
         }
 
         $this->intKeyOrder = $this->shape === []
@@ -483,14 +483,20 @@ class ArrayType extends Type
 
     public function markItemsOptional(): self
     {
-        if ($this->shape !== []) {
-            foreach (array_keys($this->shape) as $shapeKey) {
-                $this->removeItemFromArray($shapeKey, isCertain: false);
-            }
-
-            return $this;
+        if ($this->shape === []) {
+            return $this->markEntriesOutsideShapeOptional();
         }
 
+        foreach (array_keys($this->shape) as $shapeKey) {
+            $this->removeItemFromArray($shapeKey, isCertain: false);
+        }
+
+        return $this;
+    }
+
+
+    private function markEntriesOutsideShapeOptional(): self
+    {
         $this->minItems = null;
 
         if ($this->hasEntriesOutsideShape()) {
