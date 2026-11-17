@@ -26,7 +26,6 @@ final class OpenArrayShapeTest extends TestCase
     private const string NULLABLE_INTEGER_MAP = '{"type":"object","additionalProperties":{"type":["integer","null"]}}';
     private const string NULLABLE_INTEGER_LIST_OR_MAP = '{"anyOf":[' . self::NULLABLE_INTEGER_LIST . ',' . self::NULLABLE_INTEGER_MAP . ']}';
     private const string ERROR_WITH_INTEGER_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}';
-    private const string NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER = '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]}}';
     private const string ERROR_WITH_ANY_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}';
     private const string ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","boolean"]}}';
     private const string ID_AND_NAME_BEFORE_BOOLEANS = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":"boolean"},"minItems":2}';
@@ -287,7 +286,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aListWithANarrowedFirstEntryDocumentsItsOtherEntries(): void
+    public function aListWithANarrowedFirstEntryStaysAPlainList(): void
     {
         $closure = function () {
             $scores = OpenArrayShapeTest::nullableInts();
@@ -299,12 +298,12 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame(self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER, $this->closureReturnSchema($closure));
+        $this->assertSame(self::NULLABLE_INTEGER_LIST, $this->closureReturnSchema($closure));
     }
 
 
     #[Test]
-    public function aListWithTwoNarrowedLeadingEntriesDocumentsItsOtherEntries(): void
+    public function aListWithTwoNarrowedLeadingEntriesStaysAPlainList(): void
     {
         $closure = function () {
             $scores = OpenArrayShapeTest::nullableInts();
@@ -316,15 +315,12 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame(
-            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"integer"}],"items":{"type":["integer","null"]}}',
-            $this->closureReturnSchema($closure),
-        );
+        $this->assertSame(self::NULLABLE_INTEGER_LIST, $this->closureReturnSchema($closure));
     }
 
 
     #[Test]
-    public function aListWithAFirstEntryNarrowedByATypeCheckDocumentsItsOtherEntries(): void
+    public function aListWithAFirstEntryNarrowedByATypeCheckStaysAPlainList(): void
     {
         $closure = function () {
             $values = OpenArrayShapeTest::intsOrStrings();
@@ -336,15 +332,12 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame(
-            '{"type":"array","prefixItems":[{"type":"string"}],"items":{"type":["integer","string"]}}',
-            $this->closureReturnSchema($closure),
-        );
+        $this->assertSame('{"type":"array","items":{"type":["string","integer"]}}', $this->closureReturnSchema($closure));
     }
 
 
     #[Test]
-    public function declaredIntKeyedArraysWithANarrowedFirstEntryDocumentTheirOtherEntries(): void
+    public function declaredIntKeyedArraysWithANarrowedFirstEntryStayPlainLists(): void
     {
         $closures = [
             'withAnIntKeyType' => function () {
@@ -368,7 +361,7 @@ final class OpenArrayShapeTest extends TestCase
         ];
 
         $this->assertSame(
-            array_fill_keys(array_keys($closures), self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER),
+            array_fill_keys(array_keys($closures), self::NULLABLE_INTEGER_LIST),
             array_map($this->closureReturnSchema(...), $closures),
         );
     }
@@ -392,7 +385,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aListWithAFirstEntryKnownToExistDocumentsItsOtherEntries(): void
+    public function aListWithAFirstEntryKnownToExistStaysAPlainList(): void
     {
         $closure = function () {
             $scores = OpenArrayShapeTest::nullableInts();
@@ -404,15 +397,12 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame(
-            '{"type":"array","prefixItems":[{"type":["integer","null"]}],"items":{"type":["integer","null"]}}',
-            $this->closureReturnSchema($closure),
-        );
+        $this->assertSame(self::NULLABLE_INTEGER_LIST, $this->closureReturnSchema($closure));
     }
 
 
     #[Test]
-    public function aListOfShapesWithANarrowedFirstEntryDocumentsItsOtherEntries(): void
+    public function aListOfShapesWithANarrowedFirstEntryStaysAPlainList(): void
     {
         $closure = function () {
             $users = OpenArrayShapeTest::users();
@@ -425,16 +415,14 @@ final class OpenArrayShapeTest extends TestCase
         };
 
         $this->assertSame(
-            '{"type":"array",'
-                . '"prefixItems":[{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":"string"}},"required":["id","email"]}],'
-                . '"items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}}',
+            '{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}}',
             $this->closureReturnSchema($closure),
         );
     }
 
 
     #[Test]
-    public function aListNestedInAShapeDocumentsItsOtherEntriesAfterItsFirstEntryIsNarrowed(): void
+    public function aListNestedInAShapeStaysAPlainListAfterItsFirstEntryIsNarrowed(): void
     {
         $closure = function () {
             $ranking = OpenArrayShapeTest::ranking();
@@ -448,7 +436,7 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             '{"type":["object","null"],'
-                . '"properties":{"scores":' . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ',"total":{"type":"integer"}},'
+                . '"properties":{"scores":' . self::NULLABLE_INTEGER_LIST . ',"total":{"type":"integer"}},'
                 . '"required":["scores","total"]}',
             $this->closureReturnSchema($closure),
         );
@@ -469,8 +457,125 @@ final class OpenArrayShapeTest extends TestCase
         };
 
         $this->assertSame(
-            '{"type":["array","null"],"prefixItems":[{"type":"integer"}],"items":{"type":["integer","null"]},"minItems":1}',
+            '{"type":["array","null"],"items":{"type":["integer","null"]},"minItems":1}',
             $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListCheckedForItsFirstEntryStaysAPlainList(): void
+    {
+        $closures = [
+            'nullableIntegers' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (isset($scores[0])) {
+                    return $scores;
+                }
+
+                return null;
+            },
+            'integers' => function () {
+                $scores = OpenArrayShapeTest::ints();
+
+                if (isset($scores[0])) {
+                    return $scores;
+                }
+
+                return null;
+            },
+            'shapes' => function () {
+                $users = OpenArrayShapeTest::users();
+
+                if (! isset($users[0])) {
+                    return null;
+                }
+
+                return $users;
+            },
+            'unknownValues' => function () {
+                $values = OpenArrayShapeTest::mixedList();
+
+                if (isset($values[0])) {
+                    return $values;
+                }
+
+                return null;
+            },
+            'returnedFromBothBranches' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (isset($scores[0])) {
+                    return $scores;
+                }
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'nullableIntegers' => '{"type":["array","null"],"items":{"type":["integer","null"]},"minItems":1}',
+                'integers' => '{"type":["array","null"],"items":{"type":"integer"},"minItems":1}',
+                'shapes' => '{"type":["array","null"],"items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]},"minItems":1}',
+                'unknownValues' => '{"type":["array","null"],"items":{"type":"string","description":"mixed"},"minItems":1}',
+                'returnedFromBothBranches' => self::NULLABLE_INTEGER_LIST,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            [
+                'nullableIntegers' => 'Array<number|null>|null',
+                'integers' => 'number[]|null',
+                'shapes' => implode("\n", [
+                    'Array<{',
+                    '    id: number',
+                    '    email: string|null',
+                    '}>|null',
+                ]),
+                'unknownValues' => 'unknown[]|null',
+                'returnedFromBothBranches' => 'Array<number|null>',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aDeclaredListWhoseLeadingEntryTheOtherEntriesAllowIsAPlainList(): void
+    {
+        $closure = fn () => OpenArrayShapeTest::idAndNullableInts();
+
+        $this->assertSame('{"type":"array","items":{"type":["integer","null"]},"minItems":1}', $this->closureReturnSchema($closure));
+        $this->assertSame('Array<number|null>', $this->closureReturnTypeScript($closure));
+    }
+
+
+    #[Test]
+    public function leadingEntriesTheOtherEntriesDoNotAllowAreListedOneByOne(): void
+    {
+        $closures = [
+            'everyLeadingEntry' => fn () => OpenArrayShapeTest::idNameAndFlags(),
+            'oneOfTwoLeadingEntries' => fn () => OpenArrayShapeTest::nameIdAndCounts(),
+            'aKnownTypeBeforeUnknownValues' => fn () => OpenArrayShapeTest::idAndUnknownEntries(),
+        ];
+
+        $this->assertSame(
+            [
+                'everyLeadingEntry' => self::ID_AND_NAME_BEFORE_BOOLEANS,
+                'oneOfTwoLeadingEntries' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"items":{"type":"integer"},"minItems":2}',
+                'aKnownTypeBeforeUnknownValues' => '{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+        $this->assertSame(
+            [
+                'everyLeadingEntry' => '[number, string, ...boolean[]]',
+                'oneOfTwoLeadingEntries' => '[string, number, ...number[]]',
+                'aKnownTypeBeforeUnknownValues' => '[number, ...unknown[]]',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
         );
     }
 
@@ -706,7 +811,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aListWithANarrowedFirstEntryHasARestElementInTypeScript(): void
+    public function aListWithANarrowedFirstEntryStaysAListInTypeScript(): void
     {
         $closure = function () {
             $scores = OpenArrayShapeTest::nullableInts();
@@ -718,12 +823,12 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame('[number?, ...Array<number|null>]', $this->closureReturnTypeScript($closure));
+        $this->assertSame('Array<number|null>', $this->closureReturnTypeScript($closure));
     }
 
 
     #[Test]
-    public function aListWithTwoNarrowedLeadingEntriesHasARestElementInTypeScript(): void
+    public function aListWithTwoNarrowedLeadingEntriesStaysAListInTypeScript(): void
     {
         $closure = function () {
             $scores = OpenArrayShapeTest::nullableInts();
@@ -735,7 +840,7 @@ final class OpenArrayShapeTest extends TestCase
             return [];
         };
 
-        $this->assertSame('[number?, number?, ...Array<number|null>]', $this->closureReturnTypeScript($closure));
+        $this->assertSame('Array<number|null>', $this->closureReturnTypeScript($closure));
     }
 
 
@@ -757,7 +862,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aListOfShapesWithANarrowedFirstEntryHasARestElementOfTheShapeInTypeScript(): void
+    public function aListOfShapesWithANarrowedFirstEntryStaysAListOfTheShapeInTypeScript(): void
     {
         $closure = function () {
             $users = OpenArrayShapeTest::users();
@@ -771,16 +876,10 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             implode("\n", [
-                '[',
-                '    {',
-                '        id: number',
-                '        email: string',
-                '    }?,',
-                '    ...Array<{',
-                '        id: number',
-                '        email: string|null',
-                '    }>,',
-                ']',
+                'Array<{',
+                '    id: number',
+                '    email: string|null',
+                '}>',
             ]),
             $this->closureReturnTypeScript($closure),
         );
@@ -788,7 +887,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aListNestedInAShapeHasARestElementInTypeScript(): void
+    public function aListNestedInAShapeStaysAListInTypeScript(): void
     {
         $closure = function () {
             $ranking = OpenArrayShapeTest::ranking();
@@ -803,7 +902,7 @@ final class OpenArrayShapeTest extends TestCase
         $this->assertSame(
             implode("\n", [
                 '{',
-                '    scores: [number?, ...Array<number|null>]',
+                '    scores: Array<number|null>',
                 '    total: number',
                 '}|null',
             ]),
@@ -888,14 +987,14 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             '{"anyOf":['
-                . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                . self::NULLABLE_INTEGER_LIST . ','
                 . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
                 . ']}',
             $this->closureReturnSchema($closure),
         );
         $this->assertSame(
             implode("\n", [
-                '[number?, ...Array<number|null>]|{',
+                'Array<number|null>|{',
                 "    '0'?: number",
                 '    [key: string]: number|null|undefined',
                 '}',
@@ -1151,14 +1250,14 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             '{"anyOf":['
-                . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                . self::NULLABLE_INTEGER_LIST . ','
                 . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
                 . ']}',
             $this->closureReturnSchema($closure),
         );
         $this->assertSame(
             implode("\n", [
-                '[number?, ...Array<number|null>]|{',
+                'Array<number|null>|{',
                 "    '0'?: number",
                 '    [key: string]: number|null|undefined',
                 '}',
@@ -1211,7 +1310,7 @@ final class OpenArrayShapeTest extends TestCase
             [
                 'theNarrowedEntry' => self::NULLABLE_INTEGER_LIST_OR_MAP,
                 'anotherEntry' => '{"anyOf":['
-                    . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                    . self::NULLABLE_INTEGER_LIST . ','
                     . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
                     . ']}',
                 'oneOfTwoNarrowedEntries' => '{"anyOf":['
@@ -1258,7 +1357,7 @@ final class OpenArrayShapeTest extends TestCase
             array_fill_keys(
                 array_keys($closures),
                 '{"anyOf":['
-                    . self::NULLABLE_INTEGER_LIST_STARTING_WITH_AN_INTEGER . ','
+                    . self::NULLABLE_INTEGER_LIST . ','
                     . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
                     . ']}',
             ),
@@ -1694,7 +1793,7 @@ final class OpenArrayShapeTest extends TestCase
         $this->assertSame(
             [
                 'maps' => '{"type":["object","null"],"properties":{"total":{"type":["integer","string"]}},"required":["total"],"additionalProperties":{"type":["integer","string","null"]}}',
-                'lists' => '{"type":["array","null"],"prefixItems":[{"type":["integer","string"]}],"items":{"type":["integer","string","null"]},"minItems":1}',
+                'lists' => '{"type":["array","null"],"items":{"type":["integer","string","null"]},"minItems":1}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -1754,7 +1853,7 @@ final class OpenArrayShapeTest extends TestCase
         $this->assertSame(
             [
                 'shapes' => self::ERROR_WITH_INTEGER_ENTRIES,
-                'lists' => '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"integer"},"minItems":1}',
+                'lists' => '{"type":"array","items":{"type":"integer"},"minItems":1}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -1766,7 +1865,7 @@ final class OpenArrayShapeTest extends TestCase
                     '    [key: string]: string|number',
                     '}',
                 ]),
-                'lists' => '[number, ...number[]]',
+                'lists' => 'number[]',
             ],
             array_map($this->closureReturnTypeScript(...), $closures),
         );
@@ -2178,5 +2277,32 @@ final class OpenArrayShapeTest extends TestCase
     private static function idNameAndUnknownEntries(): array
     {
         return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return list<int>
+     */
+    private static function ints(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list{int, ...<int|null>}
+     */
+    private static function idAndNullableInts(): array
+    {
+        return json_decode('[1]', true);
+    }
+
+
+    /**
+     * @return list{string, int, ...<int>}
+     */
+    private static function nameIdAndCounts(): array
+    {
+        return json_decode('["first",1]', true);
     }
 }

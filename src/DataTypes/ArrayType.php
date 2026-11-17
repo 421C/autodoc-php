@@ -105,6 +105,35 @@ class ArrayType extends Type
 
 
     /**
+     * @return ?list<Type>
+     */
+    public function getDocumentedTupleEntries(Config $config): ?array
+    {
+        $tupleEntries = $this->getTupleEntries();
+
+        if ($tupleEntries === null || ! $this->hasEntriesOutsideShape()) {
+            return $tupleEntries;
+        }
+
+        return array_all($tupleEntries, fn (Type $entry) => $this->otherEntriesAllowTypeOf($entry, $config))
+            ? null
+            : $tupleEntries;
+    }
+
+
+    private function otherEntriesAllowTypeOf(Type $entry, Config $config): bool
+    {
+        $typeOfOtherEntries = ($this->itemType ?? new UnknownType)->unwrapType($config);
+
+        if ($typeOfOtherEntries instanceof UnknownType) {
+            return $entry->unwrapType($config) instanceof UnknownType;
+        }
+
+        return $entry->isSubTypeOf($typeOfOtherEntries, $config);
+    }
+
+
+    /**
      * @param array<int|string, Type> $shape
      * @return array{list<Type>, list<Type>}
      */
@@ -204,18 +233,18 @@ class ArrayType extends Type
      */
     private function listSchema(Config $config): array
     {
-        $tupleEntries = $this->getTupleEntries();
+        $requiredTupleEntryCount = count(array_filter($this->getTupleEntries() ?? [], fn (Type $entry) => $entry->required));
+        $documentedTupleEntries = $this->getDocumentedTupleEntries($config);
 
-        if ($tupleEntries !== null) {
+        if ($documentedTupleEntries !== null) {
             $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
-            $requiredEntryCount = count(array_filter($tupleEntries, fn (Type $entry) => $entry->required));
 
             return array_filter([
                 'type' => 'array',
-                'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $tupleEntries),
+                'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $documentedTupleEntries),
                 'items' => $this->schemaOfEntriesOutsideShape($config),
-                'minItems' => $hasEntriesOutsideShape ? max($requiredEntryCount, $this->minItems ?? 0) : $requiredEntryCount,
-                'maxItems' => $hasEntriesOutsideShape ? null : count($tupleEntries),
+                'minItems' => $hasEntriesOutsideShape ? max($requiredTupleEntryCount, $this->minItems ?? 0) : $requiredTupleEntryCount,
+                'maxItems' => $hasEntriesOutsideShape ? null : count($documentedTupleEntries),
             ]);
         }
 
@@ -224,7 +253,7 @@ class ArrayType extends Type
         return array_filter([
             'type' => 'array',
             'items' => $typeOfEveryEntry->toSchema($config),
-            'minItems' => $this->minItems,
+            'minItems' => max($requiredTupleEntryCount, $this->minItems ?? 0),
             'maxItems' => $this->maxItems,
         ]);
     }

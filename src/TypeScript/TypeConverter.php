@@ -148,10 +148,10 @@ class TypeConverter
         $tsTypes = [];
 
         if ($type->mayEncodeAsList($config)) {
-            $tupleEntries = $type->getTupleEntries();
+            $documentedTupleEntries = $type->getDocumentedTupleEntries($config);
 
-            $tsTypes[] = $tupleEntries !== null
-                ? $this->toTsTuple($tupleEntries, $context, $typeOfEntriesOutsideShape)
+            $tsTypes[] = $documentedTupleEntries !== null
+                ? $this->toTsTuple($documentedTupleEntries, $context, $typeOfEntriesOutsideShape)
                 : $this->toTsListOfEveryEntry($type, $context);
         }
 

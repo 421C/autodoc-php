@@ -10,6 +10,7 @@ use AutoDoc\DataTypes\BoolType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
+use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -127,6 +128,113 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $this->assertSame(
             '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":1,"maxItems":2}',
             $this->encodeSchema($array),
+        );
+    }
+
+
+    #[Test]
+    public function tupleEntriesTheOtherEntriesAllowAreNotDocumentedOneByOne(): void
+    {
+        $array = new ArrayType(
+            itemType: new UnionType([new IntegerType, new NullType]),
+            shape: [new IntegerType()->setRequired(true), new IntegerType],
+        );
+
+        $this->assertNull($array->getDocumentedTupleEntries(self::loadConfig()));
+        $this->assertSame('{"type":"array","items":{"type":["integer","null"]},"minItems":1}', $this->encodeSchema($array));
+        $this->assertSame('Array<number|null>', $this->toTypeScript($array));
+    }
+
+
+    #[Test]
+    public function tupleEntriesAreDocumentedOneByOneWhenTheOtherEntriesDoNotAllowOneOfThem(): void
+    {
+        $array = new ArrayType(
+            itemType: new IntegerType,
+            shape: [new StringType()->setRequired(true), new IntegerType()->setRequired(true)],
+        );
+
+        $this->assertCount(2, $array->getDocumentedTupleEntries(self::loadConfig()) ?? []);
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"items":{"type":"integer"},"minItems":2}',
+            $this->encodeSchema($array),
+        );
+        $this->assertSame('[string, number, ...number[]]', $this->toTypeScript($array));
+    }
+
+
+    #[Test]
+    public function aClosedTupleDocumentsEveryEntryOneByOne(): void
+    {
+        $tuple = new ArrayType(shape: [new IntegerType()->setRequired(true), new IntegerType()->setRequired(true)]);
+
+        $this->assertCount(2, $tuple->getDocumentedTupleEntries(self::loadConfig()) ?? []);
+        $this->assertSame(
+            '{"type":"array","prefixItems":[{"type":"integer"},{"type":"integer"}],"minItems":2,"maxItems":2}',
+            $this->encodeSchema($tuple),
+        );
+    }
+
+
+    #[Test]
+    public function otherEntriesOfAnUnknownTypeAllowOnlyTupleEntriesOfAnUnknownType(): void
+    {
+        $knownBeforeUnknown = new ArrayType(
+            itemType: new UnknownType,
+            shape: [new IntegerType()->setRequired(true)],
+        );
+        $unknownBeforeUnknown = new ArrayType(
+            itemType: new UnknownType,
+            shape: [new UnknownType()->setRequired(true)],
+        );
+
+        $this->assertSame('{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1}', $this->encodeSchema($knownBeforeUnknown));
+        $this->assertSame('[number, ...unknown[]]', $this->toTypeScript($knownBeforeUnknown));
+
+        $this->assertSame('{"type":"array","items":{"type":"string"},"minItems":1}', $this->encodeSchema($unknownBeforeUnknown));
+        $this->assertSame('unknown[]', $this->toTypeScript($unknownBeforeUnknown));
+    }
+
+
+    #[Test]
+    public function aPlainListKeepsTheLargerOfItsMinimumLengthAndItsRequiredLeadingEntries(): void
+    {
+        $listOfIntegers = fn (int $requiredEntryCount, int $minItems) => new ArrayType(
+            itemType: new IntegerType,
+            shape: array_fill(0, $requiredEntryCount, new IntegerType()->setRequired(true)),
+            minItems: $minItems,
+        );
+
+        $this->assertSame('{"type":"array","items":{"type":"integer"},"minItems":3}', $this->encodeSchema($listOfIntegers(1, 3)));
+        $this->assertSame('{"type":"array","items":{"type":"integer"},"minItems":2}', $this->encodeSchema($listOfIntegers(2, 1)));
+    }
+
+
+    #[Test]
+    public function aListThatMayHaveGapsListsItsLeadingEntriesOnlyAsProperties(): void
+    {
+        $array = new ArrayType(
+            itemType: new UnionType([new IntegerType, new NullType]),
+            keyType: new IntegerType,
+            shape: [new IntegerType()->setRequired(true)],
+            intKeyOrder: IntKeyOrder::MaybeSequential,
+        );
+
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"array","items":{"type":["integer","null"]},"minItems":1},'
+                . '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":["integer","null"]}}'
+                . ']}',
+            $this->encodeSchema($array),
+        );
+        $this->assertSame(
+            implode("\n", [
+                'Array<number|null>|{',
+                "    '0': number",
+                '    [key: string]: number|null',
+                '}',
+            ]),
+            $this->toTypeScript($array),
         );
     }
 
