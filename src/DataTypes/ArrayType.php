@@ -563,7 +563,7 @@ class ArrayType extends Type
     }
 
 
-    private function hasEntriesOutsideShape(): bool
+    public function hasEntriesOutsideShape(): bool
     {
         return $this->itemType !== null || $this->keyType !== null;
     }

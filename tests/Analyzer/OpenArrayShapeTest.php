@@ -6,6 +6,8 @@ use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\OpenApi\SchemaJson;
 use AutoDoc\Tests\Traits\LoadsConfig;
+use AutoDoc\TypeScript\TypeConverter;
+use AutoDoc\TypeScript\TypeScriptRenderContext;
 use Closure;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -481,6 +483,340 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function aMapWithANarrowedKeyHasAnIndexSignatureInTypeScript(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableIntsByName();
+
+            if ($scores['alice'] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice?: number',
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapWithAKeyNarrowedByATypeCheckHasAnIndexSignatureOfEveryValueTypeInTypeScript(): void
+    {
+        $closure = function () {
+            $values = OpenArrayShapeTest::intsOrStringsByName();
+
+            if (is_string($values['alice'])) {
+                return $values;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice?: string',
+                '    [key: string]: string|number|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapOfUnknownValuesWithANarrowedKeyHasAnUnknownIndexSignatureInTypeScript(): void
+    {
+        $closure = function () {
+            $values = OpenArrayShapeTest::mixedByName();
+
+            if (is_int($values['alice'])) {
+                return $values;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice?: number',
+                '    [key: string]: unknown',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapWithTwoNarrowedKeysHasOneIndexSignatureInTypeScript(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableIntsByName();
+
+            if ($scores['alice'] !== null && $scores['bob'] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice?: number',
+                '    bob?: number',
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapOfShapesWithANarrowedEntryHasAnIndexSignatureOfTheShapeInTypeScript(): void
+    {
+        $closure = function () {
+            $users = OpenArrayShapeTest::usersByName();
+
+            if ($users['admin']['email'] !== null) {
+                return $users;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    admin?: {',
+                '        id: number',
+                '        email: string',
+                '    }',
+                '    [key: string]: {',
+                '        id: number',
+                '        email: string|null',
+                '    }|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function anIntKeyedMapWithANarrowedKeyHasAnIndexSignatureInTypeScript(): void
+    {
+        $closure = function (?int $first, ?int $second) {
+            $scores = array_map(fn (?int $score) => $score, [1 => $first, 2 => $second]);
+
+            if ($scores[1] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                "    '1'?: number",
+                '    [key: string]: number|null|undefined',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aMapNestedInAShapeHasAnIndexSignatureInTypeScript(): void
+    {
+        $closure = function () {
+            $report = OpenArrayShapeTest::report();
+
+            if ($report['scores']['alice'] !== null) {
+                return $report;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    scores: {',
+                '        alice?: number',
+                '        [key: string]: number|null|undefined',
+                '    }',
+                '    total: number',
+                '}|null',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeWithANarrowedKeyHasNoIndexSignatureInTypeScript(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::closedScores();
+
+            if ($scores['alice'] !== null) {
+                return $scores;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice: number',
+                '    bob: number',
+                '}|null',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListWithANarrowedFirstEntryHasARestElementInTypeScript(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[0] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame('[number?, ...Array<number|null>]', $this->closureReturnTypeScript($closure));
+    }
+
+
+    #[Test]
+    public function aListWithTwoNarrowedLeadingEntriesHasARestElementInTypeScript(): void
+    {
+        $closure = function () {
+            $scores = OpenArrayShapeTest::nullableInts();
+
+            if ($scores[0] !== null && $scores[1] !== null) {
+                return $scores;
+            }
+
+            return [];
+        };
+
+        $this->assertSame('[number?, number?, ...Array<number|null>]', $this->closureReturnTypeScript($closure));
+    }
+
+
+    #[Test]
+    public function aListOfUnknownValuesWithANarrowedFirstEntryHasAnUnknownRestElementInTypeScript(): void
+    {
+        $closure = function () {
+            $values = OpenArrayShapeTest::mixedList();
+
+            if (is_int($values[0])) {
+                return $values;
+            }
+
+            return [];
+        };
+
+        $this->assertSame('[number?, ...unknown[]]', $this->closureReturnTypeScript($closure));
+    }
+
+
+    #[Test]
+    public function aListOfShapesWithANarrowedFirstEntryHasARestElementOfTheShapeInTypeScript(): void
+    {
+        $closure = function () {
+            $users = OpenArrayShapeTest::users();
+
+            if ($users[0]['email'] !== null) {
+                return $users;
+            }
+
+            return [];
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '[',
+                '    {',
+                '        id: number',
+                '        email: string',
+                '    }?,',
+                '    ...Array<{',
+                '        id: number',
+                '        email: string|null',
+                '    }>,',
+                ']',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aListNestedInAShapeHasARestElementInTypeScript(): void
+    {
+        $closure = function () {
+            $ranking = OpenArrayShapeTest::ranking();
+
+            if ($ranking['scores'][0] !== null) {
+                return $ranking;
+            }
+
+            return null;
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    scores: [number?, ...Array<number|null>]',
+                '    total: number',
+                '}|null',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aTupleWithANarrowedEntryHasNoRestElementInTypeScript(): void
+    {
+        $closure = function () {
+            $pair = OpenArrayShapeTest::nullableIntAndString();
+
+            if ($pair[0] !== null) {
+                return $pair;
+            }
+
+            return null;
+        };
+
+        $this->assertSame('[number, string]|null', $this->closureReturnTypeScript($closure));
+    }
+
+
     private function closureReturnSchema(Closure $closure): string
     {
         $config = self::loadConfig();
@@ -491,6 +827,20 @@ final class OpenArrayShapeTest extends TestCase
         )->getReturnType();
 
         return json_encode(SchemaJson::castPropertiesToObjects($type->toSchema($config)), JSON_THROW_ON_ERROR);
+    }
+
+
+    private function closureReturnTypeScript(Closure $closure): string
+    {
+        $config = self::loadConfig();
+        $scope = new Scope($config);
+
+        $type = new PhpCallable(
+            scope: $scope,
+            reflection: new ReflectionFunction($closure),
+        )->getReturnType();
+
+        return new TypeConverter()->convertToTypeScriptType($type, new TypeScriptRenderContext($scope, $config->getTypeScriptConfig()));
     }
 
 
