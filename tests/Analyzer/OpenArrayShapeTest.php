@@ -1719,6 +1719,98 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function aKeyAComparedArrayMayHoldOutsideItsShapeMayBeKeptOrRemoved(): void
+    {
+        $closures = [
+            'intersectKey' => fn (string $error, int $count) => array_intersect_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::errorWithCounts(),
+            ),
+            'diffKey' => fn (string $error, int $count) => array_diff_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::errorWithCounts(),
+            ),
+            'intersectKeyWithAList' => fn (string $error, int $count) => array_intersect_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::idNameAndFlags(),
+            ),
+            'diffKeyWithAList' => fn (string $error, int $count) => array_diff_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::idNameAndFlags(),
+            ),
+            'diffKeyWithAClosedShapeToo' => fn (string $error, int $count) => array_diff_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::errorOnly(),
+                OpenArrayShapeTest::errorWithCounts(),
+            ),
+        ];
+
+        $errorAndMaybeCount = '{"type":"object","properties":{"error":{"type":"string"},"count":{"type":"integer"}},"required":["error"]}';
+        $maybeErrorAndMaybeCount = '{"type":"object","properties":{"error":{"type":"string"},"count":{"type":"integer"}}}';
+        $maybeCount = '{"type":"object","properties":{"count":{"type":"integer"}}}';
+
+        $this->assertSame(
+            [
+                'intersectKey' => $errorAndMaybeCount,
+                'diffKey' => $maybeCount,
+                'intersectKeyWithAList' => $maybeErrorAndMaybeCount,
+                'diffKeyWithAList' => $maybeErrorAndMaybeCount,
+                'diffKeyWithAClosedShapeToo' => $maybeCount,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyAClosedComparedShapeDoesNotListIsNeverPresent(): void
+    {
+        $closures = [
+            'intersectKey' => fn (string $error, int $count) => array_intersect_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::errorOnly(),
+                OpenArrayShapeTest::errorWithCounts(),
+            ),
+            'diffKey' => fn (string $error, int $count) => array_diff_key(
+                ['error' => $error, 'count' => $count],
+                OpenArrayShapeTest::errorOnly(),
+            ),
+        ];
+
+        $this->assertSame(
+            [
+                'intersectKey' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"]}',
+                'diffKey' => '{"type":"object","properties":{"count":{"type":"integer"}},"required":["count"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function comparingTheKeysOfAnArrayWithEntriesOutsideItsShapeKeepsThoseEntries(): void
+    {
+        $closures = [
+            'intersectKey' => fn () => array_intersect_key(OpenArrayShapeTest::errorWithCounts(), ['error' => true]),
+            'intersectKeyWithEntriesOutsideBothShapes' => fn () => array_intersect_key(
+                OpenArrayShapeTest::errorWithCounts(),
+                OpenArrayShapeTest::errorAndCodeWithFlags(),
+            ),
+            'diffKey' => fn () => array_diff_key(OpenArrayShapeTest::errorWithCounts(), ['error' => true]),
+        ];
+
+        $this->assertSame(
+            [
+                'intersectKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'intersectKeyWithEntriesOutsideBothShapes' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'diffKey' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function aUnionOfShapesDocumentsTheOtherEntriesOfEveryMember(): void
     {
         $closures = [

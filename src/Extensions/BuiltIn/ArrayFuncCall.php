@@ -685,15 +685,13 @@ class ArrayFuncCall extends FuncCallExtension
      */
     private function getKeyPresence(ArrayType $arrayType, int|string $key): ?bool
     {
-        if ($arrayType->shape === []) {
-            return null;
+        if (isset($arrayType->shape[$key])) {
+            return $arrayType->shape[$key]->required ? true : null;
         }
 
-        if (! isset($arrayType->shape[$key])) {
-            return false;
-        }
+        $mayHoldKeyOutsideShape = $arrayType->shape === [] || $arrayType->hasEntriesOutsideShape();
 
-        return $arrayType->shape[$key]->required ? true : null;
+        return $mayHoldKeyOutsideShape ? null : false;
     }
 
 
