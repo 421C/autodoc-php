@@ -2707,6 +2707,8 @@ final class OpenArrayShapeTest extends TestCase
             'mergeOfAnEmptyLiteral' => fn (string $message) => array_merge(['error' => $message], []),
             'spreadOfAnEmptyConstant' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::NO_ENTRIES],
             'spreadOfAnEmptyDeclaredShape' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::emptyShape()],
+            'spreadOfAnEmptyDeclaredShapeOfAnUnknownValue' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::decodedEmptyShape()],
+            'spreadOfAnEmptyDeclaredList' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::decodedEmptyList()],
             'spreadOfAVariableHoldingAnEmptyArray' => function (string $message) {
                 $extra = [];
 
@@ -3236,6 +3238,630 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function aWriteToAStringKeyOfAMapOrListAddsTheKeyNextToItsOtherEntries(): void
+    {
+        $closures = [
+            'map' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+            'mapOrNull' => function (string $name, bool $flag) {
+                $scores = $flag ? OpenArrayShapeTest::nullableIntsByName() : null;
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+            'list' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableInts();
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+            'arrayWithoutKeyType' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntItems();
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+            'intKeyedArray' => function (string $name) {
+                $scores = OpenArrayShapeTest::intKeyedNullableInts();
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+            'arrayKeyedArray' => function (string $name) {
+                $scores = OpenArrayShapeTest::arrayKeyedNullableInts();
+                $scores['alice'] = $name;
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($closures),
+                '{"type":"object","properties":{"alice":{"type":"string"}},"required":["alice"],"additionalProperties":{"type":["integer","null"]}}',
+            ),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteToAKeyOfAMapIsTypedInTypeScriptNextToTheIndexSignature(): void
+    {
+        $closure = function (string $name) {
+            $scores = OpenArrayShapeTest::nullableIntsByName();
+            $scores['alice'] = $name;
+
+            return $scores;
+        };
+
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    alice: string',
+                '    [key: string]: string|number|null',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteToAKeyOfAMapOfUnknownValuesAddsTheKeyNextToThem(): void
+    {
+        $closure = function (int $id) {
+            $data = OpenArrayShapeTest::mixedByName();
+            $data['userId'] = $id;
+
+            return $data;
+        };
+
+        $this->assertSame(
+            '{"type":"object","properties":{"userId":{"type":"integer"}},"required":["userId"],"additionalProperties":true}',
+            $this->closureReturnSchema($closure),
+        );
+        $this->assertSame(
+            implode("\n", [
+                '{',
+                '    userId: number',
+                '    [key: string]: unknown',
+                '}',
+            ]),
+            $this->closureReturnTypeScript($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteToAKeyOfAMapKeepsTheTypeOfItsOtherEntries(): void
+    {
+        $closure = function () {
+            $counts = OpenArrayShapeTest::countsByName();
+            $counts['total'] = array_sum($counts);
+
+            return $counts;
+        };
+
+        $this->assertSame(
+            '{"type":"object","properties":{"total":{"type":"number"}},"required":["total"],"additionalProperties":{"type":"integer"}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteToANewKeyOfAClosedShapeStillClosesTheShape(): void
+    {
+        $closure = function (string $name) {
+            $scores = OpenArrayShapeTest::closedScores();
+            $scores['carol'] = $name;
+
+            return $scores;
+        };
+
+        $this->assertSame(
+            '{"type":"object","properties":{"alice":{"type":["integer","null"]},"bob":{"type":"integer"},"carol":{"type":"string"}},"required":["alice","bob","carol"]}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aReadAfterAWriteToAKeyOfAMapSeesTheWrittenValueOnlyAtThatKey(): void
+    {
+        $closures = [
+            'writtenKey' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                return $scores['alice'];
+            },
+            'otherKey' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                return $scores['bob'];
+            },
+            'values' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                return array_values($scores);
+            },
+            'keys' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                return array_keys($scores);
+            },
+            'iterated' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                foreach ($scores as $score) {
+                    return $score;
+                }
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'writtenKey' => '{"type":"string"}',
+                'otherKey' => '{"type":["integer","null"]}',
+                'values' => '{"type":"array","items":{"type":["string","integer","null"]}}',
+                'keys' => '{"type":"array","items":{"type":"string"}}',
+                'iterated' => '{"type":["string","integer","null"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function laterWritesAndUnsetsAfterAWriteToAKeyOfAMapChangeOnlyTheirKey(): void
+    {
+        $closures = [
+            'twoKeys' => function (string $name, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+                $scores['bob'] = $flag;
+
+                return $scores;
+            },
+            'sameKeyTwice' => function (string $name, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+                $scores['alice'] = $flag;
+
+                return $scores;
+            },
+            'readOfAKeyWrittenTwice' => function (string $name, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+                $scores['alice'] = $flag;
+
+                return $scores['alice'];
+            },
+            'unsetAfterTheWrite' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+                unset($scores['alice']);
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'twoKeys' => '{"type":"object","properties":{"alice":{"type":"string"},"bob":{"type":"boolean"}},"required":["alice","bob"],"additionalProperties":{"type":["integer","null"]}}',
+                'sameKeyTwice' => '{"type":"object","properties":{"alice":{"type":"boolean"}},"required":["alice"],"additionalProperties":{"type":["integer","null"]}}',
+                'readOfAKeyWrittenTwice' => '{"type":"boolean"}',
+                'unsetAfterTheWrite' => self::NULLABLE_INTEGER_MAP,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteThatMayNotHappenToAKeyOfAMapWidensItsEntries(): void
+    {
+        $closures = [
+            'inABranch' => function (string $name, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                if ($flag) {
+                    $scores['alice'] = $name;
+                }
+
+                return $scores;
+            },
+            'inALoop' => function (string $name, array $names) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+
+                foreach ($names as $ignored) {
+                    $scores['alice'] = $name;
+                }
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","additionalProperties":{"type":["integer","string","null"]}}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteThatMayNotHappenToANewKeyNextToOtherEntriesKeepsTheirTypeAtThatKey(): void
+    {
+        $closures = [
+            'afterAWriteToAnotherKey' => function (string $name, bool $isAdmin, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                if ($flag) {
+                    $scores['bob'] = $isAdmin;
+                }
+
+                return $scores;
+            },
+            'readAfterAWriteToAnotherKey' => function (string $name, bool $isAdmin, bool $flag) {
+                $scores = OpenArrayShapeTest::nullableIntsByName();
+                $scores['alice'] = $name;
+
+                if ($flag) {
+                    $scores['bob'] = $isAdmin;
+                }
+
+                return $scores['bob'];
+            },
+            'declaredOtherEntries' => function (bool $isAdmin, bool $flag) {
+                $error = OpenArrayShapeTest::errorWithCounts();
+
+                if ($flag) {
+                    $error['bob'] = $isAdmin;
+                }
+
+                return $error;
+            },
+            'otherEntriesThatCanNotHoldTheKey' => function (string $name, bool $flag) {
+                $error = OpenArrayShapeTest::errorWithIntKeyedFlags();
+
+                if ($flag) {
+                    $error['code'] = $name;
+                }
+
+                return $error;
+            },
+            'closedShape' => function (string $name, bool $flag) {
+                $scores = OpenArrayShapeTest::closedScores();
+
+                if ($flag) {
+                    $scores['carol'] = $name;
+                }
+
+                return $scores;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'afterAWriteToAnotherKey' => '{"type":"object","properties":{"alice":{"type":"string"},"bob":{"type":["boolean","integer","null"]}},"required":["alice"],"additionalProperties":{"type":["integer","null"]}}',
+                'readAfterAWriteToAnotherKey' => '{"type":["boolean","integer","null"]}',
+                'declaredOtherEntries' => '{"type":"object","properties":{"error":{"type":"string"},"bob":{"type":["boolean","integer"]}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+                'otherEntriesThatCanNotHoldTheKey' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"boolean"}}',
+                'closedShape' => '{"type":"object","properties":{"alice":{"type":["integer","null"]},"bob":{"type":"integer"},"carol":{"type":"string"}},"required":["alice","bob"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteThatMayNotHappenToANewKeyNextToOtherEntriesOfUnknownTypeLeavesItUnknown(): void
+    {
+        $closures = [
+            'readOfTheKey' => function (bool $isAdmin, bool $flag) {
+                $error = OpenArrayShapeTest::errorWithUnknownEntries();
+
+                if ($flag) {
+                    $error['bob'] = $isAdmin;
+                }
+
+                // @phpstan-ignore offsetAccess.notFound
+                return $error['bob'];
+            },
+            'array' => function (bool $isAdmin, bool $flag) {
+                $error = OpenArrayShapeTest::errorWithUnknownEntries();
+
+                if ($flag) {
+                    $error['bob'] = $isAdmin;
+                }
+
+                return $error;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'readOfTheKey' => 'unknown',
+                'array' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    bob?: unknown',
+                    '    [key: string]: unknown',
+                    '}',
+                ]),
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedWriteThatMayNotHappenToANewKeyNextToOtherEntriesStartsFromTheirType(): void
+    {
+        $closure = function (string $name, bool $flag) {
+            $users = OpenArrayShapeTest::usersByName();
+            $users['alice']['name'] = $name;
+
+            if ($flag) {
+                $users['bob']['name'] = $name;
+            }
+
+            return $users;
+        };
+
+        $this->assertSame(
+            '{"type":"object","properties":{"alice":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email","name"]},"bob":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email"]}},"required":["alice"],"additionalProperties":' . self::USER . '}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aWriteToANewIntKeyOfAListStaysAmongItsEntries(): void
+    {
+        $closures = [
+            'list' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableInts();
+                $scores[0] = $name;
+
+                return $scores;
+            },
+            'readOfThatKey' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableInts();
+                $scores[0] = $name;
+
+                return $scores[0];
+            },
+            'readOfAnotherKey' => function (string $name) {
+                $scores = OpenArrayShapeTest::nullableInts();
+                $scores[0] = $name;
+
+                return $scores[1];
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'list' => '{"type":"array","items":{"type":["integer","string","null"]}}',
+                'readOfThatKey' => '{"type":"string"}',
+                'readOfAnotherKey' => '{"type":["integer","string","null"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedWriteUnderAStringKeyAddsTheKeyNextToTheOtherEntries(): void
+    {
+        $closures = [
+            'mapOfShapes' => function (string $name) {
+                $users = OpenArrayShapeTest::usersByName();
+                $users['alice']['name'] = $name;
+
+                return $users;
+            },
+            'openShape' => function (string $name) {
+                $rows = OpenArrayShapeTest::errorWithRowsOfIntegerIds();
+                $rows['alice']['name'] = $name;
+
+                return $rows;
+            },
+            'mapOfMaps' => function (string $name) {
+                $groups = OpenArrayShapeTest::countsByGroup();
+                $groups['admins']['alice'] = $name;
+
+                return $groups;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'mapOfShapes' => '{"type":"object","properties":{"alice":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email","name"]}},"required":["alice"],"additionalProperties":' . self::USER . '}',
+                'openShape' => '{"type":"object","properties":{"error":{"type":"string"},"alice":{"type":"object","properties":{"id":{"type":"integer"},"name":{"type":"string"}},"required":["id","name"]}},"required":["error","alice"],"additionalProperties":{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}}',
+                'mapOfMaps' => '{"type":"object","properties":{"admins":{"type":"object","properties":{"alice":{"type":"string"}},"required":["alice"],"additionalProperties":{"type":"integer"}}},"required":["admins"],"additionalProperties":{"type":"object","additionalProperties":{"type":"integer"}}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedWriteUnderAKeyTheOtherEntriesCanNotHaveStartsFromAnEmptyArray(): void
+    {
+        $closures = [
+            'list' => function (string $name) {
+                $users = OpenArrayShapeTest::users();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $users['alice']['name'] = $name;
+
+                return $users;
+            },
+            'intKeyedArray' => function (string $name) {
+                $users = OpenArrayShapeTest::usersById();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $users['alice']['name'] = $name;
+
+                return $users;
+            },
+            'arrayWithoutKeyType' => function (string $name) {
+                $users = OpenArrayShapeTest::userItems();
+                $users['alice']['name'] = $name;
+
+                return $users;
+            },
+            'readOfThatKey' => function (string $name) {
+                $users = OpenArrayShapeTest::users();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $users['alice']['name'] = $name;
+
+                return $users['alice'];
+            },
+            'readOfAnotherKey' => function (string $name) {
+                $users = OpenArrayShapeTest::users();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $users['alice']['name'] = $name;
+
+                return $users[0];
+            },
+            'deeperWrite' => function (string $city) {
+                $users = OpenArrayShapeTest::users();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible, offsetAccess.nonOffsetAccessible
+                $users['alice']['address']['city'] = $city;
+
+                return $users;
+            },
+            'listInAShape' => function (string $name) {
+                $data = ['users' => OpenArrayShapeTest::users()];
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $data['users']['alice']['name'] = $name;
+
+                return $data;
+            },
+            'openShapeWithIntKeyedEntries' => function (string $name) {
+                $error = OpenArrayShapeTest::errorWithIntKeyedFlags();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $error['details']['code'] = $name;
+
+                return $error;
+            },
+            'writeThatMayNotHappen' => function (string $name, bool $flag) {
+                $users = OpenArrayShapeTest::users();
+
+                if ($flag) {
+                    // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                    $users['alice']['name'] = $name;
+                }
+
+                return $users;
+            },
+            'intKeyOfAMap' => function (string $name) {
+                $users = OpenArrayShapeTest::usersByName();
+                // @phpstan-ignore offsetAccess.nonOffsetAccessible
+                $users[0]['name'] = $name;
+
+                return $users;
+            },
+        ];
+
+        $nameOnly = '{"type":"object","properties":{"name":{"type":"string"}},"required":["name"]}';
+        $userOrNameOnly = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}}}';
+
+        $this->assertSame(
+            [
+                'list' => '{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}',
+                'intKeyedArray' => '{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}',
+                'arrayWithoutKeyType' => '{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}',
+                'readOfThatKey' => $nameOnly,
+                'readOfAnotherKey' => self::USER,
+                'deeperWrite' => '{"type":"object","properties":{"alice":{"type":"object","properties":{"address":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},"required":["address"]}},"required":["alice"],"additionalProperties":' . self::USER . '}',
+                'listInAShape' => '{"type":"object","properties":{"users":{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}},"required":["users"]}',
+                'openShapeWithIntKeyedEntries' => '{"type":"object","properties":{"error":{"type":"string"},"details":{"type":"object","properties":{"code":{"type":"string"}},"required":["code"]}},"required":["error","details"],"additionalProperties":{"type":"boolean"}}',
+                'writeThatMayNotHappen' => '{"type":"object","additionalProperties":' . $userOrNameOnly . '}',
+                'intKeyOfAMap' => '{"type":"object","additionalProperties":' . $userOrNameOnly . '}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedWriteUnderAnIntKeyOfAListStartsFromTheTypeOfItsEntries(): void
+    {
+        $closure = function (string $name) {
+            $users = OpenArrayShapeTest::users();
+            $users[0]['name'] = $name;
+
+            return $users;
+        };
+
+        $this->assertSame(
+            '{"type":"array","items":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aReadAfterANestedWriteUnderAKeyOfAMapSeesTheWriteOnlyUnderThatKey(): void
+    {
+        $closures = [
+            'writtenKey' => function (string $name) {
+                $users = OpenArrayShapeTest::usersByName();
+                $users['alice']['name'] = $name;
+
+                return $users['alice'];
+            },
+            'otherKey' => function (string $name) {
+                $users = OpenArrayShapeTest::usersByName();
+                $users['alice']['name'] = $name;
+
+                return $users['bob'];
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'writtenKey' => '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email","name"]}',
+                'otherKey' => self::USER,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedWriteThatMayNotHappenUnderAKeyOfAMapChangesItsEntries(): void
+    {
+        $closure = function (string $name, bool $flag) {
+            $users = OpenArrayShapeTest::usersByName();
+
+            if ($flag) {
+                $users['alice']['name'] = $name;
+            }
+
+            return $users;
+        };
+
+        $this->assertSame(
+            '{"type":"object","additionalProperties":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email"]}}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure, ?Config $config = null): string
     {
         $config ??= self::loadConfig();
@@ -3309,6 +3935,15 @@ final class OpenArrayShapeTest extends TestCase
 
 
     /**
+     * @return array<string, array<string, int>>
+     */
+    private static function countsByGroup(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
      * @return array{scores: array<string, int|null>, total: int}
      */
     private static function report(): array
@@ -3368,6 +4003,24 @@ final class OpenArrayShapeTest extends TestCase
      * @return list<array{id: int, email: string|null}>
      */
     private static function users(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<int, array{id: int, email: string|null}>
+     */
+    private static function usersById(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<array{id: int, email: string|null}>
+     */
+    private static function userItems(): array
     {
         return json_decode('[]', true);
     }
@@ -3696,6 +4349,24 @@ final class OpenArrayShapeTest extends TestCase
     private static function emptyShape(): array
     {
         return [];
+    }
+
+
+    /**
+     * @return array{}
+     */
+    private static function decodedEmptyShape(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list{}
+     */
+    private static function decodedEmptyList(): array
+    {
+        return json_decode('[]', true);
     }
 
 

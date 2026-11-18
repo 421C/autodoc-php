@@ -116,7 +116,7 @@ class ArrayFuncCall extends FuncCallExtension
 
         $getVarNames = function (Type $argType) use ($call, &$getVarNames, &$varNames): void {
             if ($argType instanceof ArrayType) {
-                $getVarNames((clone $argType)->convertShapeToTypePair($call->scope->config)->itemType ?? new UnknownType);
+                $getVarNames($argType->getTypeOfEveryEntry($call->scope->config));
 
             } else if ($argType instanceof StringType && is_string($argType->value)) {
                 $varNames[] = $argType->value;
@@ -320,7 +320,7 @@ class ArrayFuncCall extends FuncCallExtension
                 $argType = $argTypes->get($i)->unwrapType($config);
 
                 if ($argType instanceof ArrayType) {
-                    $closureArgTypes[] = (clone $argType)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+                    $closureArgTypes[] = $argType->getTypeOfEveryEntry($config);
 
                 } else {
                     $closureArgTypes[] = new UnknownType;
@@ -344,7 +344,7 @@ class ArrayFuncCall extends FuncCallExtension
                 $type = $argTypes->get($i)->unwrapType($config);
 
                 if ($type instanceof ArrayType) {
-                    $itemTypes[] = (clone $type)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+                    $itemTypes[] = $type->getTypeOfEveryEntry($config);
 
                 } else {
                     return new ArrayType;
@@ -750,7 +750,7 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function handleArrayMerge(Config $config, ArgumentList $argTypes): Type
     {
-        $mergedArray = new ArrayType(maxItems: 0);
+        $mergedArray = ArrayType::withoutEntries();
         $counter = count($argTypes);
 
         for ($i = 0; $i < $counter; $i++) {
@@ -774,7 +774,7 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function getItemType(Config $config, ArgumentList $argTypes): Type
     {
-        return $this->getArrayArgument($argTypes)?->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+        return $this->getArrayArgument($argTypes)?->getTypeOfEveryEntry($config) ?? new UnknownType;
     }
 
 

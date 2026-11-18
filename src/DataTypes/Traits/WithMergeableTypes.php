@@ -292,7 +292,7 @@ trait WithMergeableTypes
 
     private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, Config $config, bool $mergeAsIntersection = false): ?ArrayType
     {
-        if (! $array1->shape && ! $array1->itemType && ! $array1->keyType) {
+        if ($array1->isUntypedOrKnownEmpty()) {
             if (! $mergeAsIntersection) {
                 foreach ($array2->shape as $key => $type) {
                     $array2->shape[$key] = $this->asOptionalMember($type);
@@ -302,7 +302,7 @@ trait WithMergeableTypes
             return $array2;
         }
 
-        if (! $array2->shape && ! $array2->itemType && ! $array2->keyType) {
+        if ($array2->isUntypedOrKnownEmpty()) {
             if (! $mergeAsIntersection) {
                 foreach ($array1->shape as $key => $type) {
                     $array1->shape[$key] = $this->asOptionalMember($type);
@@ -330,10 +330,6 @@ trait WithMergeableTypes
             if (! $array1->tryMergeIntKeyOrder($array2, $mergeAsIntersection, $config)) {
                 return null;
             }
-
-            $array1BeforeMerge = clone $array1;
-
-            $array1->mergeEntriesOutsideShape($array2, $mergeAsIntersection, $config);
 
             foreach ($array1->shape as $key => $type1) {
                 if (! isset($array2->shape[$key])) {
@@ -371,10 +367,12 @@ trait WithMergeableTypes
             if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                 foreach ($array2->shape as $key => $type2) {
                     $array1->shape[$key] ??= $mergeAsIntersection
-                        ? $this->intersectWithEntriesOutsideShapeOf($array1BeforeMerge, $key, $type2, $config)
+                        ? $this->intersectWithEntriesOutsideShapeOf($array1, $key, $type2, $config)
                         : $this->asOptionalMember($type2);
                 }
             }
+
+            $array1->mergeEntriesOutsideShape($array2, $mergeAsIntersection, $config);
 
             return $array1;
 

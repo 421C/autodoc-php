@@ -203,6 +203,10 @@ class PhpDoc
                 }
             }
 
+            if ($node->sealed && $shape === []) {
+                return ArrayType::withoutEntries();
+            }
+
             $isListKind = in_array($node->kind, [ArrayShapeNode::KIND_LIST, ArrayShapeNode::KIND_NON_EMPTY_LIST], true);
             $hasOptionalEntries = array_any($shape, fn (Type $entry) => ! $entry->required);
 
@@ -210,7 +214,6 @@ class PhpDoc
                 itemType: $node->sealed ? null : $this->resolveTypeOfEntriesOutsideShape($node, $binding),
                 keyType: $node->sealed ? null : $this->resolveKeyTypeOfEntriesOutsideShape($node, $isListKind, $binding),
                 shape: $shape,
-                maxItems: $node->sealed && $shape === [] ? 0 : null,
                 intKeyOrder: ! $isListKind && $hasOptionalEntries ? IntKeyOrder::MaybeSequential : IntKeyOrder::Sequential,
             );
         }

@@ -118,10 +118,8 @@ class ArrayTypeResolver
                 }
             }
 
-            $hasNoEntries = $arrayType->shape === [] && ! $arrayType->hasEntriesOutsideShape() && $entriesWithoutKnownKey === [];
-
-            if ($hasNoEntries) {
-                return new ArrayType(maxItems: 0);
+            if ($arrayType->isUntypedOrKnownEmpty() && $entriesWithoutKnownKey === []) {
+                return ArrayType::withoutEntries();
             }
 
             if ($hasAtLeastOneUnknownKey && ! $resolvePartialArrayShapes) {

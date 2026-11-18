@@ -270,7 +270,7 @@ abstract class Type
         if ($type instanceof UnionType || $type instanceof IntersectionType) {
             $filteredTypes = array_values(array_filter(
                 $type->types,
-                fn (Type $t) => $t->fitsInto($this, $config, asRefinement: true)
+                fn (Type $t) => $t->refines($this, $config)
             ));
 
             if (empty($filteredTypes)) {
@@ -292,7 +292,7 @@ abstract class Type
             return $type->unwrapType($config);
         }
 
-        if ($type->fitsInto($this, $config, asRefinement: true)) {
+        if ($type->refines($this, $config)) {
             if ($this instanceof ObjectType
                 && $type instanceof ObjectType
                 && $type->className !== null
@@ -316,10 +316,16 @@ abstract class Type
 
 
     /**
-     * With `$asRefinement`, whether an analyzed type may replace the declared one. Unlike subtypes:
+     * Whether this analyzed type may replace the declared one. Unlike subtypes:
      * - `array{a: string}` refines `array<string, int>`
      * - `array{a: int}` does not refine `array{a: int, b?: int}`
      */
+    public function refines(Type $declaredType, Config $config): bool
+    {
+        return $this->fitsInto($declaredType, $config, asRefinement: true);
+    }
+
+
     protected function fitsInto(Type $superType, Config $config, bool $asRefinement): bool
     {
         if ($this instanceof UnresolvedType) {
@@ -919,7 +925,7 @@ abstract class Type
     {
         if (is_array($value)) {
             if ($value === []) {
-                return new ArrayType(maxItems: 0);
+                return ArrayType::withoutEntries();
             }
 
             $itemTypes = array_map(fn (mixed $item) => self::fromValue($item, $config)->setRequired(true), $value);

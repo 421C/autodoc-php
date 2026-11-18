@@ -927,6 +927,23 @@ final class OpenArrayShapeSchemaTest extends TestCase
 
 
     #[Test]
+    public function makingEveryEntryOfAClosedShapeOptionalDropsItsMinimumLength(): void
+    {
+        $tuple = new ArrayType(shape: [new IntegerType()->setRequired(true), new StringType()->setRequired(true)], minItems: 2);
+        $tuple->markItemsOptional();
+
+        $this->assertNull($tuple->minItems);
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"array","items":{"type":["integer","string"]}},'
+                . '{"type":"object","additionalProperties":{"type":["integer","string"]}}'
+                . ']}',
+            $this->encodeSchema($tuple->convertShapeToTypePair(self::loadConfig())),
+        );
+    }
+
+
+    #[Test]
     public function aClosedShapeIgnoresTheRemovalOfAKeyItDoesNotList(): void
     {
         $tuple = new ArrayType(shape: [new IntegerType()->setRequired(true), new StringType()->setRequired(true)], minItems: 2);
@@ -950,6 +967,174 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $this->assertSame([], $array->shape);
         $this->assertFalse($array->hasEntriesOutsideShape());
         $this->assertSame(IntKeyOrder::Sequential, $array->intKeyOrder);
+    }
+
+
+    #[Test]
+    public function anArrayWithoutEntriesIsANewEmptyArrayEachTime(): void
+    {
+        $this->assertEquals(new ArrayType(maxItems: 0), ArrayType::withoutEntries());
+        $this->assertNotSame(ArrayType::withoutEntries(), ArrayType::withoutEntries());
+    }
+
+
+    #[Test]
+    public function anArrayWithoutEntriesAddsNothingToASpreadWhileAnUntypedArrayAddsUnknownEntries(): void
+    {
+        $spreadIntoError = function (ArrayType $spreadArray): ArrayType {
+            $error = new ArrayType(shape: ['error' => new StringType()->setRequired(true)]);
+            $error->mergeArray($spreadArray, self::loadConfig());
+
+            return $error;
+        };
+
+        $this->assertSame(
+            [
+                'withoutEntries' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"]}',
+                'untyped' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}',
+            ],
+            array_map($this->encodeSchema(...), [
+                'withoutEntries' => $spreadIntoError(ArrayType::withoutEntries()),
+                'untyped' => $spreadIntoError(new ArrayType),
+            ]),
+        );
+    }
+
+
+    #[Test]
+    public function anArrayWithoutEntriesFitsAShapeOfOptionalEntriesWhileAnUntypedArrayDoesNot(): void
+    {
+        $config = self::loadConfig();
+        $optionalCode = new ArrayType(shape: ['code' => new IntegerType]);
+        $requiredCode = new ArrayType(shape: ['code' => new IntegerType()->setRequired(true)]);
+
+        $this->assertTrue(ArrayType::withoutEntries()->isSubTypeOf($optionalCode, $config));
+        $this->assertFalse(ArrayType::withoutEntries()->isSubTypeOf($requiredCode, $config));
+        $this->assertFalse(new ArrayType()->isSubTypeOf($optionalCode, $config));
+    }
+
+
+    #[Test]
+    public function onlyAnArrayWithoutAShapeAndWithoutOtherEntriesIsUntypedOrKnownEmpty(): void
+    {
+        $emptiedShape = new ArrayType(shape: ['error' => new StringType()->setRequired(true)]);
+        $emptiedShape->removeItemFromArray('error');
+
+        $arrays = [
+            'untyped' => new ArrayType,
+            'withoutEntries' => ArrayType::withoutEntries(),
+            'emptiedShape' => $emptiedShape,
+            'list' => new ArrayType(itemType: new IntegerType),
+            'keyTypeWithoutItemType' => new ArrayType(keyType: new IntegerType),
+            'closedShape' => new ArrayType(shape: ['error' => new StringType]),
+            'openShape' => $this->errorWithIntegerEntries(),
+        ];
+
+        $this->assertSame(
+            [
+                'untyped' => true,
+                'withoutEntries' => true,
+                'emptiedShape' => true,
+                'list' => false,
+                'keyTypeWithoutItemType' => false,
+                'closedShape' => false,
+                'openShape' => false,
+            ],
+            array_map(fn (ArrayType $array) => $array->isUntypedOrKnownEmpty(), $arrays),
+        );
+    }
+
+
+    #[Test]
+    public function theTypeOfEveryEntryUnitesTheKnownEntriesWithTheOtherEntries(): void
+    {
+        $arrays = [
+            'list' => new ArrayType(itemType: new IntegerType),
+            'map' => new ArrayType(itemType: new BoolType, keyType: new StringType),
+            'closedShape' => new ArrayType(shape: ['error' => new StringType()->setRequired(true), 'code' => new IntegerType]),
+            'tuple' => new ArrayType(shape: [new IntegerType()->setRequired(true), new BoolType()->setRequired(true)]),
+            'openShape' => $this->errorWithIntegerEntries(),
+            'openTuple' => $this->intKeyedOpenShape([new IntegerType()->setRequired(true)]),
+        ];
+
+        $this->assertSame(
+            [
+                'list' => '{"type":"integer"}',
+                'map' => '{"type":"boolean"}',
+                'closedShape' => '{"type":["string","integer"]}',
+                'tuple' => '{"type":["integer","boolean"]}',
+                'openShape' => '{"type":["string","integer"]}',
+                'openTuple' => '{"type":["integer","boolean"]}',
+            ],
+            array_map(fn (ArrayType $array) => $this->encodeSchema($array->getTypeOfEveryEntry(self::loadConfig())), $arrays),
+        );
+    }
+
+
+    #[Test]
+    public function theTypeOfEveryEntryIsUnknownWithoutAnItemTypeOrAShape(): void
+    {
+        $arrays = [
+            'untyped' => new ArrayType,
+            'withoutEntries' => ArrayType::withoutEntries(),
+            'keyTypeWithoutItemType' => new ArrayType(keyType: new IntegerType),
+        ];
+
+        foreach ($arrays as $name => $array) {
+            $this->assertInstanceOf(UnknownType::class, $array->getTypeOfEveryEntry(self::loadConfig()), $name);
+        }
+    }
+
+
+    #[Test]
+    public function readingTheTypeOfEveryEntryKeepsTheShape(): void
+    {
+        $array = $this->errorWithIntegerEntries();
+        $array->getTypeOfEveryEntry(self::loadConfig());
+
+        $this->assertSame(
+            '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+            $this->encodeSchema($array),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeRefinesAMapItIsNotASubtypeOf(): void
+    {
+        $config = self::loadConfig();
+        $error = new ArrayType(shape: ['error' => new StringType()->setRequired(true)]);
+        $integersByName = new ArrayType(itemType: new IntegerType, keyType: new StringType);
+
+        $this->assertTrue($error->refines($integersByName, $config));
+        $this->assertFalse($error->isSubTypeOf($integersByName, $config));
+    }
+
+
+    #[Test]
+    public function aShapeRefinesAnotherShapeOnlyWhenItListsEveryDeclaredKey(): void
+    {
+        $config = self::loadConfig();
+        $code = new ArrayType(shape: ['code' => new IntegerType()->setRequired(true)]);
+        $codeAndDetails = new ArrayType(shape: ['code' => new IntegerType()->setRequired(true), 'details' => new StringType()->setRequired(true)]);
+        $codeAndOptionalDetails = new ArrayType(shape: ['code' => new IntegerType()->setRequired(true), 'details' => new StringType]);
+
+        $this->assertFalse($code->refines($codeAndOptionalDetails, $config));
+        $this->assertTrue($code->isSubTypeOf($codeAndOptionalDetails, $config));
+        $this->assertTrue($codeAndDetails->refines($codeAndOptionalDetails, $config));
+    }
+
+
+    #[Test]
+    public function aTypeThatIsNotAnArrayRefinesExactlyItsSuperTypes(): void
+    {
+        $config = self::loadConfig();
+        $integerOrString = new UnionType([new IntegerType, new StringType]);
+
+        $this->assertTrue(new IntegerType()->refines($integerOrString, $config));
+        $this->assertTrue(new IntegerType()->isSubTypeOf($integerOrString, $config));
+        $this->assertFalse(new BoolType()->refines($integerOrString, $config));
+        $this->assertFalse(new BoolType()->isSubTypeOf($integerOrString, $config));
     }
 
 

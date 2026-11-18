@@ -152,7 +152,7 @@ class TypeConverter
 
             $tsTypes[] = $documentedTupleEntries !== null
                 ? $this->toTsTuple($documentedTupleEntries, $context, $typeOfEntriesOutsideShape)
-                : $this->toTsListOfEveryEntry($type, $context);
+                : $this->toTsList($this->convertToTypeScriptType($type->getTypeOfEveryEntry($config), $context->nested()));
         }
 
         if ($type->mayEncodeAsObject($config)) {
@@ -160,14 +160,6 @@ class TypeConverter
         }
 
         return implode('|', $tsTypes);
-    }
-
-
-    private function toTsListOfEveryEntry(ArrayType $type, TypeScriptRenderContext $context): string
-    {
-        $typeOfEveryEntry = (clone $type)->convertShapeToTypePair($context->scope->config)->itemType ?? new UnknownType;
-
-        return $this->toTsList($this->convertToTypeScriptType($typeOfEveryEntry, $context->nested()));
     }
 
 
