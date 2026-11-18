@@ -28,10 +28,6 @@ class ArrayTypeResolver
         try {
             $config = $this->scope->config;
 
-            if (! $this->node->items) {
-                return new ArrayType(maxItems: 0);
-            }
-
             $arrayType = new ArrayType;
 
             /** @var array{array<int|string>, Type}[] */
@@ -120,6 +116,12 @@ class ArrayTypeResolver
                         }
                     }
                 }
+            }
+
+            $hasNoEntries = $arrayType->shape === [] && ! $arrayType->hasEntriesOutsideShape() && $entriesWithoutKnownKey === [];
+
+            if ($hasNoEntries) {
+                return new ArrayType(maxItems: 0);
             }
 
             if ($hasAtLeastOneUnknownKey && ! $resolvePartialArrayShapes) {

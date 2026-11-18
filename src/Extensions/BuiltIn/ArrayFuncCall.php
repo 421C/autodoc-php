@@ -750,7 +750,7 @@ class ArrayFuncCall extends FuncCallExtension
 
     private function handleArrayMerge(Config $config, ArgumentList $argTypes): Type
     {
-        $mergedArray = new ArrayType;
+        $mergedArray = new ArrayType(maxItems: 0);
         $counter = count($argTypes);
 
         for ($i = 0; $i < $counter; $i++) {

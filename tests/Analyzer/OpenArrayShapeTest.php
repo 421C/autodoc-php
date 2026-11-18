@@ -2736,6 +2736,67 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function aMergeOrLiteralOfOnlyEmptyArraysIsEmpty(): void
+    {
+        $closures = [
+            'spreadOfAMergeOfEmptyArrays' => fn (string $message) => ['error' => $message, ...array_merge([], [])],
+            'spreadOfAMergeWithoutArguments' => fn (string $message) => ['error' => $message, ...array_merge()],
+            'mergeOfAMergeOfEmptyArrays' => fn (string $message) => array_merge(['error' => $message], array_merge([], [])),
+            'spreadOfALiteralOfEmptySpreads' => fn (string $message) => ['error' => $message, ...[...[], ...[]]],
+            'spreadOfALiteralOfAnEmptyConstant' => fn (string $message) => ['error' => $message, ...[...OpenArrayShapeTest::NO_ENTRIES]],
+            'spreadOfAVariableHoldingAMergeOfEmptyArrays' => function (string $message) {
+                $extra = array_merge([], []);
+
+                return ['error' => $message, ...$extra];
+            },
+            'spreadOfALiteralWithOnlyIgnoredItems' => fn (string $message) => ['error' => $message, ...[
+                /** @autodoc-ignore */
+                'debug' => true,
+            ]],
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"]}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aMergeOrLiteralWithEntriesNextToEmptyArraysIsNotEmpty(): void
+    {
+        $closures = [
+            'mergeOfAnEmptyAndAnUntypedArray' => fn (string $message, array $extra) => ['error' => $message, ...array_merge([], $extra)],
+            'spreadOfALiteralWithAKeyOfUnknownValue' => fn (string $message, string $key) => ['error' => $message, ...[$key => 1]],
+            'keyAfterAnEmptySpread' => fn () => [...[], 'a' => 2],
+            'listAfterAnEmptySpread' => fn () => [...[], ...OpenArrayShapeTest::ints()],
+            'mergeOfAnEmptyArrayAndAList' => fn () => array_merge([], OpenArrayShapeTest::ints()),
+            'ignoredItemNextToAKeptItem' => fn () => [
+                /** @autodoc-ignore */
+                'debug' => true,
+                'a' => 2,
+            ],
+            'mergeOfEmptyArraysAlone' => fn () => array_merge([], []),
+            'literalOfEmptySpreadsAlone' => fn () => [...[], ...[]],
+        ];
+
+        $this->assertSame(
+            [
+                'mergeOfAnEmptyAndAnUntypedArray' => self::ERROR_WITH_ANY_ENTRIES,
+                'spreadOfALiteralWithAKeyOfUnknownValue' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"integer","const":1}}',
+                'keyAfterAnEmptySpread' => '{"type":"object","properties":{"a":{"type":"integer","const":2}},"required":["a"]}',
+                'listAfterAnEmptySpread' => '{"type":"array","items":{"type":"integer"}}',
+                'mergeOfAnEmptyArrayAndAList' => '{"type":"array","items":{"type":"integer"}}',
+                'ignoredItemNextToAKeptItem' => '{"type":"object","properties":{"a":{"type":"integer","const":2}},"required":["a"]}',
+                'mergeOfEmptyArraysAlone' => '{"type":"array","items":{"type":"string"}}',
+                'literalOfEmptySpreadsAlone' => '{"type":"array","items":{"type":"string"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function anEmptyArrayInAUnionMakesTheOtherKeysOptional(): void
     {
         $closures = [
