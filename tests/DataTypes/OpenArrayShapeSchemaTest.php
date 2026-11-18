@@ -1094,22 +1094,22 @@ final class OpenArrayShapeSchemaTest extends TestCase
 
 
     #[Test]
-    public function anIntersectionOfShapesWithDifferentKeysKeepsTheTypeOfEachKey(): void
+    public function anIntersectionOfShapesWithDifferentKeysKeepsTheTypeOfEachKeyThatTheOtherEntriesAllow(): void
     {
         $errorWithIntegersOrStrings = new ArrayType(
             itemType: new UnionType([new IntegerType, new StringType]),
             keyType: new StringType,
             shape: ['error' => new StringType()->setRequired(true)],
         );
-        $codeWithIntegers = new ArrayType(
-            itemType: new IntegerType,
+        $codeWithIntegersOrStrings = new ArrayType(
+            itemType: new UnionType([new IntegerType, new StringType]),
             keyType: new StringType,
             shape: ['code' => new IntegerType()->setRequired(true)],
         );
 
         $this->assertSame(
-            '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"integer"}}',
-            $this->encodeSchema(new IntersectionType([$errorWithIntegersOrStrings, $codeWithIntegers])),
+            '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":["integer","string"]}}',
+            $this->encodeSchema(new IntersectionType([$errorWithIntegersOrStrings, $codeWithIntegersOrStrings])),
         );
     }
 
@@ -1167,6 +1167,124 @@ final class OpenArrayShapeSchemaTest extends TestCase
         $this->assertSame(
             '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","string"]}}',
             $this->encodeSchema($withIntegersOrStrings),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyThatOnlyOneShapeListsIsNarrowedByTheOtherEntriesOfTheOtherShape(): void
+    {
+        $errorAndCount = fn (Type $countType) => new ArrayType(shape: [
+            'error' => new StringType()->setRequired(true),
+            'count' => $countType,
+        ]);
+
+        $merged = array_map($this->mergedArray(...), [
+            'requiredKey' => new IntersectionType([$errorAndCount(new UnionType([new IntegerType, new StringType])->setRequired(true)), $this->errorWithIntegerEntries()]),
+            'requiredKeyOfTheSecondMember' => new IntersectionType([$this->errorWithIntegerEntries(), $errorAndCount(new UnionType([new IntegerType, new StringType])->setRequired(true))]),
+        ]);
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($merged),
+                '{"type":"object","properties":{"error":{"type":"string"},"count":{"type":"integer"}},"required":["error","count"],"additionalProperties":{"type":"integer"}}',
+            ),
+            array_map($this->encodeSchema(...), $merged),
+        );
+    }
+
+
+    #[Test]
+    public function anOptionalKeyThatTheOtherEntriesOfTheOtherShapeCanNotHoldStaysAsAConflict(): void
+    {
+        $errorAndCount = new ArrayType(shape: [
+            'error' => new StringType()->setRequired(true),
+            'count' => new BoolType,
+        ]);
+
+        $merged = array_map($this->mergedArray(...), [
+            'firstMember' => new IntersectionType([clone $errorAndCount, $this->errorWithIntegerEntries()]),
+            'secondMember' => new IntersectionType([$this->errorWithIntegerEntries(), clone $errorAndCount]),
+        ]);
+
+        $config = self::loadConfig();
+
+        $this->assertSame(
+            array_fill_keys(array_keys($merged), [NeverType::class, false, false]),
+            array_map(
+                fn (ArrayType $array) => [
+                    $array->shape['count']->unwrapType($config)::class,
+                    $array->shape['count']->required,
+                    $array->hasRequiredEntryThatCanNotExist($config),
+                ],
+                $merged,
+            ),
+        );
+    }
+
+
+    #[Test]
+    public function aRequiredKeyThatTheOtherEntriesOfTheOtherShapeCanNotHoldCanNotExist(): void
+    {
+        $errorAnd = fn (int|string $key, Type $valueType) => new ArrayType(shape: [
+            'error' => new StringType()->setRequired(true),
+            $key => $valueType->setRequired(true),
+        ]);
+
+        $errorWithIntKeyedIntegers = new ArrayType(
+            itemType: new IntegerType,
+            keyType: new IntegerType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $merged = array_map($this->mergedArray(...), [
+            'valueType' => new IntersectionType([$errorAnd('name', new StringType('y')), $this->errorWithIntegerEntries()]),
+            'valueTypeOfTheSecondMember' => new IntersectionType([$this->errorWithIntegerEntries(), $errorAnd('name', new StringType('y'))]),
+            'intKeyAgainstStringKeys' => new IntersectionType([$errorAnd(5, new IntegerType), $this->errorWithIntegerEntries()]),
+            'stringKeyAgainstIntKeys' => new IntersectionType([$errorAnd('count', new IntegerType), $errorWithIntKeyedIntegers]),
+            'keyBothShapesList' => new IntersectionType([$errorAnd('count', new IntegerType), $errorAnd('count', new StringType)]),
+            'fittingKey' => new IntersectionType([$errorAnd('count', new IntegerType), $this->errorWithIntegerEntries()]),
+        ]);
+
+        $this->assertSame(
+            [
+                'valueType' => true,
+                'valueTypeOfTheSecondMember' => true,
+                'intKeyAgainstStringKeys' => true,
+                'stringKeyAgainstIntKeys' => true,
+                'keyBothShapesList' => true,
+                'fittingKey' => false,
+            ],
+            array_map(fn (ArrayType $array) => $array->hasRequiredEntryThatCanNotExist(self::loadConfig()), $merged),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyThatOnlyOneShapeListsKeepsItsTypeNextToAShapeThatAllowsIt(): void
+    {
+        $errorAndName = fn () => new ArrayType(shape: [
+            'error' => new StringType()->setRequired(true),
+            'name' => new StringType()->setRequired(true),
+        ]);
+
+        $errorWithUnknownEntries = new ArrayType(
+            itemType: new UnknownType,
+            keyType: new StringType,
+            shape: ['error' => new StringType()->setRequired(true)],
+        );
+
+        $merged = array_map($this->mergedArray(...), [
+            'closedShape' => new IntersectionType([$errorAndName(), new ArrayType(shape: ['error' => new StringType()->setRequired(true)])]),
+            'unknownOtherEntries' => new IntersectionType([$errorAndName(), $errorWithUnknownEntries]),
+        ]);
+
+        $this->assertSame(
+            [
+                'closedShape' => '{"type":"object","properties":{"error":{"type":"string"},"name":{"type":"string"}},"required":["error","name"]}',
+                'unknownOtherEntries' => '{"type":"object","properties":{"error":{"type":"string"},"name":{"type":"string"}},"required":["error","name"],"additionalProperties":true}',
+            ],
+            array_map($this->encodeSchema(...), $merged),
         );
     }
 

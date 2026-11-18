@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer\Narrowing;
 
 use AutoDoc\Analyzer\Narrowing\Traits\FiltersLooseScalarValues;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\DataTypes\ArrayType;
 use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\Type;
@@ -77,6 +78,9 @@ final class IsType extends Narrowing
             $intersectedType = $intersectedType->unwrapType($scope->config);
         }
 
-        return $intersectedType instanceof IntersectionType ? null : $intersectedType;
+        $canNotExist = $intersectedType instanceof IntersectionType
+            || ($intersectedType instanceof ArrayType && $intersectedType->hasRequiredEntryThatCanNotExist($scope->config));
+
+        return $canNotExist ? null : $intersectedType;
     }
 }

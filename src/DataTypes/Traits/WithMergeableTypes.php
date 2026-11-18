@@ -331,13 +331,15 @@ trait WithMergeableTypes
                 return null;
             }
 
+            $array1BeforeMerge = clone $array1;
+
             $array1->mergeEntriesOutsideShape($array2, $mergeAsIntersection, $config);
 
             foreach ($array1->shape as $key => $type1) {
                 if (! isset($array2->shape[$key])) {
-                    if (! $mergeAsIntersection) {
-                        $array1->shape[$key] = $this->asOptionalMember($type1);
-                    }
+                    $array1->shape[$key] = $mergeAsIntersection
+                        ? $this->intersectWithEntriesOutsideShapeOf($array2, $key, $type1, $config)
+                        : $this->asOptionalMember($type1);
 
                     continue;
                 }
@@ -369,7 +371,7 @@ trait WithMergeableTypes
             if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                 foreach ($array2->shape as $key => $type2) {
                     $array1->shape[$key] ??= $mergeAsIntersection
-                        ? $type2
+                        ? $this->intersectWithEntriesOutsideShapeOf($array1BeforeMerge, $key, $type2, $config)
                         : $this->asOptionalMember($type2);
                 }
             }
@@ -410,6 +412,27 @@ trait WithMergeableTypes
         }
 
         return null;
+    }
+
+
+    private function intersectWithEntriesOutsideShapeOf(ArrayType $other, int|string $key, Type $entry, Config $config): Type
+    {
+        if (! $other->hasEntriesOutsideShape()) {
+            return $entry;
+        }
+
+        $typeOutsideShape = $other->getTypeOfEntryOutsideShapeAt($key, $config);
+
+        if ($typeOutsideShape === null) {
+            return new NeverType(conflictingTypes: [$entry], required: $entry->required);
+        }
+
+        $intersectedEntry = $this->mergeTypes($entry, $typeOutsideShape, $config, mergeAsIntersection: true)
+            ?? new IntersectionType([$entry, $typeOutsideShape]);
+
+        $intersectedEntry->required = $entry->required;
+
+        return $intersectedEntry;
     }
 
 

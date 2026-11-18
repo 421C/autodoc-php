@@ -642,6 +642,143 @@ class ArrayType extends Type
     }
 
 
+    /**
+     * The type of an entry under `$key` among the entries outside the shape, or null when none of them can be under that key.
+     */
+    public function getTypeOfEntryOutsideShapeAt(int|string $key, Config $config): ?Type
+    {
+        $mayHoldKey = is_int($key)
+            ? $this->mayHoldIntKeysOutsideShape($config)
+            : $this->hasEntriesOutsideShape() && self::mayBeStoredAsStringKey($this->keyType ?? new IntegerType, $config);
+
+        return $mayHoldKey ? $this->itemType ?? new UnknownType : null;
+    }
+
+
+    /**
+     * Whether a required entry is an intersection that no value satisfies, so no such array exists.
+     */
+    public function hasRequiredEntryThatCanNotExist(Config $config): bool
+    {
+        return array_any(
+            array: $this->shape,
+            callback: fn (Type $entry) => $entry->required
+                && ($entry instanceof NeverType || ($entry instanceof IntersectionType && $entry->unwrapType($config) instanceof NeverType)),
+        );
+    }
+
+
+    protected function fitsIntoArray(self $superArray, Config $config, bool $asRefinement): bool
+    {
+        if (! $this->isOfClassOf($superArray)) {
+            return false;
+        }
+
+        if ($asRefinement && $this->shape !== []) {
+            return $this->listsEveryKeyOf($superArray, $config);
+        }
+
+        if ($superArray->shape !== []) {
+            return ! $asRefinement && $this->fitsIntoShapeOf($superArray, $config);
+        }
+
+        $thisAsTypePair = (clone $this)->convertShapeToTypePair($config);
+
+        if ($superArray->keyType !== null
+            && ! ($thisAsTypePair->keyType ?? new IntegerType)->fitsInto($superArray->keyType, $config, $asRefinement)
+        ) {
+            return false;
+        }
+
+        if ($superArray->itemType === null) {
+            return true;
+        }
+
+        return $thisAsTypePair->itemType !== null && $thisAsTypePair->itemType->fitsInto($superArray->itemType, $config, $asRefinement);
+    }
+
+
+    private function isOfClassOf(self $superArray): bool
+    {
+        if ($superArray->className === null || $this->className === $superArray->className) {
+            return true;
+        }
+
+        if ($this->className === null || ! class_exists($this->className) || ! class_exists($superArray->className)) {
+            return false;
+        }
+
+        return is_a($this->className, $superArray->className, true);
+    }
+
+
+    private function listsEveryKeyOf(self $declaredArray, Config $config): bool
+    {
+        return array_all(
+            array: $declaredArray->shape,
+            callback: fn (Type $declaredEntry, int|string $key) => isset($this->shape[$key])
+                && self::entryFitsInto($this->shape[$key], $declaredEntry, $config, asRefinement: true),
+        );
+    }
+
+
+    private function fitsIntoShapeOf(self $superArray, Config $config): bool
+    {
+        if ($this->shape === [] && ! $this->hasEntriesOutsideShape()) {
+            return $this->isKnownEmpty() && array_all($superArray->shape, fn (Type $superEntry) => ! $superEntry->required);
+        }
+
+        foreach ($superArray->shape as $key => $superEntry) {
+            if (! $this->hasEntryFitting($key, $superEntry, $config)) {
+                return false;
+            }
+        }
+
+        if (! $superArray->hasEntriesOutsideShape()) {
+            return true;
+        }
+
+        foreach (array_diff_key($this->shape, $superArray->shape) as $key => $entry) {
+            $superTypeOutsideShape = $superArray->getTypeOfEntryOutsideShapeAt($key, $config);
+
+            if ($superTypeOutsideShape === null || ! $entry->isSubTypeOf($superTypeOutsideShape, $config)) {
+                return false;
+            }
+        }
+
+        if (! $this->hasEntriesOutsideShape()) {
+            return true;
+        }
+
+        return ($this->keyType ?? new IntegerType)->isSubTypeOf($superArray->keyType ?? new IntegerType, $config)
+            && ($this->itemType ?? new UnknownType)->isSubTypeOf($superArray->itemType ?? new UnknownType, $config);
+    }
+
+
+    private function hasEntryFitting(int|string $key, Type $superEntry, Config $config): bool
+    {
+        $entry = $this->shape[$key] ?? null;
+
+        if ($entry !== null) {
+            return self::entryFitsInto($entry, $superEntry, $config, asRefinement: false);
+        }
+
+        if ($superEntry->required) {
+            return false;
+        }
+
+        $typeOutsideShape = $this->getTypeOfEntryOutsideShapeAt($key, $config);
+
+        return $typeOutsideShape === null || $typeOutsideShape->isSubTypeOf($superEntry, $config);
+    }
+
+
+    private static function entryFitsInto(Type $entry, Type $superEntry, Config $config, bool $asRefinement): bool
+    {
+        return $entry->fitsInto($superEntry, $config, $asRefinement) && ($entry->required || ! $superEntry->required);
+    }
+
+
     public function mergeEntriesOutsideShape(self $other, bool $asIntersection, Config $config): void
     {
         if (! $other->hasEntriesOutsideShape()) {

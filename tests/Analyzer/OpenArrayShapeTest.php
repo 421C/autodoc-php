@@ -3121,6 +3121,121 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function aConditionalTypeChecksTheOtherEntriesOfAnOpenShape(): void
+    {
+        $closures = [
+            'sameShape' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(OpenArrayShapeTest::errorWithCounts()),
+            'otherEntriesOfAnotherType' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(OpenArrayShapeTest::errorWithFlags()),
+            'otherEntriesOfUnknownType' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(OpenArrayShapeTest::errorWithUnknownEntries()),
+            'otherEntriesUnderIntKeys' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(OpenArrayShapeTest::errorWithIntKeyedFlags()),
+            'extraKeyOfTheOtherEntriesType' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(['error' => 'x', 'count' => 5]),
+            'extraKeyOfAnotherType' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(['error' => 'x', 'name' => 'y']),
+            'extraIntKey' => fn () => OpenArrayShapeTest::classifyErrorWithCounts(['error' => 'x', 5 => 1]),
+        ];
+
+        $this->assertSame(
+            [
+                'sameShape' => '{"type":"string","const":"counts"}',
+                'otherEntriesOfAnotherType' => '{"type":"string","enum":["counts","other"]}',
+                'otherEntriesOfUnknownType' => '{"type":"string","enum":["counts","other"]}',
+                'otherEntriesUnderIntKeys' => '{"type":"string","enum":["counts","other"]}',
+                'extraKeyOfTheOtherEntriesType' => '{"type":"string","const":"counts"}',
+                'extraKeyOfAnotherType' => '{"type":"string","const":"other"}',
+                'extraIntKey' => '{"type":"string","const":"other"}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aConditionalTypeChecksEveryEntryOfAShapeAgainstAMap(): void
+    {
+        $closures = [
+            'openShapeWithAKnownKeyOfAnotherType' => fn () => OpenArrayShapeTest::classifyIntsByName(OpenArrayShapeTest::errorWithCounts()),
+            'closedShapeOfAnotherType' => fn () => OpenArrayShapeTest::classifyIntsByName(['error' => 'x']),
+            'closedShapeOfTheMapsType' => fn () => OpenArrayShapeTest::classifyIntsByName(['count' => 1, 'total' => 2]),
+            'map' => fn () => OpenArrayShapeTest::classifyIntsByName(OpenArrayShapeTest::countsByName()),
+        ];
+
+        $this->assertSame(
+            [
+                'openShapeWithAKnownKeyOfAnotherType' => '{"type":"string","const":"other"}',
+                'closedShapeOfAnotherType' => '{"type":"string","const":"other"}',
+                'closedShapeOfTheMapsType' => '{"type":"string","const":"ints"}',
+                'map' => '{"type":"string","const":"ints"}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aConditionalTypeAllowsAMissingOptionalKey(): void
+    {
+        $closures = [
+            'missingOptionalKey' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(['error' => 'x']),
+            'optionalKeyOfItsType' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(['error' => 'x', 'details' => 'y']),
+            'optionalKeyOfAnotherType' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(['error' => 'x', 'details' => 5]),
+            'otherEntriesThatMayHoldTheKey' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(OpenArrayShapeTest::errorWithCounts()),
+            'otherEntriesThatCanNotHoldTheKey' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(OpenArrayShapeTest::errorWithIntKeyedFlags()),
+            'missingRequiredKey' => fn () => OpenArrayShapeTest::classifyErrorWithOptionalDetails(['details' => 'y']),
+            'mapAgainstOptionalKeysAndOtherEntries' => fn () => OpenArrayShapeTest::classifyOptionalTotalWithCounts(OpenArrayShapeTest::countsByName()),
+            'emptyArrayAgainstOptionalKeys' => fn () => OpenArrayShapeTest::classifyOptionalTotalWithCounts([]),
+        ];
+
+        $this->assertSame(
+            [
+                'missingOptionalKey' => '{"type":"string","const":"error"}',
+                'optionalKeyOfItsType' => '{"type":"string","const":"error"}',
+                'optionalKeyOfAnotherType' => '{"type":"string","const":"other"}',
+                'otherEntriesThatMayHoldTheKey' => '{"type":"string","enum":["error","other"]}',
+                'otherEntriesThatCanNotHoldTheKey' => '{"type":"string","const":"error"}',
+                'missingRequiredKey' => '{"type":"string","enum":["error","other"]}',
+                'mapAgainstOptionalKeysAndOtherEntries' => '{"type":"string","const":"counts"}',
+                'emptyArrayAgainstOptionalKeys' => '{"type":"string","const":"counts"}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aConditionalTypeOnAClosedShapeAllowsExtraKeys(): void
+    {
+        $closures = [
+            'sameShape' => fn () => OpenArrayShapeTest::classifyError(OpenArrayShapeTest::errorOnly()),
+            'extraKey' => fn () => OpenArrayShapeTest::classifyError(['error' => 'x', 'code' => 1]),
+            'otherEntries' => fn () => OpenArrayShapeTest::classifyError(OpenArrayShapeTest::errorWithFlags()),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"string","const":"error"}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function deepShapeInferenceKeepsAnAnalyzedShapeThatDoesNotFitThePhpDocMap(): void
+    {
+        $config = self::loadConfig();
+        $config->data['arrays']['deep_shape_inference'] = true;
+
+        $this->assertSame(
+            [
+                'withDeepShapeInference' => '{"type":"object","properties":{"data":{"type":"object"}},"required":["data"]}',
+                'withoutDeepShapeInference' => '{"type":"object","additionalProperties":{"type":"string"}}',
+            ],
+            [
+                'withDeepShapeInference' => $this->closureReturnSchema(fn () => OpenArrayShapeTest::rulesWithADeclaredFieldType(), $config),
+                'withoutDeepShapeInference' => $this->closureReturnSchema(fn () => OpenArrayShapeTest::rulesWithADeclaredFieldType()),
+            ],
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure, ?Config $config = null): string
     {
         $config ??= self::loadConfig();
@@ -3477,6 +3592,65 @@ final class OpenArrayShapeTest extends TestCase
     private static function nameAndOptionalFlag(): array
     {
         return json_decode('["first"]', true);
+    }
+
+
+    /**
+     * @return ($value is array{error: string, ...<string, int>} ? 'counts' : 'other')
+     */
+    private static function classifyErrorWithCounts(mixed $value): string
+    {
+        return is_array($value) ? 'counts' : 'other';
+    }
+
+
+    /**
+     * @return ($value is array<string, int> ? 'ints' : 'other')
+     */
+    private static function classifyIntsByName(mixed $value): string
+    {
+        return is_array($value) ? 'ints' : 'other';
+    }
+
+
+    /**
+     * @return ($value is array{error: string, details?: string} ? 'error' : 'other')
+     */
+    private static function classifyErrorWithOptionalDetails(mixed $value): string
+    {
+        return is_array($value) ? 'error' : 'other';
+    }
+
+
+    /**
+     * @return ($value is array{total?: int, ...<string, int>} ? 'counts' : 'other')
+     */
+    private static function classifyOptionalTotalWithCounts(mixed $value): string
+    {
+        return is_array($value) ? 'counts' : 'other';
+    }
+
+
+    /**
+     * @return ($value is array{error: string} ? 'error' : 'other')
+     */
+    private static function classifyError(mixed $value): string
+    {
+        return is_array($value) ? 'error' : 'other';
+    }
+
+
+    /**
+     * @return array<string, string>
+     */
+    private static function rulesWithADeclaredFieldType(): array
+    {
+        return [
+            /**
+             * @var object
+             */
+            'data' => 'required',
+        ];
     }
 
 
