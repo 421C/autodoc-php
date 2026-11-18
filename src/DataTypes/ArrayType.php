@@ -715,13 +715,8 @@ class ArrayType extends Type
             $this->intKeyOrder = $this->getIntKeyOrderOfClosedShape($config);
         }
 
-        if ($array->mayHoldIntKeysOutsideShape($config)) {
-            $this->addTypeToOptionalListEnd($array->itemType ?? new UnknownType, $config);
-        }
-
-        $this->mergeEntriesOutsideShape(
-            other: new self(itemType: $array->itemType, keyType: $array->getRenumberedKeyType($config)),
-            asIntersection: false,
+        $this->appendEntriesOutsideShape(
+            entries: new self(itemType: $array->itemType, keyType: $array->getRenumberedKeyType($config)),
             config: $config,
         );
     }
@@ -812,12 +807,21 @@ class ArrayType extends Type
         $this->mergeShape(array_diff_key($array->shape, $entriesAtUnknownIndexes));
 
         if ($entriesAtUnknownIndexes !== []) {
-            $this->mergeEntriesOutsideShape(
-                other: new self(itemType: self::unionUnlessAnyIsUnknown(array_values($entriesAtUnknownIndexes), $config)),
-                asIntersection: false,
+            $this->appendEntriesOutsideShape(
+                entries: new self(itemType: self::unionUnlessAnyIsUnknown(array_values($entriesAtUnknownIndexes), $config)),
                 config: $config,
             );
         }
+    }
+
+
+    private function appendEntriesOutsideShape(self $entries, Config $config): void
+    {
+        if ($entries->mayHoldIntKeysOutsideShape($config)) {
+            $this->addTypeToOptionalListEnd($entries->itemType ?? new UnknownType, $config);
+        }
+
+        $this->mergeEntriesOutsideShape($entries, asIntersection: false, config: $config);
     }
 
 

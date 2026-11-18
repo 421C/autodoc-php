@@ -2527,6 +2527,87 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function tupleEntriesAfterAListMayTakeTheIndexOfAMissingTupleEntry(): void
+    {
+        $closures = [
+            'spread' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::point()],
+            'merge' => fn () => array_merge(OpenArrayShapeTest::nameAndOptionalFlag(), OpenArrayShapeTest::ints(), OpenArrayShapeTest::point()),
+            'twoMissingTupleEntries' => fn () => [...OpenArrayShapeTest::nameOptionalFlagAndOptionalNull(), ...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::point()],
+            'unionSource' => fn (bool $flag) => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), ...($flag ? OpenArrayShapeTest::point() : OpenArrayShapeTest::idAndName())],
+            'sourceWithAStringKey' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::amountAndLabel()],
+        ];
+
+        $this->assertSame(
+            [
+                'spread' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","number"]}],"items":{"type":"number"},"minItems":1}',
+                'merge' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","number"]}],"items":{"type":"number"},"minItems":1}',
+                'twoMissingTupleEntries' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","number","null"]},{"type":["number","null"]}],"items":{"type":"number"},"minItems":1}',
+                'unionSource' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","number","string"]}],"items":{"type":["number","string"]},"minItems":1}',
+                'sourceWithAStringKey' => '{"type":"object","properties":{"0":{"type":"string"},"1":{"type":["boolean","number"]},"label":{"type":"string"}},"required":["0","label"],"additionalProperties":{"type":"number"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function keylessItemsAfterAListMayTakeTheIndexOfAMissingTupleEntry(): void
+    {
+        $config = self::loadConfig();
+        $config->data['arrays']['resolve_partial_shapes'] = true;
+
+        $closures = [
+            'keylessItem' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), 1.5],
+            'keylessItemOfUnknownType' => fn (mixed $value) => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), $value],
+        ];
+
+        $this->assertSame(
+            [
+                'keylessItem' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","number"]}],"items":{"type":"number"},"minItems":1}',
+                'keylessItemOfUnknownType' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"string"}],"minItems":1}',
+            ],
+            array_map(fn (Closure $closure) => $this->closureReturnSchema($closure, $config), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function tupleEntriesWithAKnownIndexDoNotReachTheOtherTupleEntries(): void
+    {
+        $closures = [
+            'requiredTupleBeforeTheList' => fn () => [...OpenArrayShapeTest::nameAndId(), ...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::point()],
+            'stringKeyedMapBeforeTheTuple' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::countsByName(), ...OpenArrayShapeTest::point()],
+            'noListBeforeTheTuple' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::point()],
+        ];
+
+        $this->assertSame(
+            [
+                'requiredTupleBeforeTheList' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"items":{"type":"number"},"minItems":2}',
+                'stringKeyedMapBeforeTheTuple' => '{"type":"object","properties":{"0":{"type":"string"},"1":{"anyOf":[{"type":"number","format":"float"},{"type":"boolean"}]},"2":{"type":"number","format":"float"},"3":{"type":"number","format":"float"}},"required":["0","1","2"],"additionalProperties":{"type":"integer"}}',
+                'noListBeforeTheTuple' => '{"type":"array","prefixItems":[{"type":"string"},{"anyOf":[{"type":"number","format":"float"},{"type":"boolean"}]},{"type":"number","format":"float"},{"type":"number","format":"float"}],"minItems":3,"maxItems":4}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function tupleEntriesAfterAListMayTakeTheIndexOfAMissingTupleEntryInTypeScript(): void
+    {
+        $closures = [
+            'spread' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::nameAndId()],
+        ];
+
+        $this->assertSame(
+            [
+                'spread' => '[string, (boolean|number|string)?, ...Array<number|string>]',
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function aSpreadOrMergeKeepsTheOtherEntriesOfItsSource(): void
     {
         $closures = [
@@ -3312,6 +3393,33 @@ final class OpenArrayShapeTest extends TestCase
     private static function nameAndOptionalFlag(): array
     {
         return json_decode('["first"]', true);
+    }
+
+
+    /**
+     * @return array{0: string, 1?: bool, 2?: null}
+     */
+    private static function nameOptionalFlagAndOptionalNull(): array
+    {
+        return json_decode('["first"]', true);
+    }
+
+
+    /**
+     * @return list{float, float}
+     */
+    private static function point(): array
+    {
+        return json_decode('[1.5,2.5]', true);
+    }
+
+
+    /**
+     * @return array{0: float, label: string}
+     */
+    private static function amountAndLabel(): array
+    {
+        return json_decode('{"0":1.5,"label":"total"}', true);
     }
 
 
