@@ -32,6 +32,7 @@ final class OpenArrayShapeTest extends TestCase
     private const string ID_AND_NAME_BEFORE_ANY_ENTRIES = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2}';
     private const string USER = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}';
     private const string USER_WHOSE_EMAIL_MAY_BE_UNSET = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id"]}';
+    private const array NO_ENTRIES = [];
 
     #[Test]
     public function valuesOfAMapWithANarrowedKeyIncludeItsOtherEntries(): void
@@ -2420,6 +2421,541 @@ final class OpenArrayShapeTest extends TestCase
     }
 
 
+    #[Test]
+    public function knownKeysNextToAMapStayKnown(): void
+    {
+        $closures = [
+            'spreadOfUnknownValuesAfterAKey' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::mixedByName()],
+            'spreadOfIntegersAfterAKey' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::countsByName()],
+            'spreadOfAListAfterAKey' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::ints()],
+            'spreadOfUnknownValuesBeforeAKey' => fn (string $message) => [...OpenArrayShapeTest::mixedByName(), 'error' => $message],
+            'spreadOfIntegersBeforeAKey' => fn (string $message) => [...OpenArrayShapeTest::countsByName(), 'error' => $message],
+            'mergeOfUnknownValuesAfterAKey' => fn (string $message) => array_merge(['error' => $message], OpenArrayShapeTest::mixedByName()),
+            'mergeOfIntegersAfterAKey' => fn (string $message) => array_merge(['error' => $message], OpenArrayShapeTest::countsByName()),
+            'mergeOfAListAfterAKey' => fn (string $message) => array_merge(['error' => $message], OpenArrayShapeTest::ints()),
+            'mergeOfIntegersBeforeAKey' => fn (string $message) => array_merge(OpenArrayShapeTest::countsByName(), ['error' => $message]),
+        ];
+
+        $this->assertSame(
+            [
+                'spreadOfUnknownValuesAfterAKey' => self::ERROR_WITH_ANY_ENTRIES,
+                'spreadOfIntegersAfterAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'spreadOfAListAfterAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'spreadOfUnknownValuesBeforeAKey' => self::ERROR_WITH_ANY_ENTRIES,
+                'spreadOfIntegersBeforeAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'mergeOfUnknownValuesAfterAKey' => self::ERROR_WITH_ANY_ENTRIES,
+                'mergeOfIntegersAfterAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'mergeOfAListAfterAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'mergeOfIntegersBeforeAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aListAfterATupleKeepsTheTuplesPositions(): void
+    {
+        $closures = [
+            'spread' => fn () => [...OpenArrayShapeTest::nameAndId(), ...OpenArrayShapeTest::ints()],
+            'merge' => fn () => array_merge(OpenArrayShapeTest::nameAndId(), OpenArrayShapeTest::ints()),
+            'spreadOfATupleWithOtherEntries' => fn () => [...OpenArrayShapeTest::idNameAndFlags()],
+            'spreadOfATupleWithOtherEntriesAndAList' => fn () => [...OpenArrayShapeTest::idNameAndFlags(), ...OpenArrayShapeTest::ints()],
+            'mergeOfATupleWithOtherEntriesAndAList' => fn () => array_merge(OpenArrayShapeTest::idNameAndFlags(), OpenArrayShapeTest::ints()),
+        ];
+
+        $nameAndIdBeforeIntegers = '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"items":{"type":"integer"},"minItems":2}';
+        $idAndNameBeforeBooleansAndIntegers = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":["boolean","integer"]},"minItems":2}';
+
+        $this->assertSame(
+            [
+                'spread' => $nameAndIdBeforeIntegers,
+                'merge' => $nameAndIdBeforeIntegers,
+                'spreadOfATupleWithOtherEntries' => self::ID_AND_NAME_BEFORE_BOOLEANS,
+                'spreadOfATupleWithOtherEntriesAndAList' => $idAndNameBeforeBooleansAndIntegers,
+                'mergeOfATupleWithOtherEntriesAndAList' => $idAndNameBeforeBooleansAndIntegers,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function entriesAfterIntKeyedEntriesOfUnknownCountHaveNoKnownIndex(): void
+    {
+        $closures = [
+            'tupleAfterAList' => fn () => [...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::nameAndId()],
+            'mergeOfATupleAfterAList' => fn () => array_merge(OpenArrayShapeTest::ints(), OpenArrayShapeTest::nameAndId()),
+            'tupleAfterATupleWithOtherEntries' => fn () => [...OpenArrayShapeTest::idNameAndFlags(), ...OpenArrayShapeTest::nameAndId()],
+            'tupleAfterAMapOfAnyKey' => fn () => [...OpenArrayShapeTest::arrayKeyedNullableInts(), ...OpenArrayShapeTest::nameAndId()],
+            'keyAfterTheTuple' => fn (string $message) => [...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::nameAndId(), 'error' => $message],
+            'tupleAfterAStringKeyedMap' => fn () => [...OpenArrayShapeTest::countsByName(), ...OpenArrayShapeTest::nameAndId()],
+        ];
+
+        $this->assertSame(
+            [
+                'tupleAfterAList' => '{"type":"array","items":{"type":["integer","string"]}}',
+                'mergeOfATupleAfterAList' => '{"type":"array","items":{"type":["integer","string"]}}',
+                'tupleAfterATupleWithOtherEntries' => '{"type":"array","items":{"type":["integer","string","boolean"]}}',
+                'tupleAfterAMapOfAnyKey' => '{"type":"object","additionalProperties":{"type":["integer","string","null"]}}',
+                'keyAfterTheTuple' => '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","string"]}}',
+                'tupleAfterAStringKeyedMap' => '{"type":"object","properties":{"0":{"type":"string"},"1":{"type":"integer"}},"required":["0","1"],"additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function otherEntriesMayTakeTheIndexOfAMissingTupleEntry(): void
+    {
+        $closures = [
+            'spread' => fn () => [...OpenArrayShapeTest::nameAndOptionalFlag(), ...OpenArrayShapeTest::ints()],
+            'merge' => fn () => array_merge(OpenArrayShapeTest::nameAndOptionalFlag(), OpenArrayShapeTest::ints()),
+            'spreadOfAUnionOfATupleAndAList' => fn (bool $flag) => [...($flag ? OpenArrayShapeTest::nameAndId() : OpenArrayShapeTest::ints())],
+        ];
+
+        $this->assertSame(
+            [
+                'spread' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","integer"]}],"items":{"type":"integer"},"minItems":1}',
+                'merge' => '{"type":"array","prefixItems":[{"type":"string"},{"type":["boolean","integer"]}],"items":{"type":"integer"},"minItems":1}',
+                'spreadOfAUnionOfATupleAndAList' => '{"type":"array","prefixItems":[{"type":["string","integer"]},{"type":"integer"}],"items":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aSpreadOrMergeKeepsTheOtherEntriesOfItsSource(): void
+    {
+        $closures = [
+            'spread' => fn () => [...OpenArrayShapeTest::errorWithCounts()],
+            'spreadOfUnknownEntries' => fn () => [...OpenArrayShapeTest::errorWithUnknownEntries()],
+            'spreadAfterAKey' => fn (int $code) => ['code' => $code, ...OpenArrayShapeTest::errorWithCounts()],
+            'spreadBeforeAKey' => fn (int $code) => [...OpenArrayShapeTest::errorWithCounts(), 'code' => $code],
+            'mergeAfterAKey' => fn (int $code) => array_merge(['code' => $code], OpenArrayShapeTest::errorWithCounts()),
+            'spreadOfATupleWithOtherEntriesBeforeAKey' => fn (string $label) => [...OpenArrayShapeTest::idNameAndFlags(), 'label' => $label],
+        ];
+
+        $this->assertSame(
+            [
+                'spread' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'spreadOfUnknownEntries' => self::ERROR_WITH_ANY_ENTRIES,
+                'spreadAfterAKey' => '{"type":"object","properties":{"code":{"type":"integer"},"error":{"type":"string"}},"required":["code","error"],"additionalProperties":{"type":"integer"}}',
+                'spreadBeforeAKey' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error","code"],"additionalProperties":{"type":"integer"}}',
+                'mergeAfterAKey' => '{"type":"object","properties":{"code":{"type":"integer"},"error":{"type":"string"}},"required":["code","error"],"additionalProperties":{"type":"integer"}}',
+                'spreadOfATupleWithOtherEntriesBeforeAKey' => '{"type":"object","properties":{"0":{"type":"integer"},"1":{"type":"string"},"label":{"type":"string"}},"required":["0","1","label"],"additionalProperties":{"type":"boolean"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aUnionSourceKeepsKnownKeysAndTheOtherEntriesOfEveryMember(): void
+    {
+        $closures = [
+            'spreadOfAMapOrAShape' => fn (string $message, bool $flag) => ['error' => $message, ...($flag ? OpenArrayShapeTest::countsByName() : ['code' => 1])],
+            'spreadOfAMapOfUnknownValuesOrAShape' => fn (string $message, bool $flag) => ['error' => $message, ...($flag ? OpenArrayShapeTest::mixedByName() : ['code' => 1])],
+            'spreadOfShapesWithOtherEntries' => fn (bool $flag) => [...($flag ? OpenArrayShapeTest::errorWithCounts() : OpenArrayShapeTest::errorWithFlags())],
+            'mergeOfAMapOrAShape' => fn (string $message, bool $flag) => array_merge(['error' => $message], $flag ? OpenArrayShapeTest::countsByName() : ['code' => 1]),
+        ];
+
+        $errorAndOptionalCodeWithIntegerEntries = '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer","const":1}},"required":["error"],"additionalProperties":{"type":"integer"}}';
+
+        $this->assertSame(
+            [
+                'spreadOfAMapOrAShape' => $errorAndOptionalCodeWithIntegerEntries,
+                'spreadOfAMapOfUnknownValuesOrAShape' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer","const":1}},"required":["error"],"additionalProperties":true}',
+                'spreadOfShapesWithOtherEntries' => self::ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES,
+                'mergeOfAMapOrAShape' => $errorAndOptionalCodeWithIntegerEntries,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aSourceOfUnknownEntriesAddsEntriesOfAnyType(): void
+    {
+        $closures = [
+            'spreadOfAnUntypedArray' => fn (string $message, array $extra) => ['error' => $message, ...$extra],
+            'spreadOfANonEmptyArray' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::nonEmptyArray()],
+            // @phpstan-ignore arrayUnpacking.nonIterable
+            'spreadOfAnUnknownValue' => fn (string $message, mixed $extra) => ['error' => $message, ...$extra],
+            'mergeOfAnUntypedArray' => fn (string $message, array $extra) => array_merge(['error' => $message], $extra),
+            // @phpstan-ignore argument.type
+            'mergeOfAnUnknownValue' => fn (string $message, mixed $extra) => array_merge(['error' => $message], $extra),
+            'spreadOfAnUntypedArrayOrAnEmptyArray' => fn (string $message, bool $flag, array $extra) => ['error' => $message, ...($flag ? $extra : [])],
+            'spreadOfAnEmptyArrayOrAnUntypedArray' => fn (string $message, bool $flag, array $extra) => ['error' => $message, ...($flag ? [] : $extra)],
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), self::ERROR_WITH_ANY_ENTRIES),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function entriesAfterASourceOfUnknownEntriesHaveNoKnownIndex(): void
+    {
+        $closures = [
+            'tupleAfterAnUntypedArray' => fn (array $extra) => [...$extra, ...OpenArrayShapeTest::nameAndId()],
+            'tupleBeforeAnUntypedArray' => fn (array $extra) => [...OpenArrayShapeTest::nameAndId(), ...$extra],
+            'keylessItemAfterAnUntypedArray' => fn (array $names) => [...$names, 'all'],
+        ];
+
+        $this->assertSame(
+            [
+                'tupleAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
+                'tupleBeforeAnUntypedArray' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"minItems":2}',
+                'keylessItemAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anEmptyArrayAddsNothing(): void
+    {
+        $closures = [
+            'spreadOfAnEmptyLiteral' => fn (string $message) => ['error' => $message, ...[]],
+            'mergeOfAnEmptyLiteral' => fn (string $message) => array_merge(['error' => $message], []),
+            'spreadOfAnEmptyConstant' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::NO_ENTRIES],
+            'spreadOfAnEmptyDeclaredShape' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::emptyShape()],
+            'spreadOfAVariableHoldingAnEmptyArray' => function (string $message) {
+                $extra = [];
+
+                return ['error' => $message, ...$extra];
+            },
+            'spreadOfAnArrayWhoseOnlyKeyWasUnset' => function (string $message) {
+                $extra = ['code' => 1];
+                unset($extra['code']);
+
+                return ['error' => $message, ...$extra];
+            },
+            'mergeOfAnArrayWhoseOnlyKeyWasUnset' => function (string $message) {
+                $extra = ['code' => 1];
+                unset($extra['code']);
+
+                return array_merge(['error' => $message], $extra);
+            },
+            'spreadOfADisjointKeyIntersection' => fn (string $message) => ['error' => $message, ...array_intersect_key(['code' => 1], ['id' => 2])],
+            'spreadOfAKeyDiffThatRemovesEveryKey' => fn (string $message) => ['error' => $message, ...array_diff_key(['code' => 1], ['code' => 2])],
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"]}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anEmptyArrayInAUnionMakesTheOtherKeysOptional(): void
+    {
+        $closures = [
+            'ternary' => fn (string $message, bool $flag, string $details) => ['error' => $message, ...($flag ? ['details' => $details] : [])],
+            'filledInABranch' => function (string $message, bool $flag, string $details) {
+                $extra = [];
+
+                if ($flag) {
+                    $extra['details'] = $details;
+                }
+
+                return ['error' => $message, ...$extra];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"error":{"type":"string"},"details":{"type":"string"}},"required":["error"]}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anArrayThatStartsEmptyIsNoLongerEmptyOnceFilled(): void
+    {
+        $closures = [
+            'appended' => function (bool $flag) {
+                $ids = [];
+
+                if ($flag) {
+                    $ids[] = 5;
+                }
+
+                if ($ids) {
+                    return $ids;
+                }
+
+                return [];
+            },
+            'writtenUnderAKey' => function () {
+                $counts = [];
+                $counts['total'] = 5;
+
+                return ['error' => 'failed', ...$counts];
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'appended' => '{"type":"array","items":{"type":"integer","const":5}}',
+                'writtenUnderAKey' => '{"type":"object","properties":{"error":{"type":"string","const":"failed"},"total":{"type":"integer","const":5}},"required":["error","total"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anArrayThatStartsEmptyMayBeFilledThroughAReference(): void
+    {
+        $closures = [
+            'filledByABuiltInFunction' => function (bool $failed) {
+                $errors = [];
+
+                if ($failed) {
+                    array_push($errors, 'failed');
+                }
+
+                if ($errors) {
+                    return $errors;
+                }
+
+                return 'none';
+            },
+            'filledAsAnOutParameter' => function (string $code) {
+                $matches = [];
+                preg_match('/(\d+)/', $code, $matches);
+
+                if ($matches) {
+                    return $matches;
+                }
+
+                return 'none';
+            },
+            'filledByAMethod' => function () {
+                $errors = [];
+                OpenArrayShapeTest::collectErrors($errors);
+
+                if (! empty($errors)) {
+                    return $errors;
+                }
+
+                return 'none';
+            },
+            'filledByAClosure' => function () {
+                $errors = [];
+                $collect = function () use (&$errors) {
+                    $errors[] = 'failed';
+                };
+                $collect();
+
+                if ($errors) {
+                    return $errors;
+                }
+
+                return 'none';
+            },
+            'filledThroughAReference' => function (bool $failed) {
+                $errors = [];
+                $reference = &$errors;
+
+                if ($failed) {
+                    $reference[] = 'failed';
+                }
+
+                if ($errors) {
+                    return $errors;
+                }
+
+                return 'none';
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"none"}]}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function anIntKeyBeforeOtherEntriesIsNotAListIndex(): void
+    {
+        $closures = [
+            'spreadAfterKeyThree' => fn () => [3 => 'a', ...OpenArrayShapeTest::ints()],
+            'spreadAfterKeyZero' => fn () => [0 => 'a', ...OpenArrayShapeTest::ints()],
+            'mergeAfterKeyThree' => fn () => array_merge([3 => 'a'], OpenArrayShapeTest::ints()),
+        ];
+
+        $aBeforeIntegers = '{"type":"array","prefixItems":[{"type":"string","const":"a"}],"items":{"type":"integer"},"minItems":1}';
+
+        $this->assertSame(
+            [
+                'spreadAfterKeyThree' => '{"type":"object","properties":{"3":{"type":"string","const":"a"}},"required":["3"],"additionalProperties":{"type":"integer"}}',
+                'spreadAfterKeyZero' => $aBeforeIntegers,
+                'mergeAfterKeyThree' => $aBeforeIntegers,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyWithSeveralPossibleValuesKeepsTheOtherEntries(): void
+    {
+        $closure = fn (bool $flag) => [($flag ? 'a' : 'b') => 1, ...OpenArrayShapeTest::countsByName()];
+
+        $this->assertSame(
+            '{"anyOf":['
+                . '{"type":"object","properties":{"a":{"type":"integer","const":1}},"required":["a"],"additionalProperties":{"type":"integer"}},'
+                . '{"type":"object","properties":{"b":{"type":"integer","const":1}},"required":["b"],"additionalProperties":{"type":"integer"}}'
+                . ']}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
+    public function aKeyOfUnknownValueStillFoldsTheLiteral(): void
+    {
+        $closures = [
+            'dynamicKeyBeforeAMap' => fn (string $key, string $message) => [$key => $message, ...OpenArrayShapeTest::countsByName()],
+            'keylessItemBeforeAMap' => fn (int $id) => [$id, ...OpenArrayShapeTest::countsByName()],
+        ];
+
+        $this->assertSame(
+            [
+                'dynamicKeyBeforeAMap' => '{"type":"object","additionalProperties":{"type":["integer","string"]}}',
+                'keylessItemBeforeAMap' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function partialShapesKeepTheOtherEntriesToo(): void
+    {
+        $config = self::loadConfig();
+        $config->data['arrays']['resolve_partial_shapes'] = true;
+
+        $closures = [
+            'mapAfterAKey' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::countsByName()],
+            'listAfterATuple' => fn () => [...OpenArrayShapeTest::nameAndId(), ...OpenArrayShapeTest::ints()],
+            'tupleAfterAList' => fn () => [...OpenArrayShapeTest::ints(), ...OpenArrayShapeTest::nameAndId()],
+            'keylessItemAfterAList' => fn () => [...OpenArrayShapeTest::ints(), 'all'],
+            'keylessItemAfterAStringKeyedMap' => fn () => [...OpenArrayShapeTest::countsByName(), 'all'],
+            'keylessItemAfterATuple' => fn () => [...OpenArrayShapeTest::nameAndId(), 'all'],
+        ];
+
+        $this->assertSame(
+            [
+                'mapAfterAKey' => self::ERROR_WITH_INTEGER_ENTRIES,
+                'listAfterATuple' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"items":{"type":"integer"},"minItems":2}',
+                'tupleAfterAList' => '{"type":"array","items":{"type":["integer","string"]}}',
+                'keylessItemAfterAList' => '{"type":"array","items":{"anyOf":[{"type":"string","const":"all"},{"type":"integer"}]}}',
+                'keylessItemAfterAStringKeyedMap' => '{"type":"object","properties":{"0":{"type":"string","const":"all"}},"required":["0"],"additionalProperties":{"type":"integer"}}',
+                'keylessItemAfterATuple' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"},{"type":"string","const":"all"}],"minItems":3,"maxItems":3}',
+            ],
+            array_map(fn (Closure $closure) => $this->closureReturnSchema($closure, $config), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aSpreadInANestedLiteralKeepsItsKnownKeys(): void
+    {
+        $closures = [
+            'nested' => fn (string $message) => ['data' => ['error' => $message, ...OpenArrayShapeTest::countsByName()]],
+            'spreadOfALiteralWithOtherEntries' => fn (string $message) => [...['error' => $message, ...OpenArrayShapeTest::countsByName()]],
+        ];
+
+        $this->assertSame(
+            [
+                'nested' => '{"type":"object","properties":{"data":' . self::ERROR_WITH_INTEGER_ENTRIES . '},"required":["data"]}',
+                'spreadOfALiteralWithOtherEntries' => self::ERROR_WITH_INTEGER_ENTRIES,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function readingALiteralWithOtherEntriesSeesThem(): void
+    {
+        $closures = [
+            'aKeyOutsideTheShape' => function (string $message) {
+                $payload = ['error' => $message, ...OpenArrayShapeTest::countsByName()];
+
+                return $payload['count'];
+            },
+            'aKnownKey' => function (string $message) {
+                $payload = ['error' => $message, ...OpenArrayShapeTest::countsByName()];
+
+                return $payload['error'];
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'aKeyOutsideTheShape' => '{"type":"integer"}',
+                'aKnownKey' => '{"type":"string"}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function literalsWithOtherEntriesHaveAnIndexSignatureOrARestElementInTypeScript(): void
+    {
+        $closures = [
+            'unknownEntries' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::mixedByName()],
+            'typedEntries' => fn (string $message) => ['error' => $message, ...OpenArrayShapeTest::countsByName()],
+            'listAfterATuple' => fn () => [...OpenArrayShapeTest::nameAndId(), ...OpenArrayShapeTest::ints()],
+            'untypedArray' => fn (string $message, array $extra) => ['error' => $message, ...$extra],
+            'emptyArray' => fn (string $message) => ['error' => $message, ...[]],
+        ];
+
+        $this->assertSame(
+            [
+                'unknownEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: unknown',
+                    '}',
+                ]),
+                'typedEntries' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: string|number',
+                    '}',
+                ]),
+                'listAfterATuple' => '[string, number, ...number[]]',
+                'untypedArray' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '    [key: string]: unknown',
+                    '}',
+                ]),
+                'emptyArray' => implode("\n", [
+                    '{',
+                    '    error: string',
+                    '}',
+                ]),
+            ],
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
     private function closureReturnSchema(Closure $closure, ?Config $config = null): string
     {
         $config ??= self::loadConfig();
@@ -2758,6 +3294,51 @@ final class OpenArrayShapeTest extends TestCase
     private static function idAndName(): array
     {
         return json_decode('[1,"first"]', true);
+    }
+
+
+    /**
+     * @return list{string, int}
+     */
+    private static function nameAndId(): array
+    {
+        return json_decode('["first",1]', true);
+    }
+
+
+    /**
+     * @return array{0: string, 1?: bool}
+     */
+    private static function nameAndOptionalFlag(): array
+    {
+        return json_decode('["first"]', true);
+    }
+
+
+    /**
+     * @return non-empty-array
+     */
+    private static function nonEmptyArray(): array // @phpstan-ignore missingType.iterableValue
+    {
+        return json_decode('{"code":1}', true);
+    }
+
+
+    /**
+     * @return array{}
+     */
+    private static function emptyShape(): array
+    {
+        return [];
+    }
+
+
+    /**
+     * @param list<string> $errors
+     */
+    private static function collectErrors(array &$errors): void
+    {
+        $errors[] = 'failed';
     }
 
 

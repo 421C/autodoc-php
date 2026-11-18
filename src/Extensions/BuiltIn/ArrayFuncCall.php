@@ -751,39 +751,13 @@ class ArrayFuncCall extends FuncCallExtension
     private function handleArrayMerge(Config $config, ArgumentList $argTypes): Type
     {
         $mergedArray = new ArrayType;
-        $itemTypes = [];
-        $keyTypes = [];
-        $hasShape = true;
         $counter = count($argTypes);
 
         for ($i = 0; $i < $counter; $i++) {
-            $argType = $this->getArrayArgument($argTypes, $i);
-
-            if ($argType === null) {
-                return new ArrayType;
-            }
-
-            if ($argType->shape && $hasShape) {
-                $mergedArray->mergeShape($argType->shape, isTuple: $argType->isTuple());
-
-            } else {
-                $hasShape = false;
-            }
-
-            $typePair = $argType->convertShapeToTypePair($config);
-
-            $itemTypes[] = $typePair->itemType ?? new UnknownType;
-            $keyTypes[] = $typePair->getRenumberedKeyType($config) ?? new IntegerType;
+            $mergedArray->mergeArray($argTypes->get($i), $config);
         }
 
-        if ($hasShape) {
-            return $mergedArray;
-        }
-
-        return new ArrayType(
-            itemType: new UnionType($itemTypes)->unwrapType($config),
-            keyType: new UnionType($keyTypes)->unwrapType($config),
-        );
+        return $mergedArray;
     }
 
 

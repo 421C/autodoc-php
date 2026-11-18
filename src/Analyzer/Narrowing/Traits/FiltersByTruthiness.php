@@ -47,10 +47,6 @@ trait FiltersByTruthiness
             ) {
                 return $truthy ? $base : new NeverType;
             }
-
-            if ($base->maxItems === 0) {
-                return $truthy ? new NeverType : $base;
-            }
         }
 
         return $base;

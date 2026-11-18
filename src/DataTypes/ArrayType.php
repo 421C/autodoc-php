@@ -369,13 +369,7 @@ class ArrayType extends Type
             $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
 
             if (! $hasEntriesOutsideShape) {
-                $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
-
-                $this->intKeyOrder = match (true) {
-                    ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
-                    $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
-                    default => IntKeyOrder::NonSequential,
-                };
+                $this->intKeyOrder = $this->getIntKeyOrderOfClosedShape($config);
             }
 
             $keyTypes = [];
@@ -436,8 +430,22 @@ class ArrayType extends Type
     }
 
 
+    private function getIntKeyOrderOfClosedShape(Config $config): IntKeyOrder
+    {
+        $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
+
+        return match (true) {
+            ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
+            $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
+            default => IntKeyOrder::NonSequential,
+        };
+    }
+
+
     public function addItemToArray(int|string|Type|null $key, Type $itemType, Config $config): self
     {
+        $this->maxItems = null;
+
         if ($key instanceof Type) {
             if (! self::mayBeStoredAsStringKey($key, $config)) {
                 return $this->addIntKeyedItem($itemType, $config);
@@ -502,9 +510,14 @@ class ArrayType extends Type
             return $this->markEntriesOutsideShapeOptional();
         }
 
-        $this->intKeyOrder = $this->shape === []
-            ? IntKeyOrder::Sequential
-            : $this->intKeyOrder->union(IntKeyOrder::NonSequential);
+        if ($this->shape === []) {
+            $this->intKeyOrder = IntKeyOrder::Sequential;
+            $this->maxItems = 0;
+
+            return $this;
+        }
+
+        $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
 
         return $this;
     }
@@ -623,6 +636,12 @@ class ArrayType extends Type
     }
 
 
+    private function isKnownEmpty(): bool
+    {
+        return $this->shape === [] && ! $this->hasEntriesOutsideShape() && $this->maxItems === 0;
+    }
+
+
     public function mergeEntriesOutsideShape(self $other, bool $asIntersection, Config $config): void
     {
         if (! $other->hasEntriesOutsideShape()) {
@@ -675,6 +694,164 @@ class ArrayType extends Type
 
 
     /**
+     * Adds the entries of `$array` the way a spread or `array_merge()` does: string keys overwrite, int keys are renumbered.
+     */
+    public function mergeArray(Type $array, Config $config): void
+    {
+        $array = self::getEntriesAddedByMerge($array, $config);
+
+        if ($array === null) {
+            return;
+        }
+
+        $this->maxItems = null;
+        $this->mergeShapeOf($array, $config);
+
+        if (! $array->hasEntriesOutsideShape()) {
+            return;
+        }
+
+        if ($this->isClosedShape()) {
+            $this->intKeyOrder = $this->getIntKeyOrderOfClosedShape($config);
+        }
+
+        if ($array->mayHoldIntKeysOutsideShape($config)) {
+            $this->addTypeToOptionalListEnd($array->itemType ?? new UnknownType, $config);
+        }
+
+        $this->mergeEntriesOutsideShape(
+            other: new self(itemType: $array->itemType, keyType: $array->getRenumberedKeyType($config)),
+            asIntersection: false,
+            config: $config,
+        );
+    }
+
+
+    private static function getEntriesAddedByMerge(Type $type, Config $config): ?self
+    {
+        $type = $type->unwrapType($config);
+
+        if ($type instanceof UnionType) {
+            return self::fromUnionOfArrays($type, $config);
+        }
+
+        if ($type instanceof self) {
+            return match (true) {
+                $type->isKnownEmpty() => null,
+                $type->shape === [] && ! $type->hasEntriesOutsideShape() => self::withUnknownEntries(),
+                default => $type,
+            };
+        }
+
+        if ($type instanceof UnknownType || $type instanceof ObjectType) {
+            return self::withUnknownEntries();
+        }
+
+        return null;
+    }
+
+
+    private static function withUnknownEntries(): self
+    {
+        return new self(itemType: new UnknownType);
+    }
+
+
+    private static function fromUnionOfArrays(UnionType $union, Config $config): ?self
+    {
+        $merged = new self;
+        $valueTypesByKey = [];
+        $isTuple = true;
+
+        foreach ($union->types as $member) {
+            $member = self::getEntriesAddedByMerge($member, $config);
+
+            if ($member === null) {
+                continue;
+            }
+
+            foreach ($member->shape as $key => $valueType) {
+                $valueTypesByKey[$key][] = $valueType;
+            }
+
+            $isTuple = $isTuple && ($member->shape === [] || $member->isTuple());
+            $merged->mergeEntriesOutsideShape($member, asIntersection: false, config: $config);
+        }
+
+        foreach ($valueTypesByKey as $key => $valueTypes) {
+            $isInEveryMember = count($valueTypes) === count($union->types);
+            $isRequired = $isInEveryMember && array_all($valueTypes, fn (Type $valueType) => $valueType->required);
+
+            $merged->shape[$key] = count($valueTypes) === 1
+                ? (clone $valueTypes[0])->setRequired($isRequired)
+                : new UnionType($valueTypes)->setRequired($isRequired);
+        }
+
+        if ($merged->shape === [] && ! $merged->hasEntriesOutsideShape()) {
+            return null;
+        }
+
+        if (! $isTuple) {
+            $merged->intKeyOrder = IntKeyOrder::MaybeSequential;
+        }
+
+        return $merged;
+    }
+
+
+    private function mergeShapeOf(self $array, Config $config): void
+    {
+        if (! $this->mayHoldIntKeysOutsideShape($config)) {
+            $this->mergeShape($array->shape, isTuple: $array->isTuple());
+
+            return;
+        }
+
+        $entriesAtUnknownIndexes = array_filter($array->shape, fn (int|string $key) => is_int($key), ARRAY_FILTER_USE_KEY);
+
+        $this->mergeShape(array_diff_key($array->shape, $entriesAtUnknownIndexes));
+
+        if ($entriesAtUnknownIndexes !== []) {
+            $this->mergeEntriesOutsideShape(
+                other: new self(itemType: self::unionUnlessAnyIsUnknown(array_values($entriesAtUnknownIndexes), $config)),
+                asIntersection: false,
+                config: $config,
+            );
+        }
+    }
+
+
+    private function mayHoldIntKeysOutsideShape(Config $config): bool
+    {
+        if (! $this->hasEntriesOutsideShape()) {
+            return false;
+        }
+
+        return $this->keyType === null || ! self::toStoredKeyType($this->keyType, $config) instanceof StringType;
+    }
+
+
+    private function addTypeToOptionalListEnd(Type $type, Config $config): void
+    {
+        for ($key = $this->getFirstKeyOfOptionalListEnd(); isset($this->shape[$key]); $key++) {
+            $this->shape[$key] = (clone self::unionUnlessAnyIsUnknown([$this->shape[$key], $type], $config))->setRequired(false);
+        }
+    }
+
+
+    private function getFirstKeyOfOptionalListEnd(): int
+    {
+        $requiredIntKeys = array_keys(array_filter(
+            array: $this->shape,
+            callback: fn (Type $entry, int|string $key) => is_int($key) && $entry->required,
+            mode: ARRAY_FILTER_USE_BOTH,
+        ));
+
+        return $requiredIntKeys === [] ? 0 : max($requiredIntKeys) + 1;
+    }
+
+
+    /**
      * @param array<int|string, Type> $shape
      */
     public function mergeShape(array $shape, bool $isTuple = false): void
@@ -708,12 +885,7 @@ class ArrayType extends Type
      */
     private function appendListEntries(array $entries): void
     {
-        $requiredIntKeys = array_keys(array_filter(
-            array: $this->shape,
-            callback: fn (Type $entry, int|string $key) => is_int($key) && $entry->required,
-            mode: ARRAY_FILTER_USE_BOTH,
-        ));
-        $firstOptionalKey = $requiredIntKeys === [] ? 0 : max($requiredIntKeys) + 1;
+        $firstOptionalKey = $this->getFirstKeyOfOptionalListEnd();
 
         $optionalEnd = [];
 

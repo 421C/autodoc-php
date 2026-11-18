@@ -272,7 +272,13 @@ trait WithMergeableTypes
 
         if ($type1 instanceof ArrayType) {
             /** @var ArrayType $type2 */
-            return $this->mergeArrayTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
+            $mergedArray = $this->mergeArrayTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
+
+            if ($mergedArray !== null) {
+                $mergedArray->maxItems = self::mergeMaxItems($type1->maxItems, $type2->maxItems, $mergeAsIntersection);
+            }
+
+            return $mergedArray;
         }
 
         if ($type1 instanceof ObjectType) {
@@ -404,6 +410,18 @@ trait WithMergeableTypes
         }
 
         return null;
+    }
+
+
+    private static function mergeMaxItems(?int $maxItems1, ?int $maxItems2, bool $mergeAsIntersection): ?int
+    {
+        if (! $mergeAsIntersection) {
+            return $maxItems1 === null || $maxItems2 === null ? null : max($maxItems1, $maxItems2);
+        }
+
+        $limits = array_filter([$maxItems1, $maxItems2], fn (?int $limit) => $limit !== null);
+
+        return $limits === [] ? null : min($limits);
     }
 
 

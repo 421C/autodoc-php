@@ -166,24 +166,31 @@ class ArrayOperationsController
                                 ],
                                 'mergeItems' => [
                                     'type' => 'object',
-                                    'additionalProperties' => [
-                                        'anyOf' => [
-                                            [
-                                                'enum' => [
-                                                    1,
-                                                    2,
-                                                    3,
-                                                ],
-                                                'type' => 'integer',
-                                            ],
-                                            [
-                                                'enum' => [
-                                                    'x',
-                                                    'y',
-                                                ],
-                                                'type' => 'string',
-                                            ],
+                                    'properties' => [
+                                        'a' => [
+                                            'const' => 1,
+                                            'type' => 'integer',
                                         ],
+                                        'b' => [
+                                            'const' => 2,
+                                            'type' => 'integer',
+                                        ],
+                                        'c' => [
+                                            'const' => 3,
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => [
+                                        'a',
+                                        'b',
+                                        'c',
+                                    ],
+                                    'additionalProperties' => [
+                                        'enum' => [
+                                            'x',
+                                            'y',
+                                        ],
+                                        'type' => 'string',
                                     ],
                                 ],
                                 'mergeShape' => [

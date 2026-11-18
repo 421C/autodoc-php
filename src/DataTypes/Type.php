@@ -969,11 +969,15 @@ abstract class Type
     public static function fromValue(mixed $value, ?Config $config = null): Type
     {
         if (is_array($value)) {
+            if ($value === []) {
+                return new ArrayType(maxItems: 0);
+            }
+
             $itemTypes = array_map(fn (mixed $item) => self::fromValue($item, $config)->setRequired(true), $value);
 
             $resolvePartialShapes = $config->data['arrays']['resolve_partial_shapes'] ?? false;
 
-            if ($itemTypes && array_is_list($itemTypes) && ! $resolvePartialShapes) {
+            if (array_is_list($itemTypes) && ! $resolvePartialShapes) {
                 $itemType = new UnionType($itemTypes);
 
                 return new ArrayType(
