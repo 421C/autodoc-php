@@ -2983,6 +2983,29 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function aKeyOfUnknownValueNextToAKnownKeyFoldsTheLiteral(): void
+    {
+        $closures = [
+            'mixedKey' => fn (mixed $key) => [$key => 1, 'a' => 'x'], // @phpstan-ignore array.invalidKey
+            'nullableStringKey' => fn (?string $key) => [$key => 1, 'a' => 'x'], // @phpstan-ignore array.invalidKey
+            'floatKey' => fn (float $key) => [$key => 1, 'a' => 'x'], // @phpstan-ignore array.invalidKey
+            'intOrStringKey' => fn (int|string $key) => [$key => 1, 'a' => 'x'],
+            'knownKeyFirst' => fn (mixed $key) => ['a' => 'x', $key => 1], // @phpstan-ignore array.invalidKey
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","additionalProperties":{"anyOf":[{"type":"string","const":"x"},{"type":"integer","const":1}]}}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), "Record<string, 'x'|1>"),
+            array_map($this->closureReturnTypeScript(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function partialShapesKeepTheOtherEntriesToo(): void
     {
         $config = self::loadConfig();
