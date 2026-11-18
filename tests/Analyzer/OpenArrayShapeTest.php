@@ -30,6 +30,8 @@ final class OpenArrayShapeTest extends TestCase
     private const string ERROR_WITH_INTEGER_OR_BOOLEAN_ENTRIES = '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":{"type":["integer","boolean"]}}';
     private const string ID_AND_NAME_BEFORE_BOOLEANS = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"items":{"type":"boolean"},"minItems":2}';
     private const string ID_AND_NAME_BEFORE_ANY_ENTRIES = '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2}';
+    private const string USER = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id","email"]}';
+    private const string USER_WHOSE_EMAIL_MAY_BE_UNSET = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]}},"required":["id"]}';
 
     #[Test]
     public function valuesOfAMapWithANarrowedKeyIncludeItsOtherEntries(): void
@@ -1933,6 +1935,134 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function aNestedUnsetReachesTheEntriesOutsideTheShapeOfAList(): void
+    {
+        $closures = [
+            'underADynamicKey' => function (int $index) {
+                $users = OpenArrayShapeTest::users();
+
+                if (! isset($users[0])) {
+                    throw new RuntimeException;
+                }
+
+                unset($users[$index]['email']);
+
+                return $users;
+            },
+            'underAKeyOutsideTheShape' => function () {
+                $users = OpenArrayShapeTest::users();
+
+                if (! isset($users[0])) {
+                    throw new RuntimeException;
+                }
+
+                unset($users[1]['email']);
+
+                return $users;
+            },
+            'withoutAKnownEntry' => function (int $index) {
+                $users = OpenArrayShapeTest::users();
+                unset($users[$index]['email']);
+
+                return $users;
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"array","items":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedUnsetReachesTheEntriesOutsideTheShapeOfAMap(): void
+    {
+        $closures = [
+            'underADynamicKey' => function (string $name) {
+                $users = OpenArrayShapeTest::usersByName();
+
+                if (! isset($users['alice'])) {
+                    throw new RuntimeException;
+                }
+
+                unset($users[$name]['email']);
+
+                return $users;
+            },
+            'underAKeyOutsideTheShape' => function () {
+                $users = OpenArrayShapeTest::usersByName();
+
+                if (! isset($users['alice'])) {
+                    throw new RuntimeException;
+                }
+
+                unset($users['bob']['email']);
+
+                return $users;
+            },
+            'readingTheEntryAfterwards' => function () {
+                $users = OpenArrayShapeTest::usersByName();
+
+                if (! isset($users['alice'])) {
+                    throw new RuntimeException;
+                }
+
+                unset($users['bob']['email']);
+
+                return $users['bob'];
+            },
+            'ofADeclaredShape' => function (string $name) {
+                $users = OpenArrayShapeTest::adminAndUsersByName();
+                unset($users[$name]['email']);
+
+                return $users;
+            },
+        ];
+
+        $this->assertSame(
+            [
+                'underADynamicKey' => '{"type":"object",'
+                    . '"properties":{"alice":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '},"required":["alice"],'
+                    . '"additionalProperties":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '}',
+                'underAKeyOutsideTheShape' => '{"type":"object",'
+                    . '"properties":{"alice":' . self::USER . '},"required":["alice"],'
+                    . '"additionalProperties":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '}',
+                'readingTheEntryAfterwards' => self::USER_WHOSE_EMAIL_MAY_BE_UNSET,
+                'ofADeclaredShape' => '{"type":"object",'
+                    . '"properties":{"admin":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '},"required":["admin"],'
+                    . '"additionalProperties":' . self::USER_WHOSE_EMAIL_MAY_BE_UNSET . '}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aNestedUnsetUnderAKnownKeyChangesOnlyThatEntry(): void
+    {
+        $closure = function () {
+            $users = OpenArrayShapeTest::usersByName();
+
+            if (! isset($users['alice'])) {
+                throw new RuntimeException;
+            }
+
+            unset($users['alice']['email']);
+
+            return $users;
+        };
+
+        $this->assertSame(
+            '{"type":"object",'
+                . '"properties":{"alice":{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"]}},"required":["alice"],'
+                . '"additionalProperties":' . self::USER . '}',
+            $this->closureReturnSchema($closure),
+        );
+    }
+
+
+    #[Test]
     public function aUnionOfShapesDocumentsTheOtherEntriesOfEveryMember(): void
     {
         $closures = [
@@ -2700,5 +2830,14 @@ final class OpenArrayShapeTest extends TestCase
     private static function errorWithNullableCounts(): array
     {
         return json_decode('{"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return array{admin: array{id: int, email: string|null}, ...<string, array{id: int, email: string|null}>}
+     */
+    private static function adminAndUsersByName(): array
+    {
+        return json_decode('{"admin":{"id":1,"email":null}}', true);
     }
 }

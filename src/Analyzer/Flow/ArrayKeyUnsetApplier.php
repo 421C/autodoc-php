@@ -71,10 +71,8 @@ final readonly class ArrayKeyUnsetApplier
     {
         $arrayType = clone $arrayType;
 
-        if ($arrayType->shape === []) {
-            if ($arrayType->itemType !== null) {
-                $arrayType->itemType = $this->applyKeepingRequired($arrayType->itemType, $remainingPath, isCertain: false);
-            }
+        if ($key !== null && isset($arrayType->shape[$key])) {
+            $arrayType->shape[$key] = $this->applyKeepingRequired($arrayType->shape[$key], $remainingPath, $isCertain);
 
             return $arrayType;
         }
@@ -83,9 +81,10 @@ final readonly class ArrayKeyUnsetApplier
             foreach ($arrayType->shape as $shapeKey => $entry) {
                 $arrayType->shape[$shapeKey] = $this->applyKeepingRequired($entry, $remainingPath, isCertain: false);
             }
+        }
 
-        } else if (isset($arrayType->shape[$key])) {
-            $arrayType->shape[$key] = $this->applyKeepingRequired($arrayType->shape[$key], $remainingPath, $isCertain);
+        if ($arrayType->itemType !== null) {
+            $arrayType->itemType = $this->applyKeepingRequired($arrayType->itemType, $remainingPath, isCertain: false);
         }
 
         return $arrayType;
