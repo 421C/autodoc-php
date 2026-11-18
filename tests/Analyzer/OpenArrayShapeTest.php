@@ -1811,6 +1811,128 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
+    public function removingEntriesOfAListWithAKnownFirstEntryReachesItsOtherEntries(): void
+    {
+        $closures = [
+            'arrayUnique' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return array_unique($scores);
+            },
+            'arrayFilter' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return array_filter($scores);
+            },
+            'arrayFilterWithACallback' => function () {
+                $scores = OpenArrayShapeTest::nullableInts();
+
+                if (! isset($scores[0])) {
+                    throw new RuntimeException;
+                }
+
+                return array_filter($scores, fn (?int $score) => $score !== null);
+            },
+            'arrayUniqueOfADeclaredList' => fn () => array_unique(OpenArrayShapeTest::idAndFlags()),
+        ];
+
+        $integerListOrMapWithAnOptionalFirstEntry = '{"anyOf":['
+            . '{"type":"array","items":{"type":"integer"}},'
+            . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":"integer"}}'
+            . ']}';
+
+        $this->assertSame(
+            [
+                'arrayUnique' => '{"anyOf":['
+                    . self::NULLABLE_INTEGER_LIST . ','
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":["integer","null"]}}'
+                    . ']}',
+                'arrayFilter' => $integerListOrMapWithAnOptionalFirstEntry,
+                'arrayFilterWithACallback' => $integerListOrMapWithAnOptionalFirstEntry,
+                'arrayUniqueOfADeclaredList' => '{"anyOf":['
+                    . '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"},"minItems":1},'
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"required":["0"],"additionalProperties":{"type":"boolean"}}'
+                    . ']}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function filteringAMapWithAKnownKeyNarrowsItsOtherEntries(): void
+    {
+        $closures = [
+            'withoutACallback' => fn () => array_filter(OpenArrayShapeTest::errorWithNullableCounts()),
+            'withATypeCheckFunction' => fn () => array_filter(OpenArrayShapeTest::errorWithNullableCounts(), 'is_int'),
+            'withAClosure' => fn () => array_filter(
+                OpenArrayShapeTest::errorWithNullableCounts(),
+                fn (string|int|null $value) => $value !== null,
+            ),
+            'byItsKeys' => fn () => array_filter(
+                OpenArrayShapeTest::errorWithNullableCounts(),
+                fn (string $key) => $key !== 'error',
+                ARRAY_FILTER_USE_KEY,
+            ),
+        ];
+
+        $maybeErrorWithIntegers = '{"type":"object","properties":{"error":{"type":"string"}},"additionalProperties":{"type":"integer"}}';
+
+        $this->assertSame(
+            [
+                'withoutACallback' => $maybeErrorWithIntegers,
+                'withATypeCheckFunction' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+                'withAClosure' => $maybeErrorWithIntegers,
+                'byItsKeys' => self::NULLABLE_INTEGER_MAP,
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function removingEntriesOfAClosedShapeOrAPairWorksAsBefore(): void
+    {
+        $closures = [
+            'arrayUniqueOfATuple' => fn () => array_unique(OpenArrayShapeTest::idAndName()),
+            'arrayUniqueOfAList' => fn () => array_unique(OpenArrayShapeTest::nullableInts()),
+            'arrayFilterOfAShape' => fn () => array_filter(OpenArrayShapeTest::closedScores()),
+            'arrayFilterOfAList' => fn () => array_filter(OpenArrayShapeTest::nullableInts()),
+            'arrayFilterOfAListWithACallback' => fn () => array_filter(
+                OpenArrayShapeTest::nullableInts(),
+                fn (?int $score) => $score !== null,
+            ),
+            'arrayDiffOfADeclaredList' => fn () => array_diff(OpenArrayShapeTest::idAndFlags(), [1]),
+        ];
+
+        $integerListOrMap = '{"anyOf":[{"type":"array","items":{"type":"integer"}},{"type":"object","additionalProperties":{"type":"integer"}}]}';
+
+        $this->assertSame(
+            [
+                'arrayUniqueOfATuple' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":1,"maxItems":2}',
+                'arrayUniqueOfAList' => self::NULLABLE_INTEGER_LIST_OR_MAP,
+                'arrayFilterOfAShape' => '{"type":"object","properties":{"alice":{"type":"integer"},"bob":{"type":"integer"}}}',
+                'arrayFilterOfAList' => $integerListOrMap,
+                'arrayFilterOfAListWithACallback' => $integerListOrMap,
+                'arrayDiffOfADeclaredList' => '{"anyOf":['
+                    . '{"type":"array","prefixItems":[{"type":"integer"}],"items":{"type":"boolean"}},'
+                    . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":"boolean"}}'
+                    . ']}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function aUnionOfShapesDocumentsTheOtherEntriesOfEveryMember(): void
     {
         $closures = [
@@ -2560,5 +2682,23 @@ final class OpenArrayShapeTest extends TestCase
     private static function idErrorAndIntKeyedFlags(): array
     {
         return json_decode('{"0":1,"error":"failed"}', true);
+    }
+
+
+    /**
+     * @return list{int, ...<bool>}
+     */
+    private static function idAndFlags(): array
+    {
+        return json_decode('[1]', true);
+    }
+
+
+    /**
+     * @return array{error: string, ...<string, int|null>}
+     */
+    private static function errorWithNullableCounts(): array
+    {
+        return json_decode('{"error":"failed"}', true);
     }
 }

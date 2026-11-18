@@ -524,7 +524,7 @@ class ArrayType extends Type
     }
 
 
-    private function markEntriesOutsideShapeOptional(): self
+    public function markEntriesOutsideShapeOptional(): self
     {
         $this->minItems = null;
 
