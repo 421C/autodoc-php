@@ -55,6 +55,8 @@ class UnresolvedVariableType extends UnresolvedType
         $resolvedType->addDescription($this->description);
         $resolvedType->examples = $this->examples ?: $resolvedType->examples;
         $resolvedType->required = $this->required ?: $resolvedType->required;
+        $resolvedType->deprecated = $resolvedType->deprecated || $this->deprecated;
+        $resolvedType->addDeprecatedDescription($this->deprecatedDescription);
 
         $this->scope->variables->resolvedTypes[$cacheKey] = $resolvedType;
 

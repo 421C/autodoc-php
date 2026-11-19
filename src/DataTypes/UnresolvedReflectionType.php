@@ -20,6 +20,8 @@ class UnresolvedReflectionType extends UnresolvedType
         $type = Type::resolveFromReflection($this->reflection, $this->scope);
 
         $type->addDescription($this->description);
+        $type->deprecated = $type->deprecated || $this->deprecated;
+        $type->addDeprecatedDescription($this->deprecatedDescription);
 
         return $type;
     }
