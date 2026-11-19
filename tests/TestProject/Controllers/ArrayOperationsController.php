@@ -518,6 +518,8 @@ class ArrayOperationsController
                                 ],
                                 'b' => [
                                     'type' => 'integer',
+                                    'deprecated' => true,
+                                    'x-deprecated-description' => 'Unused parameter',
                                 ],
                             ],
                         ],
