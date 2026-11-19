@@ -8,6 +8,7 @@ use AutoDoc\DataTypes\NullType;
 use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
+use AutoDoc\DataTypes\UnknownType;
 
 /**
  * Applies attribute mutations to a resolved variable type.
@@ -394,23 +395,24 @@ final readonly class AttributeMutationApplier
             if ($potentialTypes[$i] instanceof ObjectType) {
                 $potentialTypes[$i] = clone $potentialTypes[$i];
                 $keyString = (string) $key;
+                $propertyType = $this->replaceUnknownPartsWithDeclaredType($potentialTypes[$i], $keyString, $attributeType);
 
                 if (isset($potentialTypes[$i]->properties[$keyString])) {
                     if ($isCertain) {
                         $potentialTypes[$i]->properties[$keyString] = $this->applyCertainAttributeMutation(
                             currentType: $potentialTypes[$i]->properties[$keyString],
-                            attributeType: $attributeType,
+                            attributeType: $propertyType,
                         );
 
                     } else {
                         $potentialTypes[$i]->properties[$keyString] = new UnionType([
                             $potentialTypes[$i]->properties[$keyString],
-                            $attributeType,
+                            $propertyType,
                         ])->unwrapType($this->scope->config);
                     }
 
                 } else {
-                    $potentialTypes[$i]->properties[$keyString] = $attributeType->setRequired($isCertain);
+                    $potentialTypes[$i]->properties[$keyString] = $propertyType->setRequired($isCertain);
                 }
 
                 $typesWithAddedAttribute[] = $potentialTypes[$i];
@@ -466,6 +468,46 @@ final readonly class AttributeMutationApplier
         }
 
         return $baseType;
+    }
+
+
+    private function replaceUnknownPartsWithDeclaredType(ObjectType $objectType, string $propertyName, Type $attributeType): Type
+    {
+        $declaredType = $this->getDeclaredPropertyType($objectType, $propertyName);
+
+        if ($declaredType === null) {
+            return $attributeType;
+        }
+
+        $resolvedAttributeType = $attributeType->unwrapType($this->scope->config);
+        $attributeTypes = $resolvedAttributeType instanceof UnionType ? $resolvedAttributeType->types : [$resolvedAttributeType];
+        $knownTypes = array_values(array_filter($attributeTypes, fn (Type $type) => ! $type instanceof UnknownType));
+
+        if (count($knownTypes) === count($attributeTypes)) {
+            return $attributeType;
+        }
+
+        return new UnionType([...$knownTypes, $declaredType])
+            ->unwrapType($this->scope->config)
+            ->setRequired($attributeType->required);
+    }
+
+
+    private function getDeclaredPropertyType(ObjectType $objectType, string $propertyName): ?Type
+    {
+        if ($objectType->className === null) {
+            return null;
+        }
+
+        $phpClass = $this->scope->getPhpClassInDeeperScope($objectType->className, $objectType->templateTypes);
+
+        if (! $phpClass->exists()) {
+            return null;
+        }
+
+        $declaredType = $phpClass->getProperty($propertyName, onlyPublic: false)?->unwrapType($this->scope->config);
+
+        return $declaredType instanceof UnknownType ? null : $declaredType;
     }
 
 
