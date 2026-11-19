@@ -450,7 +450,11 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
             );
 
         } else if ($varNode instanceof Node\Expr\ArrayDimFetch || $varNode instanceof Node\Expr\PropertyFetch) {
-            $this->handleAttributeAssignment($varNode, $assignedType);
+            $this->handleAttributeAssignment(
+                varNode: $varNode,
+                assignedType: $assignedType,
+                endFilePos: $this->getNodeEndFilePos($valueNode instanceof Node ? $valueNode : $varNode),
+            );
 
         } else if ($varNode instanceof Node\Expr\List_ || $varNode instanceof Node\Expr\Array_) {
             $sourceType = $assignedType;
@@ -468,7 +472,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
     }
 
 
-    private function handleAttributeAssignment(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $varNode, Type $assignedType): void
+    private function handleAttributeAssignment(Node\Expr\ArrayDimFetch|Node\Expr\PropertyFetch $varNode, Type $assignedType, int $endFilePos): void
     {
         $nestedKeys = $this->getNestedAccessKeys($varNode);
         $baseVariable = $nestedKeys['baseVariable'];
@@ -484,6 +488,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
         $this->scope->variables->mutate(
             varNode: $baseVariable,
             attributes: $isLiteralKey ? [$lastKey => $assignedType] : [],
+            endFilePos: $endFilePos,
             path: $mutationPath,
             dynamicAttribute: $isLiteralKey ? null : $assignedType,
             dynamicKey: $lastKey instanceof Type ? $lastKey : null,

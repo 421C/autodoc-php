@@ -841,9 +841,11 @@ class ArrayType extends Type
 
 
     /**
+     * @internal
+     *
      * @param list<Type> $types
      */
-    private static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
+    public static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
     {
         $types = array_map(fn (Type $type) => $type->unwrapType($config), $types);
 

@@ -312,9 +312,10 @@ trait WithMergeableTypes
             return $array1;
         }
 
-        if ($array1->shape && $array2->shape) {
-            $mergeShapesInTypeUnions = $config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+        $mergeShapesInTypeUnions = $config->data['arrays']['merge_shapes_in_type_unions'] ?? false;
+        $mergesShapeIntoEntriesOutsideShape = ! $mergeAsIntersection && $mergeShapesInTypeUnions && ($array1->shape || $array2->shape);
 
+        if (($array1->shape && $array2->shape) || $mergesShapeIntoEntriesOutsideShape) {
             if (! $mergeAsIntersection && ! $mergeShapesInTypeUnions) {
                 $keys1 = array_keys($array1->shape);
                 $keys2 = array_keys($array2->shape);
@@ -335,7 +336,7 @@ trait WithMergeableTypes
                 if (! isset($array2->shape[$key])) {
                     $array1->shape[$key] = $mergeAsIntersection
                         ? $this->intersectWithEntriesOutsideShapeOf($array2, $key, $type1, $config)
-                        : $this->asOptionalMember($type1);
+                        : $this->uniteWithEntriesOutsideShapeOf($array2, $key, $type1, $config);
 
                     continue;
                 }
@@ -368,7 +369,7 @@ trait WithMergeableTypes
                 foreach ($array2->shape as $key => $type2) {
                     $array1->shape[$key] ??= $mergeAsIntersection
                         ? $this->intersectWithEntriesOutsideShapeOf($array1, $key, $type2, $config)
-                        : $this->asOptionalMember($type2);
+                        : $this->uniteWithEntriesOutsideShapeOf($array1, $key, $type2, $config, otherMemberComesFirst: true);
                 }
             }
 
@@ -431,6 +432,30 @@ trait WithMergeableTypes
         $intersectedEntry->required = $entry->required;
 
         return $intersectedEntry;
+    }
+
+
+    private function uniteWithEntriesOutsideShapeOf(
+        ArrayType $other,
+        int|string $key,
+        Type $entry,
+        Config $config,
+        bool $otherMemberComesFirst = false,
+    ): Type {
+        $typeOutsideShape = $other->getTypeOfEntryOutsideShapeAt($key, $config);
+
+        if ($typeOutsideShape === null) {
+            return $this->asOptionalMember($entry);
+        }
+
+        $entries = [$this->asOptionalMember($entry), $this->asOptionalMember($typeOutsideShape)];
+
+        $unitedEntry = ArrayType::unionUnlessAnyIsUnknown(
+            types: $otherMemberComesFirst ? array_reverse($entries) : $entries,
+            config: $config,
+        );
+
+        return $this->asOptionalMember($unitedEntry);
     }
 
 

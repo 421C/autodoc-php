@@ -733,7 +733,7 @@ final class NonListArrayTest extends TestCase
             [
                 'last' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2,"maxItems":2}',
                 'first' => '{"type":"object","properties":{"1":{"type":"string"},"2":{"type":"boolean"}},"required":["1","2"]}',
-                'middleInABranch' => '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"},{"type":"boolean"}],"minItems":3,"maxItems":3},{"type":"object","properties":{"0":{"type":"integer"},"1":{"type":"string"},"2":{"type":"boolean"}},"required":["0","2"]}]}',
+                'middleInABranch' => '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"},{"type":"boolean"}],"minItems":3,"maxItems":3},{"type":"object","properties":{"0":{"type":"integer"},"2":{"type":"boolean"}},"required":["0","2"]}]}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -772,7 +772,7 @@ final class NonListArrayTest extends TestCase
         };
 
         $this->assertSame(
-            '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1,"maxItems":1},{"type":"object","properties":{"0":{"type":"integer"},"label":{"type":"string"}},"required":["0"]}]}',
+            '{"anyOf":[{"type":"object","properties":{"0":{"type":"integer"},"label":{"type":"string"}},"required":["0","label"]},{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1,"maxItems":1}]}',
             $this->closureReturnSchema($closure),
         );
     }

@@ -175,7 +175,7 @@ class ScopeEventLog
      * Get all events for a given variable that occurred before the read position.
      * Uses endFilePos to ensure the entire assignment expression has completed.
      *
-     * @return ScopeEvent[]
+     * @return list<ScopeEvent>
      */
     public function getEventsForVariable(string $varName, int $readFilePos, BranchPath $readBranchPath): array
     {
