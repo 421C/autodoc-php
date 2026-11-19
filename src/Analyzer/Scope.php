@@ -203,22 +203,13 @@ class Scope
                     return $getMethodReturnType($varType);
 
                 } else if ($varType instanceof UnionType) {
-                    $returnTypes = [];
-
-                    foreach ($varType->types as $type) {
-                        if ($type instanceof ObjectType || $type instanceof ArrayType) {
-                            $returnType = $getMethodReturnType($type);
-
-                            if (! ($returnType instanceof UnknownType)) {
-                                $returnTypes[] = $returnType;
-                            }
-
-                        } else if ($type instanceof NullType && $node instanceof Node\Expr\NullsafeMethodCall) {
-                            $returnTypes[] = $type;
-                        }
-                    }
-
-                    return new UnionType($returnTypes)->unwrapType($this->config);
+                    return $this->resolveOnEveryReceiver(
+                        receivers: $varType,
+                        resolveOnReceiver: fn (Type $receiver) => $receiver instanceof ObjectType || $receiver instanceof ArrayType
+                            ? $getMethodReturnType($receiver)
+                            : null,
+                        isNullsafe: $node instanceof Node\Expr\NullsafeMethodCall,
+                    );
                 }
 
                 return new UnknownType;
@@ -349,23 +340,13 @@ class Scope
                     return $getPropertyType($varType, $propertyName);
 
                 } else if ($varType instanceof UnionType) {
-                    /** @var list<Type> $types */
-                    $types = [];
-
-                    foreach ($varType->types as $type) {
-                        if ($type instanceof ObjectType) {
-                            $propType = $getPropertyType($type, $propertyName);
-
-                            if (! ($propType instanceof UnknownType)) {
-                                $types[] = $propType;
-                            }
-
-                        } else if ($type instanceof NullType && $node instanceof Node\Expr\NullsafePropertyFetch) {
-                            $types[] = $type;
-                        }
-                    }
-
-                    return new UnionType($types)->unwrapType($this->config);
+                    return $this->resolveOnEveryReceiver(
+                        receivers: $varType,
+                        resolveOnReceiver: fn (Type $receiver) => $receiver instanceof ObjectType
+                            ? $getPropertyType($receiver, $propertyName)
+                            : null,
+                        isNullsafe: $node instanceof Node\Expr\NullsafePropertyFetch,
+                    );
                 }
 
                 return new UnknownType;
@@ -1162,6 +1143,40 @@ class Scope
 
         return $scope;
     }
+
+    /**
+     * @param callable(Type): ?Type $resolveOnReceiver
+     */
+    private function resolveOnEveryReceiver(UnionType $receivers, callable $resolveOnReceiver, bool $isNullsafe): Type
+    {
+        $resolvedTypes = [];
+        $unknownType = null;
+        $nullType = null;
+
+        foreach ($receivers->types as $receiver) {
+            if ($receiver instanceof NullType) {
+                $nullType = $isNullsafe ? $receiver : null;
+
+                continue;
+            }
+
+            $resolvedType = $resolveOnReceiver($receiver);
+
+            if ($resolvedType instanceof UnknownType) {
+                $unknownType ??= $resolvedType;
+
+            } else if ($resolvedType !== null) {
+                $resolvedTypes[] = $resolvedType;
+            }
+        }
+
+        if ($resolvedTypes === [] && $unknownType !== null) {
+            $resolvedTypes[] = $unknownType;
+        }
+
+        return new UnionType(array_values(array_filter([...$resolvedTypes, $nullType])))->unwrapType($this->config);
+    }
+
 
     /**
      * @template T of object
