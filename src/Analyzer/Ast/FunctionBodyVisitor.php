@@ -4,6 +4,7 @@ namespace AutoDoc\Analyzer\Ast;
 
 use AutoDoc\Analyzer\ArgumentList;
 use AutoDoc\Analyzer\DocBlock\PhpDoc;
+use AutoDoc\Analyzer\DocBlock\PhpDocBinding;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\PhpCondition;
 use AutoDoc\Analyzer\Narrowing\BranchNarrowingEmitter;
@@ -42,6 +43,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
         private readonly bool $isOperationEntrypoint = false,
         private readonly ?string $methodName = null,
         private readonly ?Scope $parentScope = null,
+        private readonly ?PhpDocBinding $parameterBinding = null,
     ) {
         $this->narrowingEmitter = new BranchNarrowingEmitter;
     }
@@ -98,6 +100,8 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
         $node = $nodes[0];
 
         if ($node instanceof Node\Expr\Closure) {
+            $this->scope->className = ($this->parentScope ?? $this->scope)->className;
+
             $this->handleParameters($node->params, $node->getDocComment());
 
             if (! empty($node->uses)) {
@@ -247,7 +251,7 @@ class FunctionBodyVisitor extends NodeVisitorAbstract
 
         if ($docComment) {
             $phpDoc = new PhpDoc($docComment->getText(), $this->scope);
-            $phpDocParameters = $phpDoc->getParameters();
+            $phpDocParameters = $phpDoc->getParameters($this->parameterBinding);
         }
 
         foreach ($params as $paramIndex => $paramNode) {

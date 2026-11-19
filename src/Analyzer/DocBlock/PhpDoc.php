@@ -714,14 +714,7 @@ class PhpDoc
 
     public function getTypeFromPhpDocTag(PhpDocTagValueNode $tagValueNode, ?PhpDocBinding $binding = null): ?UnresolvedPhpDocType
     {
-        $tagBinding = new PhpDocBinding(
-            templateTypes: [
-                ...($this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? []),
-                ...$this->bindTemplates($this->scope)->templateTypes,
-                ...($binding->templateTypes ?? []),
-            ],
-            argumentTypeResolver: $binding?->argumentTypeResolver,
-        );
+        $tagBinding = $this->bindCall($binding);
 
         if ($tagValueNode instanceof ReturnTagValueNode) {
             return $this->createUnresolvedType(
@@ -738,6 +731,22 @@ class PhpDoc
         }
 
         return null;
+    }
+
+
+    /**
+     * The class's declared templates, overridden by `bindTemplates()`, overridden by the call's bindings.
+     */
+    private function bindCall(?PhpDocBinding $binding): PhpDocBinding
+    {
+        return new PhpDocBinding(
+            templateTypes: [
+                ...($this->scope->getCurrentPhpClass()?->getPhpDoc()?->getTemplateTypes() ?? []),
+                ...$this->bindTemplates($this->scope)->templateTypes,
+                ...($binding->templateTypes ?? []),
+            ],
+            argumentTypeResolver: $binding?->argumentTypeResolver,
+        );
     }
 
 
@@ -1016,8 +1025,21 @@ class PhpDoc
     /**
      * @return array<string, UnresolvedPhpDocType>
      */
-    public function getParameters(): array
+    public function getParameters(?PhpDocBinding $callBinding = null): array
     {
+        if ($callBinding !== null) {
+            $binding = $this->bindCall($callBinding);
+
+            return array_map(
+                fn (UnresolvedPhpDocType $parameterType) => $this->createUnresolvedType(
+                    typeNode: $parameterType->typeNode,
+                    description: $parameterType->description,
+                    binding: $binding,
+                ),
+                $this->getParameters(),
+            );
+        }
+
         if (isset($this->parameters)) {
             return $this->parameters;
         }
