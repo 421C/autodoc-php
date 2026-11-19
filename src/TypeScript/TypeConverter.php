@@ -143,15 +143,20 @@ class TypeConverter
 
     private function toTsShape(ArrayType $type, TypeScriptRenderContext $context): string
     {
-        $tupleEntries = $type->getTupleEntries();
+        $config = $context->scope->config;
+        $typeOfEntriesOutsideShape = $type->hasEntriesOutsideShape() ? $type->itemType ?? new UnknownType : null;
         $tsTypes = [];
 
-        if ($tupleEntries !== null) {
-            $tsTypes[] = $this->toTsTuple($tupleEntries, $context);
+        if ($type->mayEncodeAsList($config)) {
+            $documentedTupleEntries = $type->getDocumentedTupleEntries($config);
+
+            $tsTypes[] = $documentedTupleEntries !== null
+                ? $this->toTsTuple($documentedTupleEntries, $context, $typeOfEntriesOutsideShape)
+                : $this->toTsList($this->convertToTypeScriptType($type->getTypeOfEveryEntry($config), $context->nested()));
         }
 
-        if ($type->mayEncodeAsObject($context->scope->config)) {
-            $tsTypes[] = $this->toTsObject($type->shape, $context);
+        if ($type->mayEncodeAsObject($config)) {
+            $tsTypes[] = $this->toTsObject($type->shape, $context, $typeOfEntriesOutsideShape);
         }
 
         return implode('|', $tsTypes);
@@ -179,16 +184,9 @@ class TypeConverter
     /**
      * @param list<Type> $entries
      */
-    private function toTsTuple(array $entries, TypeScriptRenderContext $context): string
+    private function toTsTuple(array $entries, TypeScriptRenderContext $context, ?Type $restEntryType = null): string
     {
-        $tsTypes = [];
-
-        foreach ($entries as $entry) {
-            $tsTypes[] = $this->toTsTupleElement(
-                tsType: $this->convertToTypeScriptType($entry, $context->nested()),
-                required: $entry->required,
-            );
-        }
+        $tsTypes = $this->toTsTupleElements($entries, $restEntryType, $context->nested());
 
         if (count($tsTypes) < 4 && !str_contains(implode('', $tsTypes), "\n")) {
             return '[' . implode(', ', $tsTypes) . ']';
@@ -197,16 +195,33 @@ class TypeConverter
         $entryBaseIndent = $context->baseIndent . $context->config['indent'];
         $result = '[';
 
-        foreach ($entries as $entry) {
-            $tsType = $this->toTsTupleElement(
-                tsType: $this->convertToTypeScriptType($entry, $context->nested($entryBaseIndent)),
-                required: $entry->required,
-            );
-
+        foreach ($this->toTsTupleElements($entries, $restEntryType, $context->nested($entryBaseIndent)) as $tsType) {
             $result .= "\n" . $entryBaseIndent . $tsType . ',';
         }
 
         return $result . "\n" . $context->baseIndent . ']';
+    }
+
+
+    /**
+     * @param list<Type> $entries
+     * @return list<string>
+     */
+    private function toTsTupleElements(array $entries, ?Type $restEntryType, TypeScriptRenderContext $context): array
+    {
+        $tsTypes = array_map(
+            callback: fn (Type $entry) => $this->toTsTupleElement(
+                tsType: $this->convertToTypeScriptType($entry, $context),
+                required: $entry->required,
+            ),
+            array: $entries,
+        );
+
+        if ($restEntryType !== null) {
+            $tsTypes[] = '...' . $this->toTsList($this->convertToTypeScriptType($restEntryType, $context));
+        }
+
+        return $tsTypes;
     }
 
 
@@ -249,33 +264,77 @@ class TypeConverter
     private function toTsObject(
         array $properties,
         TypeScriptRenderContext $context,
+        ?Type $otherPropertiesType = null,
     ): string {
         $tsConfig = $context->config;
         $baseIndent = $context->baseIndent;
+        $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
+        $lineEnd = $tsConfig['add_semicolons'] ? ';' : '';
 
         if ($context->isRootLevel) {
             $properties = $this->projectRootProperties($properties, $context->rootOptions);
+
+            if (isset($context->rootOptions['only'])) {
+                $otherPropertiesType = null;
+            }
         }
 
-        if (! $properties) {
+        if (! $properties && $otherPropertiesType === null) {
             return 'object';
         }
 
         $result = '{';
 
         foreach ($properties as $propertyName => $propertyType) {
-            $propertyBaseIndent = $baseIndent . $tsConfig['indent'];
-
             $tsType = $this->convertToTypeScriptType($propertyType, $context->nested($propertyBaseIndent));
 
             $propertyName = $this->toTsPropertyName((string) $propertyName, $tsConfig['string_quote']);
 
-            $result .= "\n" . $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . ($tsConfig['add_semicolons'] ? ';' : '');
+            $result .= "\n" . $propertyBaseIndent . $propertyName . ($propertyType->required ? '' : '?') . ': ' . $tsType . $lineEnd;
+        }
+
+        if ($otherPropertiesType !== null) {
+            $tsIndexSignatureType = $this->toTsTypeEveryPropertyIsAssignableTo($properties, $otherPropertiesType, $context->nested($propertyBaseIndent));
+
+            $result .= "\n" . $propertyBaseIndent . '[key: string]: ' . $tsIndexSignatureType . $lineEnd;
         }
 
         $result .= "\n" . $baseIndent . '}';
 
         return $result;
+    }
+
+
+    /**
+     * @param array<int|string, Type> $properties
+     */
+    private function toTsTypeEveryPropertyIsAssignableTo(array $properties, Type $otherPropertiesType, TypeScriptRenderContext $context): string
+    {
+        $valueTypes = [...array_values($properties), $otherPropertiesType];
+
+        if (array_any($valueTypes, fn (Type $valueType) => $this->mayRenderAsUnknown($valueType, $context))) {
+            return 'unknown';
+        }
+
+        $tsType = $this->convertToTypeScriptType(new UnionType($valueTypes), $context);
+
+        if (array_any($properties, fn (Type $property) => ! $property->required)) {
+            return $tsType . '|undefined';
+        }
+
+        return $tsType;
+    }
+
+
+    private function mayRenderAsUnknown(Type $type, TypeScriptRenderContext $context): bool
+    {
+        $type = $type->unwrapType($context->scope->config);
+
+        if ($type instanceof UnionType) {
+            return array_any($type->types, fn (Type $member) => $this->mayRenderAsUnknown($member, $context));
+        }
+
+        return $type instanceof UnknownType || $type instanceof NeverType;
     }
 
     /**

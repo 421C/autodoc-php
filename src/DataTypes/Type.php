@@ -270,7 +270,7 @@ abstract class Type
         if ($type instanceof UnionType || $type instanceof IntersectionType) {
             $filteredTypes = array_values(array_filter(
                 $type->types,
-                fn (Type $t) => $t->isSubTypeOf($this, $config)
+                fn (Type $t) => $t->refines($this, $config)
             ));
 
             if (empty($filteredTypes)) {
@@ -292,7 +292,7 @@ abstract class Type
             return $type->unwrapType($config);
         }
 
-        if ($type->isSubTypeOf($this, $config)) {
+        if ($type->refines($this, $config)) {
             if ($this instanceof ObjectType
                 && $type instanceof ObjectType
                 && $type->className !== null
@@ -311,12 +311,29 @@ abstract class Type
 
     public function isSubTypeOf(Type $superType, Config $config): bool
     {
+        return $this->fitsInto($superType, $config, asRefinement: false);
+    }
+
+
+    /**
+     * Whether this analyzed type may replace the declared one. Unlike subtypes:
+     * - `array{a: string}` refines `array<string, int>`
+     * - `array{a: int}` does not refine `array{a: int, b?: int}`
+     */
+    public function refines(Type $declaredType, Config $config): bool
+    {
+        return $this->fitsInto($declaredType, $config, asRefinement: true);
+    }
+
+
+    protected function fitsInto(Type $superType, Config $config, bool $asRefinement): bool
+    {
         if ($this instanceof UnresolvedType) {
-            return $this->unwrapType($config)->isSubTypeOf($superType, $config);
+            return $this->unwrapType($config)->fitsInto($superType, $config, $asRefinement);
         }
 
         if ($superType instanceof UnresolvedType) {
-            return $this->isSubTypeOf($superType->unwrapType($config), $config);
+            return $this->fitsInto($superType->unwrapType($config), $config, $asRefinement);
         }
 
         if ($this instanceof NeverType) {
@@ -332,15 +349,15 @@ abstract class Type
         }
 
         if ($this instanceof UnionType) {
-            return $this->types !== [] && array_all($this->types, fn (Type $type) => $type->isSubTypeOf($superType, $config));
+            return $this->types !== [] && array_all($this->types, fn (Type $type) => $type->fitsInto($superType, $config, $asRefinement));
         }
 
         if ($superType instanceof UnionType) {
-            return array_any($superType->types, fn ($type) => $this->isSubTypeOf($type, $config));
+            return array_any($superType->types, fn ($type) => $this->fitsInto($type, $config, $asRefinement));
         }
 
         if ($superType instanceof IntersectionType) {
-            return array_all($superType->types, fn ($type) => $this->isSubTypeOf($type, $config));
+            return array_all($superType->types, fn ($type) => $this->fitsInto($type, $config, $asRefinement));
         }
 
         if ($superType instanceof ClassStringType && $this instanceof ClassStringType) {
@@ -372,69 +389,7 @@ abstract class Type
         }
 
         if ($superType instanceof ArrayType && $this instanceof ArrayType) {
-            if ($superType->className !== null) {
-                if ($this->className === null) {
-                    return false;
-                }
-
-                if ($this->className !== $superType->className) {
-                    if (class_exists($this->className) && class_exists($superType->className)) {
-                        if (! is_a($this->className, $superType->className, true)) {
-                            return false;
-                        }
-
-                    } else {
-                        return false;
-                    }
-                }
-            }
-
-            if ($superType->shape) {
-                if (! $this->shape) {
-                    return false;
-                }
-
-                foreach ($superType->shape as $key => $superItemType) {
-                    $subItemType = $this->shape[$key] ?? null;
-
-                    if ($subItemType === null) {
-                        return false;
-                    }
-
-                    if (! $subItemType->isSubTypeOf($superItemType, $config)) {
-                        return false;
-                    }
-
-                    if ($superItemType->required && ! $subItemType->required) {
-                        return false;
-                    }
-                }
-
-                return true;
-
-            } else if ($this->shape) {
-                return true;
-            }
-
-            $thisAsTypePair = (clone $this)->convertShapeToTypePair($config);
-
-            if ($superType->keyType !== null) {
-                if (! ($thisAsTypePair->keyType ?? new IntegerType)->isSubTypeOf($superType->keyType, $config)) {
-                    return false;
-                }
-            }
-
-            if ($superType->itemType !== null) {
-                if ($thisAsTypePair->itemType === null) {
-                    return false;
-                }
-
-                if (! $thisAsTypePair->itemType->isSubTypeOf($superType->itemType, $config)) {
-                    return false;
-                }
-            }
-
-            return true;
+            return $this->fitsIntoArray($superType, $config, $asRefinement);
         }
 
         if ($superType instanceof ObjectType && $this instanceof ObjectType) {
@@ -463,7 +418,7 @@ abstract class Type
                     return false;
                 }
 
-                if (! $subPropType->isSubTypeOf($superPropType, $config)) {
+                if (! $subPropType->fitsInto($superPropType, $config, $asRefinement)) {
                     return false;
                 }
 
@@ -969,11 +924,15 @@ abstract class Type
     public static function fromValue(mixed $value, ?Config $config = null): Type
     {
         if (is_array($value)) {
+            if ($value === []) {
+                return ArrayType::withoutEntries();
+            }
+
             $itemTypes = array_map(fn (mixed $item) => self::fromValue($item, $config)->setRequired(true), $value);
 
             $resolvePartialShapes = $config->data['arrays']['resolve_partial_shapes'] ?? false;
 
-            if ($itemTypes && array_is_list($itemTypes) && ! $resolvePartialShapes) {
+            if (array_is_list($itemTypes) && ! $resolvePartialShapes) {
                 $itemType = new UnionType($itemTypes);
 
                 return new ArrayType(

@@ -289,9 +289,9 @@ final class NonListArrayTest extends TestCase
 
         $this->assertSame(
             [
-                'listAfterTuple' => '{"type":"array","items":{"type":["integer","string","boolean"]}}',
+                'listAfterTuple' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"},{"type":"boolean"}],"items":{"type":"integer"},"minItems":3}',
                 'tupleAfterList' => '{"type":"array","items":{"type":["integer","string","boolean"]}}',
-                'listAfterStringKey' => '{"type":"object","additionalProperties":{"type":"integer"}}',
+                'listAfterStringKey' => '{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"],"additionalProperties":{"type":"integer"}}',
                 'stringKeyedMap' => '{"type":"object","additionalProperties":{"type":"integer"}}',
             ],
             array_map($this->closureReturnSchema(...), $closures),

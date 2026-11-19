@@ -272,7 +272,13 @@ trait WithMergeableTypes
 
         if ($type1 instanceof ArrayType) {
             /** @var ArrayType $type2 */
-            return $this->mergeArrayTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
+            $mergedArray = $this->mergeArrayTypes(clone $type1, clone $type2, $config, $mergeAsIntersection);
+
+            if ($mergedArray !== null) {
+                $mergedArray->maxItems = self::mergeMaxItems($type1->maxItems, $type2->maxItems, $mergeAsIntersection);
+            }
+
+            return $mergedArray;
         }
 
         if ($type1 instanceof ObjectType) {
@@ -286,7 +292,7 @@ trait WithMergeableTypes
 
     private function mergeArrayTypes(ArrayType $array1, ArrayType $array2, Config $config, bool $mergeAsIntersection = false): ?ArrayType
     {
-        if (! $array1->shape && ! $array1->itemType && ! $array1->keyType) {
+        if ($array1->isUntypedOrKnownEmpty()) {
             if (! $mergeAsIntersection) {
                 foreach ($array2->shape as $key => $type) {
                     $array2->shape[$key] = $this->asOptionalMember($type);
@@ -296,7 +302,7 @@ trait WithMergeableTypes
             return $array2;
         }
 
-        if (! $array2->shape && ! $array2->itemType && ! $array2->keyType) {
+        if ($array2->isUntypedOrKnownEmpty()) {
             if (! $mergeAsIntersection) {
                 foreach ($array1->shape as $key => $type) {
                     $array1->shape[$key] = $this->asOptionalMember($type);
@@ -327,9 +333,9 @@ trait WithMergeableTypes
 
             foreach ($array1->shape as $key => $type1) {
                 if (! isset($array2->shape[$key])) {
-                    if (! $mergeAsIntersection) {
-                        $array1->shape[$key] = $this->asOptionalMember($type1);
-                    }
+                    $array1->shape[$key] = $mergeAsIntersection
+                        ? $this->intersectWithEntriesOutsideShapeOf($array2, $key, $type1, $config)
+                        : $this->asOptionalMember($type1);
 
                     continue;
                 }
@@ -361,10 +367,12 @@ trait WithMergeableTypes
             if ($mergeAsIntersection || $mergeShapesInTypeUnions) {
                 foreach ($array2->shape as $key => $type2) {
                     $array1->shape[$key] ??= $mergeAsIntersection
-                        ? $type2
+                        ? $this->intersectWithEntriesOutsideShapeOf($array1, $key, $type2, $config)
                         : $this->asOptionalMember($type2);
                 }
             }
+
+            $array1->mergeEntriesOutsideShape($array2, $mergeAsIntersection, $config);
 
             return $array1;
 
@@ -402,6 +410,39 @@ trait WithMergeableTypes
         }
 
         return null;
+    }
+
+
+    private function intersectWithEntriesOutsideShapeOf(ArrayType $other, int|string $key, Type $entry, Config $config): Type
+    {
+        if (! $other->hasEntriesOutsideShape()) {
+            return $entry;
+        }
+
+        $typeOutsideShape = $other->getTypeOfEntryOutsideShapeAt($key, $config);
+
+        if ($typeOutsideShape === null) {
+            return new NeverType(conflictingTypes: [$entry], required: $entry->required);
+        }
+
+        $intersectedEntry = $this->mergeTypes($entry, $typeOutsideShape, $config, mergeAsIntersection: true)
+            ?? new IntersectionType([$entry, $typeOutsideShape]);
+
+        $intersectedEntry->required = $entry->required;
+
+        return $intersectedEntry;
+    }
+
+
+    private static function mergeMaxItems(?int $maxItems1, ?int $maxItems2, bool $mergeAsIntersection): ?int
+    {
+        if (! $mergeAsIntersection) {
+            return $maxItems1 === null || $maxItems2 === null ? null : max($maxItems1, $maxItems2);
+        }
+
+        $limits = array_filter([$maxItems1, $maxItems2], fn (?int $limit) => $limit !== null);
+
+        return $limits === [] ? null : min($limits);
     }
 
 

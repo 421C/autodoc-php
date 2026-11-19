@@ -4,6 +4,7 @@ namespace AutoDoc\DataTypes;
 
 use AutoDoc\Analyzer\IntKeyOrder;
 use AutoDoc\Config;
+use AutoDoc\DataTypes\Traits\MergesArrayEntries;
 
 /**
  * @phpstan-import-type TypeSchema from Type
@@ -11,6 +12,8 @@ use AutoDoc\Config;
  */
 class ArrayType extends Type
 {
+    use MergesArrayEntries;
+
     public function __construct(
         public ?Type $itemType = null,
         public ?Type $keyType = null,
@@ -32,6 +35,12 @@ class ArrayType extends Type
     ) {}
 
 
+    public static function withoutEntries(): self
+    {
+        return new self(maxItems: 0);
+    }
+
+
     public function isTuple(): bool
     {
         [$listEntries, $otherEntries] = self::splitListEntries($this->shape);
@@ -47,8 +56,8 @@ class ArrayType extends Type
 
     public function mayEncodeAsList(Config $config): bool
     {
-        if ($this->shape === []) {
-            return $this->intKeyOrder !== IntKeyOrder::NonSequential && ! self::includesStringKeys($this->keyType, $config);
+        if (! $this->isClosedShape()) {
+            return $this->intKeyOrder !== IntKeyOrder::NonSequential && ! $this->mayHaveStringKeys($config);
         }
 
         [$listEntries, $otherEntries] = self::splitListEntries($this->shape);
@@ -59,11 +68,24 @@ class ArrayType extends Type
 
     public function mayEncodeAsObject(Config $config): bool
     {
-        if ($this->shape === []) {
+        if (! $this->isClosedShape()) {
             return $this->intKeyOrder !== IntKeyOrder::Sequential || ! $this->mayEncodeAsList($config);
         }
 
         return ! $this->isTuple();
+    }
+
+
+    private function isClosedShape(): bool
+    {
+        return $this->shape !== [] && ! $this->hasEntriesOutsideShape();
+    }
+
+
+    private function mayHaveStringKeys(Config $config): bool
+    {
+        return array_any(array_keys($this->shape), fn (int|string $key) => is_string($key))
+            || self::includesStringKeys($this->keyType, $config);
     }
 
 
@@ -88,6 +110,35 @@ class ArrayType extends Type
         }
 
         return $tupleEntries;
+    }
+
+
+    /**
+     * @return ?list<Type>
+     */
+    public function getDocumentedTupleEntries(Config $config): ?array
+    {
+        $tupleEntries = $this->getTupleEntries();
+
+        if ($tupleEntries === null || ! $this->hasEntriesOutsideShape()) {
+            return $tupleEntries;
+        }
+
+        return array_all($tupleEntries, fn (Type $entry) => $this->otherEntriesAllowTypeOf($entry, $config))
+            ? null
+            : $tupleEntries;
+    }
+
+
+    private function otherEntriesAllowTypeOf(Type $entry, Config $config): bool
+    {
+        $typeOfOtherEntries = ($this->itemType ?? new UnknownType)->unwrapType($config);
+
+        if ($typeOfOtherEntries instanceof UnknownType) {
+            return $entry->unwrapType($config) instanceof UnknownType;
+        }
+
+        return $entry->isSubTypeOf($typeOfOtherEntries, $config);
     }
 
 
@@ -121,6 +172,10 @@ class ArrayType extends Type
     {
         if ($listEntries === []) {
             return false;
+        }
+
+        if ($this->hasEntriesOutsideShape()) {
+            return $this->intKeyOrder !== IntKeyOrder::NonSequential && $otherEntries === [];
         }
 
         return match ($this->intKeyOrder) {
@@ -187,20 +242,24 @@ class ArrayType extends Type
      */
     private function listSchema(Config $config): array
     {
-        $tupleEntries = $this->getTupleEntries();
+        $documentedTupleEntries = $this->getDocumentedTupleEntries($config);
 
-        if ($tupleEntries !== null) {
+        if ($documentedTupleEntries !== null) {
+            $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
+            $requiredEntryCount = count(array_filter($documentedTupleEntries, fn (Type $entry) => $entry->required));
+
             return array_filter([
                 'type' => 'array',
-                'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $tupleEntries),
-                'minItems' => count(array_filter($tupleEntries, fn (Type $entry) => $entry->required)),
-                'maxItems' => count($tupleEntries),
+                'prefixItems' => array_map(fn (Type $entry) => $entry->toSchema($config), $documentedTupleEntries),
+                'items' => $this->schemaOfEntriesOutsideShape($config),
+                'minItems' => $hasEntriesOutsideShape ? max($requiredEntryCount, $this->minItems ?? 0) : $requiredEntryCount,
+                'maxItems' => $hasEntriesOutsideShape ? null : count($documentedTupleEntries),
             ]);
         }
 
         return array_filter([
             'type' => 'array',
-            'items' => ($this->itemType ?? new UnknownType)->toSchema($config),
+            'items' => $this->getTypeOfEveryEntry($config)->toSchema($config),
             'minItems' => $this->minItems,
             'maxItems' => $this->maxItems,
         ]);
@@ -217,6 +276,7 @@ class ArrayType extends Type
                 'type' => 'object',
                 'properties' => self::propertySchemas($this->shape, $config),
                 'required' => self::requiredPropertyNames($this->shape),
+                'additionalProperties' => $this->hasEntriesOutsideShape() ? $this->schemaOfEntriesOutsideShape($config) ?? true : null,
             ]);
         }
 
@@ -226,6 +286,21 @@ class ArrayType extends Type
             'minProperties' => $this->minItems,
             'maxProperties' => $this->maxItems,
         ]);
+    }
+
+
+    /**
+     * @return ?TypeSchema
+     */
+    private function schemaOfEntriesOutsideShape(Config $config): ?array
+    {
+        $itemType = $this->itemType?->unwrapType($config);
+
+        if ($itemType === null || $itemType instanceof UnknownType) {
+            return null;
+        }
+
+        return $itemType->toSchema($config);
     }
 
 
@@ -298,13 +373,11 @@ class ArrayType extends Type
     public function convertShapeToTypePair(Config $config, bool $removePossibleItemValues = false): self
     {
         if ($this->shape) {
-            $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
+            $hasEntriesOutsideShape = $this->hasEntriesOutsideShape();
 
-            $this->intKeyOrder = match (true) {
-                ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
-                $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
-                default => IntKeyOrder::NonSequential,
-            };
+            if (! $hasEntriesOutsideShape) {
+                $this->intKeyOrder = $this->getIntKeyOrderOfClosedShape($config);
+            }
 
             $keyTypes = [];
             $itemTypes = [];
@@ -320,6 +393,11 @@ class ArrayType extends Type
                 }
 
                 $itemTypes[] = $value->unwrapType($config);
+            }
+
+            if ($hasEntriesOutsideShape) {
+                $keyTypes[] = $this->keyType ?? new IntegerType;
+                $itemTypes[] = $this->itemType ?? new UnknownType;
             }
 
             $this->keyType = new UnionType($keyTypes)->unwrapType($config);
@@ -359,8 +437,28 @@ class ArrayType extends Type
     }
 
 
+    public function getTypeOfEveryEntry(Config $config): Type
+    {
+        return (clone $this)->convertShapeToTypePair($config)->itemType ?? new UnknownType;
+    }
+
+
+    private function getIntKeyOrderOfClosedShape(Config $config): IntKeyOrder
+    {
+        $hasIntKeys = array_any(array_keys($this->shape), fn (int|string $key) => is_int($key));
+
+        return match (true) {
+            ! $hasIntKeys, ! $this->mayEncodeAsObject($config) => IntKeyOrder::Sequential,
+            $this->mayEncodeAsList($config) => IntKeyOrder::MaybeSequential,
+            default => IntKeyOrder::NonSequential,
+        };
+    }
+
+
     public function addItemToArray(int|string|Type|null $key, Type $itemType, Config $config): self
     {
+        $this->maxItems = null;
+
         if ($key instanceof Type) {
             if (! self::mayBeStoredAsStringKey($key, $config)) {
                 return $this->addIntKeyedItem($itemType, $config);
@@ -368,7 +466,7 @@ class ArrayType extends Type
 
             $this->convertShapeToTypePair($config);
             $this->keyType = new UnionType(array_values(array_filter([
-                $this->hasKnownEntries() ? $this->keyType ?? new IntegerType : null,
+                $this->hasEntriesOutsideShape() ? $this->keyType ?? new IntegerType : null,
                 self::toStoredKeyType($key, $config),
             ])))->unwrapType($config);
             $this->itemType = $this->itemType === null ? $itemType : new UnionType([$this->itemType, $itemType])->unwrapType($config);
@@ -386,8 +484,12 @@ class ArrayType extends Type
             return $this->addIntKeyedItem($itemType, $config);
         }
 
-        if ($this->shape || $this->itemType === null) {
-            $this->shape[$key] = $itemType;
+        if ($this->shape || $this->itemType === null || $itemType->required) {
+            $typeOfEntryOutsideShape = $itemType->required ? null : $this->getTypeOfEntryOutsideShapeAt($key, $config);
+
+            $this->shape[$key] = $typeOfEntryOutsideShape === null
+                ? $itemType
+                : self::unionUnlessAnyIsUnknown([$itemType, clone $typeOfEntryOutsideShape], $config)->setRequired(false);
 
         } else {
             $this->keyType = new UnionType(array_values(array_filter([$this->keyType, new StringType])))->unwrapType($config);
@@ -410,12 +512,8 @@ class ArrayType extends Type
 
     public function removeItemFromArray(int|string $key, bool $isCertain = true): self
     {
-        if ($this->shape === []) {
-            return $this->markItemsOptional();
-        }
-
         if (! isset($this->shape[$key])) {
-            return $this;
+            return $this->isClosedShape() ? $this : $this->markEntriesOutsideShapeOptional();
         }
 
         if ($isCertain) {
@@ -425,9 +523,18 @@ class ArrayType extends Type
             $this->shape[$key] = (clone $this->shape[$key])->setRequired(false);
         }
 
-        $this->intKeyOrder = $this->shape === []
-            ? IntKeyOrder::Sequential
-            : $this->intKeyOrder->union(IntKeyOrder::NonSequential);
+        if ($this->hasEntriesOutsideShape()) {
+            return $this->markEntriesOutsideShapeOptional();
+        }
+
+        if ($this->shape === []) {
+            $this->intKeyOrder = IntKeyOrder::Sequential;
+            $this->maxItems = 0;
+
+            return $this;
+        }
+
+        $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
 
         return $this;
     }
@@ -435,17 +542,19 @@ class ArrayType extends Type
 
     public function markItemsOptional(): self
     {
-        if ($this->shape !== []) {
-            foreach (array_keys($this->shape) as $shapeKey) {
-                $this->removeItemFromArray($shapeKey, isCertain: false);
-            }
-
-            return $this;
+        foreach (array_keys($this->shape) as $shapeKey) {
+            $this->removeItemFromArray($shapeKey, isCertain: false);
         }
 
+        return $this->markEntriesOutsideShapeOptional();
+    }
+
+
+    public function markEntriesOutsideShapeOptional(): self
+    {
         $this->minItems = null;
 
-        if ($this->hasKnownEntries()) {
+        if ($this->hasEntriesOutsideShape()) {
             $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
         }
 
@@ -464,7 +573,7 @@ class ArrayType extends Type
 
         $this->convertShapeToTypePair($config);
 
-        if ($this->hasKnownEntries()) {
+        if ($this->hasEntriesOutsideShape()) {
             $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
         }
 
@@ -534,73 +643,224 @@ class ArrayType extends Type
     }
 
 
-    private function hasKnownEntries(): bool
+    public function hasEntriesOutsideShape(): bool
     {
         return $this->itemType !== null || $this->keyType !== null;
     }
 
 
     /**
-     * @param array<int|string, Type> $shape
+     * @internal
      */
-    public function mergeShape(array $shape, bool $isTuple = false): void
+    public function isUntypedOrKnownEmpty(): bool
     {
-        // The loop below would turn the tuple [A, B?, C?] into [A, (B|C)?, C?]
-        // but in a tuple C exists only when B does.
-        if ($isTuple) {
-            $this->appendListEntries(array_values($shape));
+        return $this->shape === [] && ! $this->hasEntriesOutsideShape();
+    }
 
-            return;
-        }
 
-        foreach ($shape as $key => $type) {
-            if (is_int($key)) {
-                $this->appendListEntries([$type]);
-
-            } else if (! $type->required && isset($this->shape[$key])) {
-                $existingType = $this->shape[$key];
-
-                $this->shape[$key] = new UnionType([$existingType, $type])->setRequired($existingType->required);
-
-            } else {
-                $this->shape[$key] = $type;
-            }
-        }
+    private function hasNoEntries(): bool
+    {
+        return $this->isUntypedOrKnownEmpty() && $this->maxItems === 0;
     }
 
 
     /**
-     * @param list<Type> $entries Entries that are missing only from the end.
+     * The type of an entry under `$key` among the entries outside the shape, or null when none of them can be under that key.
      */
-    private function appendListEntries(array $entries): void
+    public function getTypeOfEntryOutsideShapeAt(int|string $key, Config $config): ?Type
     {
-        $requiredIntKeys = array_keys(array_filter(
+        $mayHoldKey = is_int($key)
+            ? $this->mayHoldIntKeysOutsideShape($config)
+            : $this->hasEntriesOutsideShape() && self::mayBeStoredAsStringKey($this->keyType ?? new IntegerType, $config);
+
+        return $mayHoldKey ? $this->itemType ?? new UnknownType : null;
+    }
+
+
+    /**
+     * Whether a required entry is an intersection that no value satisfies, so no such array exists.
+     */
+    public function hasRequiredEntryThatCanNotExist(Config $config): bool
+    {
+        return array_any(
             array: $this->shape,
-            callback: fn (Type $entry, int|string $key) => is_int($key) && $entry->required,
-            mode: ARRAY_FILTER_USE_BOTH,
-        ));
-        $firstOptionalKey = $requiredIntKeys === [] ? 0 : max($requiredIntKeys) + 1;
+            callback: fn (Type $entry) => $entry->required
+                && ($entry instanceof NeverType || ($entry instanceof IntersectionType && $entry->unwrapType($config) instanceof NeverType)),
+        );
+    }
 
-        $optionalEnd = [];
 
-        while (isset($this->shape[$firstOptionalKey + count($optionalEnd)])) {
-            $optionalEnd[] = $this->shape[$firstOptionalKey + count($optionalEnd)];
+    protected function fitsIntoArray(self $superArray, Config $config, bool $asRefinement): bool
+    {
+        if (! $this->isOfClassOf($superArray)) {
+            return false;
         }
 
-        $candidatesByIndex = array_map(fn (Type $entry) => [clone $entry], $optionalEnd);
+        if ($asRefinement && $this->shape !== []) {
+            return $this->listsEveryKeyOf($superArray, $config);
+        }
 
-        foreach ($entries as $entryIndex => $entry) {
-            foreach (range(0, count($optionalEnd)) as $presentOptionalCount) {
-                $candidatesByIndex[$presentOptionalCount + $entryIndex][] = (clone $entry)->setRequired(false);
+        if ($superArray->shape !== []) {
+            return ! $asRefinement && $this->fitsIntoShapeOf($superArray, $config);
+        }
+
+        $thisAsTypePair = (clone $this)->convertShapeToTypePair($config);
+
+        if ($superArray->keyType !== null
+            && ! ($thisAsTypePair->keyType ?? new IntegerType)->fitsInto($superArray->keyType, $config, $asRefinement)
+        ) {
+            return false;
+        }
+
+        if ($superArray->itemType === null) {
+            return true;
+        }
+
+        return $thisAsTypePair->itemType !== null && $thisAsTypePair->itemType->fitsInto($superArray->itemType, $config, $asRefinement);
+    }
+
+
+    private function isOfClassOf(self $superArray): bool
+    {
+        if ($superArray->className === null || $this->className === $superArray->className) {
+            return true;
+        }
+
+        if ($this->className === null || ! class_exists($this->className) || ! class_exists($superArray->className)) {
+            return false;
+        }
+
+        return is_a($this->className, $superArray->className, true);
+    }
+
+
+    private function listsEveryKeyOf(self $declaredArray, Config $config): bool
+    {
+        return array_all(
+            array: $declaredArray->shape,
+            callback: fn (Type $declaredEntry, int|string $key) => isset($this->shape[$key])
+                && self::entryFitsInto($this->shape[$key], $declaredEntry, $config, asRefinement: true),
+        );
+    }
+
+
+    private function fitsIntoShapeOf(self $superArray, Config $config): bool
+    {
+        if ($this->isUntypedOrKnownEmpty()) {
+            return $this->hasNoEntries() && array_all($superArray->shape, fn (Type $superEntry) => ! $superEntry->required);
+        }
+
+        foreach ($superArray->shape as $key => $superEntry) {
+            if (! $this->hasEntryFitting($key, $superEntry, $config)) {
+                return false;
             }
         }
 
-        $requiredEntryCount = count(array_filter($entries, fn (Type $entry) => $entry->required));
-
-        foreach ($candidatesByIndex as $index => $candidates) {
-            $type = count($candidates) === 1 ? $candidates[0] : new UnionType($candidates);
-
-            $this->shape[$firstOptionalKey + $index] = $type->setRequired($index < $requiredEntryCount);
+        if (! $superArray->hasEntriesOutsideShape()) {
+            return true;
         }
+
+        foreach (array_diff_key($this->shape, $superArray->shape) as $key => $entry) {
+            $superTypeOutsideShape = $superArray->getTypeOfEntryOutsideShapeAt($key, $config);
+
+            if ($superTypeOutsideShape === null || ! $entry->isSubTypeOf($superTypeOutsideShape, $config)) {
+                return false;
+            }
+        }
+
+        if (! $this->hasEntriesOutsideShape()) {
+            return true;
+        }
+
+        return ($this->keyType ?? new IntegerType)->isSubTypeOf($superArray->keyType ?? new IntegerType, $config)
+            && ($this->itemType ?? new UnknownType)->isSubTypeOf($superArray->itemType ?? new UnknownType, $config);
+    }
+
+
+    private function hasEntryFitting(int|string $key, Type $superEntry, Config $config): bool
+    {
+        $entry = $this->shape[$key] ?? null;
+
+        if ($entry !== null) {
+            return self::entryFitsInto($entry, $superEntry, $config, asRefinement: false);
+        }
+
+        if ($superEntry->required) {
+            return false;
+        }
+
+        $typeOutsideShape = $this->getTypeOfEntryOutsideShapeAt($key, $config);
+
+        return $typeOutsideShape === null || $typeOutsideShape->isSubTypeOf($superEntry, $config);
+    }
+
+
+    private static function entryFitsInto(Type $entry, Type $superEntry, Config $config, bool $asRefinement): bool
+    {
+        return $entry->fitsInto($superEntry, $config, $asRefinement) && ($entry->required || ! $superEntry->required);
+    }
+
+
+    /**
+     * @internal
+     */
+    public function mergeEntriesOutsideShape(self $other, bool $asIntersection, Config $config): void
+    {
+        if (! $other->hasEntriesOutsideShape()) {
+            return;
+        }
+
+        if (! $this->hasEntriesOutsideShape()) {
+            $this->itemType = $other->itemType;
+            $this->keyType = $other->keyType;
+
+            return;
+        }
+
+        $neitherDeclaresAKeyType = $this->keyType === null && $other->keyType === null;
+        $itemTypes = [$this->itemType ?? new UnknownType, $other->itemType ?? new UnknownType];
+        $keyTypes = [$this->keyType ?? new IntegerType, $other->keyType ?? new IntegerType];
+
+        $itemType = $asIntersection
+            ? new IntersectionType($itemTypes)->unwrapType($config)
+            : self::unionUnlessAnyIsUnknown($itemTypes, $config);
+        $keyType = $asIntersection
+            ? new IntersectionType($keyTypes)->unwrapType($config)
+            : new UnionType($keyTypes)->unwrapType($config);
+
+        if ($itemType instanceof NeverType || $keyType instanceof NeverType) {
+            $this->itemType = null;
+            $this->keyType = null;
+
+            return;
+        }
+
+        $this->itemType = $itemType;
+        $this->keyType = $neitherDeclaresAKeyType ? null : $keyType;
+    }
+
+
+    /**
+     * @param list<Type> $types
+     */
+    private static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
+    {
+        $types = array_map(fn (Type $type) => $type->unwrapType($config), $types);
+
+        if (array_any($types, fn (Type $type) => $type instanceof UnknownType)) {
+            return new UnknownType;
+        }
+
+        return new UnionType($types)->unwrapType($config);
+    }
+
+
+    private function mayHoldIntKeysOutsideShape(Config $config): bool
+    {
+        if (! $this->hasEntriesOutsideShape()) {
+            return false;
+        }
+
+        return $this->keyType === null || ! self::toStoredKeyType($this->keyType, $config) instanceof StringType;
     }
 }

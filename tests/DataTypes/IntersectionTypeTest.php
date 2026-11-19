@@ -502,6 +502,52 @@ final class IntersectionTypeTest extends TestCase
         ], $schema, 'type', 'schema');
     }
 
+    #[Test]
+    public function arrayIntersectionKeepsTheSmallerMaxItems(): void
+    {
+        $members = [
+            'twoLimits' => [new ArrayType(itemType: new IntegerType, maxItems: 5), new ArrayType(itemType: new IntegerType, maxItems: 3)],
+            'limitOnTheFirstMember' => [new ArrayType(itemType: new IntegerType, maxItems: 3), new ArrayType(itemType: new IntegerType)],
+            'limitOnTheSecondMember' => [new ArrayType(itemType: new IntegerType), new ArrayType(itemType: new IntegerType, maxItems: 3)],
+            'noLimit' => [new ArrayType(itemType: new IntegerType), new ArrayType(itemType: new IntegerType)],
+            'emptyArrayAndList' => [new ArrayType(maxItems: 0), new ArrayType(itemType: new IntegerType)],
+        ];
+
+        $this->assertSame(
+            [
+                'twoLimits' => 3,
+                'limitOnTheFirstMember' => 3,
+                'limitOnTheSecondMember' => 3,
+                'noLimit' => null,
+                'emptyArrayAndList' => 0,
+            ],
+            array_map(fn (array $arrays) => $this->maxItemsOf(new IntersectionType($arrays)), $members),
+        );
+    }
+
+    #[Test]
+    public function arrayUnionKeepsTheLargerMaxItemsOnlyWhenEveryMemberHasOne(): void
+    {
+        $members = [
+            'twoLimits' => [new ArrayType(itemType: new IntegerType, maxItems: 3), new ArrayType(itemType: new IntegerType, maxItems: 5)],
+            'limitOnTheFirstMember' => [new ArrayType(itemType: new IntegerType, maxItems: 3), new ArrayType(itemType: new IntegerType)],
+            'limitOnTheSecondMember' => [new ArrayType(itemType: new IntegerType), new ArrayType(itemType: new IntegerType, maxItems: 3)],
+            'twoEmptyArrays' => [new ArrayType(maxItems: 0), new ArrayType(maxItems: 0)],
+            'emptyArrayAndList' => [new ArrayType(maxItems: 0), new ArrayType(itemType: new IntegerType)],
+        ];
+
+        $this->assertSame(
+            [
+                'twoLimits' => 5,
+                'limitOnTheFirstMember' => null,
+                'limitOnTheSecondMember' => null,
+                'twoEmptyArrays' => 0,
+                'emptyArrayAndList' => null,
+            ],
+            array_map(fn (array $arrays) => $this->maxItemsOf(new UnionType($arrays)), $members),
+        );
+    }
+
     private function configWithScalarValues(): Config
     {
         $config = self::loadConfig();
@@ -522,5 +568,14 @@ final class IntersectionTypeTest extends TestCase
     private function unwrapFully(Type $type): Type
     {
         return $type->unwrapType($this->configWithScalarValues());
+    }
+
+    private function maxItemsOf(Type $type): ?int
+    {
+        $array = $this->unwrapFully($type);
+
+        $this->assertInstanceOf(ArrayType::class, $array);
+
+        return $array->maxItems;
     }
 }

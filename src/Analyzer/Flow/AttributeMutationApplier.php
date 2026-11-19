@@ -166,7 +166,8 @@ final readonly class AttributeMutationApplier
         }
 
         if ($baseType instanceof ArrayType) {
-            $elementType = $baseType->shape[$pathKey] ?? $baseType->itemType;
+            $mayHoldKeyOutsideShape = $baseType->getTypeOfEntryOutsideShapeAt($pathKey, $this->scope->config) !== null;
+            $elementType = $baseType->shape[$pathKey] ?? ($mayHoldKeyOutsideShape ? $baseType->itemType : null);
 
             if ($elementType === null) {
                 $createdElementType = $this->apply(
@@ -190,13 +191,14 @@ final readonly class AttributeMutationApplier
             }
 
             $isSharedItemType = ! isset($baseType->shape[$pathKey]);
+            $isNewKnownKey = $isCertain && $isSharedItemType && is_string($pathKey);
             $wasRequired = $elementType->required;
 
             $mergedElementType = $this->apply(
                 baseType: $elementType->unwrapType($this->scope->config),
                 mutationPath: $remainingPath,
                 attributes: $attributes,
-                isCertain: $isCertain && (! $isSharedItemType || $readPathIsAligned),
+                isCertain: $isNewKnownKey || ($isCertain && (! $isSharedItemType || $readPathIsAligned)),
                 readPath: $readPathTail,
                 dynamicAttribute: $dynamicAttribute,
                 dynamicKey: $dynamicKey,
@@ -208,7 +210,10 @@ final readonly class AttributeMutationApplier
 
             $baseType = clone $baseType;
 
-            if ($baseType->shape) {
+            if ($isNewKnownKey) {
+                $baseType->addItemToArray($pathKey, $mergedElementType->setRequired(true), $this->scope->config);
+
+            } else if ($baseType->shape) {
                 $baseType->shape[$pathKey] = $mergedElementType->setRequired($wasRequired);
 
             } else {
@@ -246,7 +251,7 @@ final readonly class AttributeMutationApplier
             ));
 
             if ($baseType instanceof ArrayType
-                && ($this->hasNoEntries($baseType) || $this->makesListAMap($baseType, $pathKey))
+                && ($this->hasNoShapeOrItemType($baseType) || $this->makesListAMap($baseType, $pathKey))
             ) {
                 $createdElementType = $this->apply(
                     baseType: null,
@@ -293,7 +298,7 @@ final readonly class AttributeMutationApplier
             ])->unwrapType($this->scope->config));
 
             if ($baseType instanceof ArrayType
-                && ($this->hasNoEntries($baseType) || $this->makesListAMap($baseType, $key))
+                && ($this->hasNoShapeOrItemType($baseType) || $this->makesListAMap($baseType, $key))
             ) {
                 $baseType->addItemToArray($key, $attributeType->setRequired($isCertain), $this->scope->config);
             }
@@ -312,7 +317,7 @@ final readonly class AttributeMutationApplier
     }
 
 
-    private function hasNoEntries(ArrayType $arrayType): bool
+    private function hasNoShapeOrItemType(ArrayType $arrayType): bool
     {
         return $arrayType->shape === [] && $arrayType->itemType === null;
     }
@@ -427,9 +432,8 @@ final readonly class AttributeMutationApplier
                         ])->unwrapType($this->scope->config);
                     }
 
-                } else if ($isCertain && ($readPath[0] ?? null) === $key) {
-                    // The shape entry shadows the shared itemType only for this exact-read
-                    // resolution, consumed immediately via getTypeAtKey.
+                } else if ($isCertain && is_int($key) && ($readPath[0] ?? null) === $key) {
+                    // A new int key may break the order of a list, so it is a known key only for a read of that key.
                     $potentialTypes[$i]->shape[$key] = $attributeType;
 
                 } else {

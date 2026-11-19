@@ -82,6 +82,7 @@ final class AttributeMutationApplierTest extends TestCase
         $array = new ArrayType(
             shape: ['a' => (clone $element)->setRequired(true)],
             itemType: $element,
+            keyType: new StringType,
         );
 
         $result = $applier->apply($array, ['b'], ['tagged' => new StringType], isCertain: false);

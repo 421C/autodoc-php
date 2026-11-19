@@ -203,10 +203,16 @@ class PhpDoc
                 }
             }
 
+            if ($node->sealed && $shape === []) {
+                return ArrayType::withoutEntries();
+            }
+
             $isListKind = in_array($node->kind, [ArrayShapeNode::KIND_LIST, ArrayShapeNode::KIND_NON_EMPTY_LIST], true);
             $hasOptionalEntries = array_any($shape, fn (Type $entry) => ! $entry->required);
 
             return new ArrayType(
+                itemType: $node->sealed ? null : $this->resolveTypeOfEntriesOutsideShape($node, $binding),
+                keyType: $node->sealed ? null : $this->resolveKeyTypeOfEntriesOutsideShape($node, $isListKind, $binding),
                 shape: $shape,
                 intKeyOrder: ! $isListKind && $hasOptionalEntries ? IntKeyOrder::MaybeSequential : IntKeyOrder::Sequential,
             );
@@ -336,6 +342,26 @@ class PhpDoc
         }
 
         return null;
+    }
+
+
+    private function resolveTypeOfEntriesOutsideShape(ArrayShapeNode $unsealedShape, ?PhpDocBinding $binding): Type
+    {
+        $valueTypeNode = $unsealedShape->unsealedType?->valueType;
+
+        return ($valueTypeNode ? $this->resolveTypeFromNode($valueTypeNode, $binding) : null) ?? new UnknownType;
+    }
+
+
+    private function resolveKeyTypeOfEntriesOutsideShape(ArrayShapeNode $unsealedShape, bool $isListKind, ?PhpDocBinding $binding): ?Type
+    {
+        if ($isListKind) {
+            return new IntegerType;
+        }
+
+        $keyTypeNode = $unsealedShape->unsealedType?->keyType;
+
+        return ($keyTypeNode ? $this->resolveTypeFromNode($keyTypeNode, $binding) : null) ?? Type::fromKeyword('array-key');
     }
 
 
