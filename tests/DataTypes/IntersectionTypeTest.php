@@ -284,6 +284,86 @@ final class IntersectionTypeTest extends TestCase
     }
 
     #[Test]
+    public function intersectedNullableUnionsKeepTheirDocumentationAndRequiredness(): void
+    {
+        $nullableString = function (): UnionType {
+            $union = new UnionType([new StringType, new NullType]);
+            $union->description = 'Documented.';
+            $union->examples = ['abc'];
+            $union->deprecated = true;
+            $union->required = true;
+
+            return $union;
+        };
+
+        $type = (new IntersectionType([$nullableString(), $nullableString()]))->unwrapType(self::loadConfig());
+
+        self::assertTrue($type->required);
+        $this->assertSchemaArraysMatch([
+            'type' => ['string', 'null'],
+            'description' => 'Documented.',
+            'examples' => ['abc'],
+            'deprecated' => true,
+        ], $type->toSchema(self::loadConfig()), 'type', 'schema');
+    }
+
+    #[Test]
+    public function intersectedUnionsKeepTheDocumentationOnTheUnionInsteadOfItsMembers(): void
+    {
+        $documentedUnion = function (): UnionType {
+            $union = new UnionType([new IntegerType, new StringType, new NullType]);
+            $union->description = 'Documented.';
+
+            return $union;
+        };
+
+        $schema = (new IntersectionType([$documentedUnion(), $documentedUnion()]))->toSchema(self::loadConfig());
+
+        $this->assertSchemaArraysMatch([
+            'type' => ['integer', 'string', 'null'],
+            'description' => 'Documented.',
+        ], $schema, 'type', 'schema');
+    }
+
+    #[Test]
+    public function documentedNullableUnionIntersectedWithItsMemberKeepsTheDescription(): void
+    {
+        $nullableBool = function (): UnionType {
+            $union = new UnionType([new BoolType, new NullType]);
+            $union->description = 'Documented.';
+
+            return $union;
+        };
+
+        foreach ([[$nullableBool(), new BoolType], [new BoolType, $nullableBool()]] as [$a, $b]) {
+            $schema = (new IntersectionType([$a, $b]))->toSchema(self::loadConfig());
+
+            $this->assertSchemaArraysMatch([
+                'type' => 'boolean',
+                'description' => 'Documented.',
+            ], $schema, 'type', 'schema');
+        }
+    }
+
+    #[Test]
+    public function intersectedUnionsWithDifferentDescriptionsKeepBothInOrder(): void
+    {
+        $nullableBool = function (string $description): UnionType {
+            $union = new UnionType([new BoolType, new NullType]);
+            $union->description = $description;
+
+            return $union;
+        };
+
+        $schema = (new IntersectionType([$nullableBool('First.'), $nullableBool('Second.')]))->toSchema(self::loadConfig());
+
+        $this->assertSchemaArraysMatch([
+            'type' => ['boolean', 'null'],
+            'description' => "First.\n\nSecond.",
+        ], $schema, 'type', 'schema');
+    }
+
+    #[Test]
     public function numericIntersectionKeepsTheStricterBounds(): void
     {
         $intersect = fn (Type ...$types): Type => (new IntersectionType($types))->unwrapType(self::loadConfig());

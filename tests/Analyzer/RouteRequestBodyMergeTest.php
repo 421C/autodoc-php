@@ -9,6 +9,8 @@ use AutoDoc\DataTypes\ObjectType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\Route;
+use AutoDoc\Tests\TestProject\Entities\ClassRecordedAsRequestBody;
+use AutoDoc\Tests\TestProject\Extensions\RequestBodyClassExtension;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
@@ -79,6 +81,32 @@ final class RouteRequestBodyMergeTest extends TestCase
         $this->assertArrayNotHasKey('right', $leftPayload->properties);
         $this->assertArrayNotHasKey('left', $rightPayload->properties);
     }
+
+    #[Test]
+    public function aClassActingAsTheRequestBodyIsRecordedOncePerRoute(): void
+    {
+        $closure = function (ClassRecordedAsRequestBody $request): void {
+            $request->isUrgent();
+        };
+
+        $config = self::loadConfig();
+        $config->data['extensions'] = [RequestBodyClassExtension::class];
+
+        $recordedBodyCounts = [];
+
+        foreach (['/api/test/first', '/api/test/second'] as $uri) {
+            $route = new RouteWithRecordedBodyCount($uri, 'post');
+
+            new PhpCallable(
+                scope: new Scope($config, route: $route),
+                reflection: new ReflectionFunction($closure),
+            )->toOperation();
+
+            $recordedBodyCounts[$uri] = $route->recordedBodyCount;
+        }
+
+        $this->assertSame(['/api/test/first' => 1, '/api/test/second' => 1], $recordedBodyCounts);
+    }
 }
 
 class RouteWithMergeCount extends Route
@@ -90,5 +118,17 @@ class RouteWithMergeCount extends Route
         $this->mergeCount++;
 
         return parent::getRequestBodyType($scope);
+    }
+}
+
+class RouteWithRecordedBodyCount extends Route
+{
+    public int $recordedBodyCount = 0;
+
+    public function addRequestBodyType(Type $type): void
+    {
+        $this->recordedBodyCount++;
+
+        parent::addRequestBodyType($type);
     }
 }

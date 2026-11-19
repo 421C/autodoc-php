@@ -577,9 +577,8 @@ abstract class Type
 
 
     /**
-     * Expand an intersection over a union member: `A & (B|C)` = `(A&B) | (A&C)`.
-     * Returns null when no member is a union (nothing to distribute), a
-     * `NeverType` when every branch is empty, otherwise the distributed union.
+     * `A & (B|C)` becomes `(A&B) | (A&C)`, documented as the unions it replaces.
+     * Null when no member is a union.
      *
      * @param Type[] $types
      */
@@ -587,29 +586,48 @@ abstract class Type
     {
         $members = array_map(fn (Type $type) => $type->unwrapType($config), $types);
 
-        foreach ($members as $index => $member) {
+        $distributedUnion = new UnionType;
+        $options = null;
+        $otherMembers = [];
+
+        foreach ($members as $member) {
             if (! $member instanceof UnionType) {
+                $otherMembers[] = $member;
+
                 continue;
             }
 
-            $otherMembers = $members;
-            unset($otherMembers[$index]);
-            $otherMembers = array_values($otherMembers);
+            $distributedUnion->inheritDocumentationFrom($member);
 
-            $branches = [];
+            if ($options === null) {
+                $options = $member->types;
 
-            foreach ($member->types as $option) {
-                $branch = new IntersectionType([...$otherMembers, $option])->unwrapType($config);
-
-                if (! $branch instanceof NeverType) {
-                    $branches[] = $branch;
-                }
+            } else {
+                $undocumentedUnion = new UnionType($member->types);
+                $otherMembers[] = $undocumentedUnion;
             }
-
-            return $branches === [] ? new NeverType(conflictingTypes: $types, required: $this->required) : new UnionType($branches);
         }
 
-        return null;
+        if ($options === null) {
+            return null;
+        }
+
+        foreach ($options as $option) {
+            $branch = new IntersectionType([...$otherMembers, $option])->unwrapType($config);
+
+            if (! $branch instanceof NeverType) {
+                $distributedUnion->types[] = $branch;
+            }
+        }
+
+        if ($distributedUnion->types === []) {
+            return new NeverType(conflictingTypes: $types, required: $this->required);
+        }
+
+        $distributedUnion->inheritDocumentationFrom($this);
+        $distributedUnion->required = $this->required || array_any($members, fn (Type $member) => $member->required);
+
+        return $distributedUnion;
     }
 
 

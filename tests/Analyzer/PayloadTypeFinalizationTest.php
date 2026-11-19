@@ -464,6 +464,58 @@ final class PayloadTypeFinalizationTest extends TestCase
     }
 
     #[Test]
+    public function requestBodyRecordedTwiceFinalizesLikeTheBodyRecordedOnce(): void
+    {
+        $requestBody = function (): ObjectType {
+            $nickname = new UnionType([new StringType, new NullType]);
+            $nickname->description = 'Shown instead of the name.';
+            $nickname->examples = ['Ed'];
+            $nickname->deprecated = true;
+            $nickname->required = true;
+
+            return new ObjectType(properties: [
+                'nickname' => $nickname,
+                'name' => (new StringType)->setRequired(true),
+            ]);
+        };
+
+        $finalizedType = $this->finalizer()->finalizeRequestBodyTypes(types: [
+            $requestBody(),
+            $requestBody(),
+        ]);
+
+        $this->assertNotNull($finalizedType);
+        $this->assertSchemaArraysMatch(
+            expected: [
+                'type' => 'object',
+                'properties' => [
+                    'nickname' => [
+                        'type' => [
+                            'string',
+                            'null',
+                        ],
+                        'description' => 'Shown instead of the name.',
+                        'examples' => [
+                            'Ed',
+                        ],
+                        'deprecated' => true,
+                    ],
+                    'name' => [
+                        'type' => 'string',
+                    ],
+                ],
+                'required' => [
+                    'nickname',
+                    'name',
+                ],
+            ],
+            actual: $finalizedType->toSchema(self::loadConfig()),
+            uri: '/test/request-recorded-twice',
+            method: 'request',
+        );
+    }
+
+    #[Test]
     public function responseMergeCannotMutateSharedTypeBeforeResolverResultIsCloned(): void
     {
         $sharedProperty = new StringType('shared');

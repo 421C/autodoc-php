@@ -18,9 +18,6 @@ use WeakMap;
  */
 final class ExtensionDispatcher
 {
-    /** @var WeakMap<object, true> */
-    private WeakMap $classesHandlingRequestBody;
-
     /** @var WeakMap<Node, true> */
     private WeakMap $nodesWithHandledSideEffects;
 
@@ -29,7 +26,6 @@ final class ExtensionDispatcher
     public function __construct(
         private readonly Scope $scope,
     ) {
-        $this->classesHandlingRequestBody = new WeakMap;
         $this->nodesWithHandledSideEffects = new WeakMap;
     }
 
@@ -146,7 +142,17 @@ final class ExtensionDispatcher
      */
     public function getReturnTypeFromClassExtensions(PhpClass $phpClass): ?Type
     {
-        return $this->runClassExtensions($phpClass);
+        $this->handleExpectedRequestTypeFromClassExtensions($phpClass);
+
+        foreach ($this->getExtensionsOfType(ClassExtension::class) as $extensionClass) {
+            $returnType = (new $extensionClass)->getReturnType($phpClass);
+
+            if ($returnType !== null) {
+                return $returnType;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -154,51 +160,21 @@ final class ExtensionDispatcher
      */
     public function handleExpectedRequestTypeFromClassExtensions(PhpClass $phpClass): void
     {
-        $this->runClassExtensions($phpClass, returnType: false);
-    }
+        $route = $this->scope->route;
 
-    /**
-     * A class extension may act as the request body (form-request pattern) and/or
-     * resolve a return type. Request capture is recorded onto the route once per
-     * class and suppressed during return-type peeks.
-     *
-     * @param PhpClass<object> $phpClass
-     * @return ($returnType is true ? Type|null : null)
-     */
-    private function runClassExtensions(PhpClass $phpClass, bool $returnType = true): ?Type
-    {
-        $requestTypeHandled = $this->suppressSideEffects || isset($this->classesHandlingRequestBody[$phpClass]);
-        $returnTypeHandled = ! $returnType;
-        $result = null;
-
-        foreach ($this->getExtensionsOfType(ClassExtension::class) as $extensionClass) {
-            $extension = new $extensionClass;
-
-            if (! $requestTypeHandled) {
-                $requestResult = $extension->getRequestType($phpClass);
-
-                if ($requestResult instanceof Type) {
-                    $requestTypeHandled = true;
-
-                    $this->classesHandlingRequestBody[$phpClass] = true;
-                    $this->scope->route?->addRequestBodyType($requestResult);
-                }
-            }
-
-            if (! $returnTypeHandled) {
-                $result = $extension->getReturnType($phpClass);
-
-                if ($result instanceof Type) {
-                    $returnTypeHandled = true;
-                }
-            }
-
-            if ($requestTypeHandled && $returnTypeHandled) {
-                break;
-            }
+        if ($this->suppressSideEffects || $route === null || $route->hasRequestBodyTypeFromClass($phpClass->className)) {
+            return;
         }
 
-        return $result;
+        foreach ($this->getExtensionsOfType(ClassExtension::class) as $extensionClass) {
+            $requestType = (new $extensionClass)->getRequestType($phpClass);
+
+            if ($requestType !== null) {
+                $route->addRequestBodyTypeFromClass($phpClass->className, $requestType);
+
+                return;
+            }
+        }
     }
 
     public function handleOperationExtensions(Operation $operation, Route $route): Operation
