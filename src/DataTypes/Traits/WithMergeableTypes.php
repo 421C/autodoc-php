@@ -575,7 +575,30 @@ trait WithMergeableTypes
             $object1->typeToDisplay = new UnionType(array_values(array_filter([$object1->typeToDisplay, $object2->typeToDisplay])))->unwrapType($config);
         }
 
+        $object1->templateTypes = $this->mergeTemplateTypes($object1, $object2, $mergeAsIntersection);
+
         return $object1;
+    }
+
+
+    /**
+     * @return array<string, Type>
+     */
+    private function mergeTemplateTypes(ObjectType $object1, ObjectType $object2, bool $mergeAsIntersection): array
+    {
+        $templateTypes = [];
+
+        foreach ($object1->templateTypes as $name => $templateType1) {
+            $templateType2 = $object2->templateTypes[$name] ?? null;
+
+            if ($templateType1 !== null && $templateType2 !== null) {
+                $templateTypes[$name] = $mergeAsIntersection
+                    ? new IntersectionType([$templateType1, $templateType2])
+                    : new UnionType([$templateType1, $templateType2]);
+            }
+        }
+
+        return $templateTypes;
     }
 
 

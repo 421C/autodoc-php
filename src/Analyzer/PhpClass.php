@@ -78,6 +78,7 @@ class PhpClass
     {
         $objectType = new ObjectType(className: $this->className);
         $objectType->constructorArgs = $this->scope->constructorArgs;
+        $objectType->templateTypes = $this->scope->constructorTemplateTypes;
 
         if ($useExtensions) {
             $returnType = $this->scope->extensions->getReturnTypeFromClassExtensions($this);

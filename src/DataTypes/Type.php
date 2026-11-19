@@ -788,6 +788,10 @@ abstract class Type
                 array: $type->hiddenProperties,
             );
             $type->typeToDisplay = $type->typeToDisplay?->deepClone();
+            $type->templateTypes = array_map(
+                callback: fn (?Type $templateType): ?Type => $templateType?->deepClone(),
+                array: $type->templateTypes,
+            );
 
         } else if ($type instanceof ArrayType) {
             $type->keyType = $type->keyType?->deepClone();

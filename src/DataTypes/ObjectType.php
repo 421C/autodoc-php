@@ -34,6 +34,11 @@ class ObjectType extends Type
          * @var array<string, Type>
          */
         public array $hiddenProperties = [],
+
+        /**
+         * @var array<string, ?Type>
+         */
+        public array $templateTypes = [],
     ) {}
 
 
