@@ -34,6 +34,10 @@ final class NullsafeAccessTest extends TestCase
             'undeclaredPropertyOfAClass' => fn (?CachedSpecialist $specialist) => $specialist?->doesNotExist,
             'mixedProperty' => fn (?RecordWithPayload $record) => $record?->payload,
             'mixedMethod' => fn (?LabelledRecord $record) => $record?->label(),
+            /** @phpstan-ignore property.nonObject */
+            'propertyOfAnUnknownReceiver' => fn (bool $flag) => ($flag ? NullsafeAccessTest::untypedValue() : null)?->displayName,
+            /** @phpstan-ignore method.nonObject */
+            'methodOfAnUnknownReceiver' => fn (bool $flag) => ($flag ? NullsafeAccessTest::untypedValue() : null)?->label(),
         ];
 
         $this->assertSame(
@@ -88,5 +92,11 @@ final class NullsafeAccessTest extends TestCase
         )->getReturnType();
 
         return new TypeConverter()->convertToTypeScriptType($type, new TypeScriptRenderContext($scope, $config->getTypeScriptConfig()));
+    }
+
+
+    private static function untypedValue(): mixed
+    {
+        return json_decode('null');
     }
 }

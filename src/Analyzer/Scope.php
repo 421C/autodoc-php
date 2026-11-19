@@ -1160,6 +1160,12 @@ class Scope
                 continue;
             }
 
+            if ($receiver instanceof UnknownType) {
+                $unknownType ??= new UnknownType;
+
+                continue;
+            }
+
             $resolvedType = $resolveOnReceiver($receiver);
 
             if ($resolvedType instanceof UnknownType) {
