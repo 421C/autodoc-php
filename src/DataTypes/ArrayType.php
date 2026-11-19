@@ -835,12 +835,15 @@ class ArrayType extends Type
         }
 
         $neitherDeclaresAKeyType = $this->keyType === null && $other->keyType === null;
+        $eitherIsAnOpenShape = $this->shape !== [] || $other->shape !== [];
         $itemTypes = [$this->itemType ?? new UnknownType, $other->itemType ?? new UnknownType];
         $keyTypes = [$this->keyType ?? new IntegerType, $other->keyType ?? new IntegerType];
 
-        $itemType = $asIntersection
-            ? new IntersectionType($itemTypes)->unwrapType($config)
-            : self::unionUnlessAnyIsUnknown($itemTypes, $config);
+        $itemType = match (true) {
+            $asIntersection => new IntersectionType($itemTypes)->unwrapType($config),
+            $eitherIsAnOpenShape => self::unionUnlessAnyIsUnknown($itemTypes, $config),
+            default => new UnionType($itemTypes)->unwrapType($config),
+        };
         $keyType = $asIntersection
             ? new IntersectionType($keyTypes)->unwrapType($config)
             : new UnionType($keyTypes)->unwrapType($config);

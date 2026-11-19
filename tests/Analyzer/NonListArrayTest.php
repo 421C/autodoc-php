@@ -477,6 +477,48 @@ final class NonListArrayTest extends TestCase
 
 
     #[Test]
+    public function mergingWithUnknownItemsKeepsTheKnownItemType(): void
+    {
+        $user = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":"string"}},"required":["id","email"]}';
+        $mixed = '{"type":"string","description":"mixed"}';
+
+        $closures = [
+            'merge' => fn () => array_merge(NonListArrayTest::users(), NonListArrayTest::mixedItems()),
+            'spread' => fn () => [...NonListArrayTest::users(), ...NonListArrayTest::mixedItems()],
+            'unknownFirst' => fn () => array_merge(NonListArrayTest::mixedItems(), NonListArrayTest::users()),
+            'untyped' => fn () => array_merge(NonListArrayTest::users(), NonListArrayTest::untyped()),
+            'map' => fn () => [...NonListArrayTest::usersByEmail(), ...NonListArrayTest::mixedByName()],
+        ];
+
+        $this->assertSame(
+            [
+                'merge' => '{"type":"array","items":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+                'spread' => '{"type":"array","items":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+                'unknownFirst' => '{"type":"array","items":{"anyOf":[' . $mixed . ',' . $user . ']}}',
+                'untyped' => '{"type":"array","items":{"anyOf":[' . $user . ',{"type":"string"}]}}',
+                'map' => '{"type":"object","additionalProperties":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeMergedWithUnknownItemsStillAllowsAnyOtherEntry(): void
+    {
+        $closures = [
+            'spread' => fn (string $message) => ['error' => $message, ...NonListArrayTest::users(), ...NonListArrayTest::mixedItems()],
+            'merge' => fn (string $message) => array_merge(['error' => $message], NonListArrayTest::users(), NonListArrayTest::mixedItems()),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}'),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function arrayMergeTreatsAListWithoutAKeyTypeAsIntKeyed(): void
     {
         $closure = fn () => array_merge(NonListArrayTest::intItems(), NonListArrayTest::tuple());
@@ -1106,6 +1148,33 @@ final class NonListArrayTest extends TestCase
 
     /** @phpstan-ignore missingType.iterableValue */
     private static function untyped(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<mixed>
+     */
+    private static function mixedItems(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function mixedByName(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<string, array{id: int, email: string}>
+     */
+    private static function usersByEmail(): array
     {
         return json_decode('[]', true);
     }

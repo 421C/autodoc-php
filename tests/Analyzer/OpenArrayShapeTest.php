@@ -2693,7 +2693,7 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             [
-                'tupleAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
+                'tupleAfterAnUntypedArray' => '{"type":"array","items":{"type":["string","integer"]}}',
                 'tupleBeforeAnUntypedArray' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"minItems":2}',
                 'keylessItemAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
             ],
