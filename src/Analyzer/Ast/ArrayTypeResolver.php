@@ -37,6 +37,7 @@ class ArrayTypeResolver
             $entriesWithoutKnownKey = [];
 
             $hasAtLeastOneUnknownKey = false;
+            $mayHaveIntKeysOutOfOrder = false;
 
             $resolvePartialArrayShapes = $config->data['arrays']['resolve_partial_shapes'] ?? false;
 
@@ -109,6 +110,8 @@ class ArrayTypeResolver
 
                         } else {
                             $entriesWithoutKnownKey[] = [$keyType, $itemType];
+                            $mayHaveIntKeysOutOfOrder = $mayHaveIntKeysOutOfOrder
+                                || ($arrayItemNode->key !== null && ArrayType::mayBeStoredAsIntKey($keyType, $config));
 
                             if ($keyVariants) {
                                 $keysWithVariants[] = [$keyVariants, $itemType];
@@ -122,8 +125,8 @@ class ArrayTypeResolver
                 return ArrayType::withoutEntries();
             }
 
-            if ($hasAtLeastOneUnknownKey && ! $resolvePartialArrayShapes) {
-                return $this->foldWithEntriesWithoutKnownKey($arrayType, $entriesWithoutKnownKey);
+            if ($hasAtLeastOneUnknownKey) {
+                return $this->foldWithEntriesWithoutKnownKey($arrayType, $entriesWithoutKnownKey, $mayHaveIntKeysOutOfOrder);
             }
 
             if ($keysWithVariants) {
@@ -207,7 +210,7 @@ class ArrayTypeResolver
     /**
      * @param list<array{Type, Type}> $entriesWithoutKnownKey
      */
-    private function foldWithEntriesWithoutKnownKey(ArrayType $arrayType, array $entriesWithoutKnownKey): ArrayType
+    private function foldWithEntriesWithoutKnownKey(ArrayType $arrayType, array $entriesWithoutKnownKey, bool $mayHaveIntKeysOutOfOrder): ArrayType
     {
         $config = $this->scope->config;
         $arrayType->convertShapeToTypePair($config);
@@ -222,6 +225,10 @@ class ArrayTypeResolver
 
         $arrayType->keyType = new UnionType($keyTypes)->unwrapType($config);
         $arrayType->itemType = new UnionType($itemTypes)->unwrapType($config);
+
+        if ($mayHaveIntKeysOutOfOrder) {
+            $arrayType->placeIntKeysOutOfOrder();
+        }
 
         return $arrayType;
     }

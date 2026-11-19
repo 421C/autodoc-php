@@ -360,7 +360,7 @@ trait WithMergeableTypes
                         ->setRequired($type1->required || $type2->required);
 
                 } else {
-                    $array1->shape[$key] = new UnionType([$type1, $type2])
+                    $array1->shape[$key] = new UnionType([$this->asOptionalMember($type1), $this->asOptionalMember($type2)])
                         ->setRequired($type1->required && $type2->required);
                 }
             }
@@ -558,7 +558,8 @@ trait WithMergeableTypes
                 $object1->properties[$key] = new IntersectionType([$type1, $type2])->setRequired($type1->required || $type2->required);
 
             } else {
-                $object1->properties[$key] = new UnionType([$type1, $type2])->setRequired($type1->required && $type2->required);
+                $object1->properties[$key] = new UnionType([$this->asOptionalMember($type1), $this->asOptionalMember($type2)])
+                    ->setRequired($type1->required && $type2->required);
             }
         }
 

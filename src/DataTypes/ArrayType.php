@@ -313,6 +313,15 @@ class ArrayType extends Type
     }
 
 
+    public static function mayBeStoredAsIntKey(Type $keyType, Config $config): bool
+    {
+        $storedKeyType = self::toStoredKeyType($keyType, $config);
+        $storedKeyTypes = $storedKeyType instanceof UnionType ? $storedKeyType->types : [$storedKeyType];
+
+        return array_any($storedKeyTypes, fn (Type $type) => $type instanceof IntegerType);
+    }
+
+
     private static function includesStringKeys(?Type $keyType, Config $config): bool
     {
         $keyType = $keyType?->unwrapType($config);
@@ -576,6 +585,14 @@ class ArrayType extends Type
         if ($this->hasEntriesOutsideShape()) {
             $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
         }
+
+        return $this;
+    }
+
+
+    public function placeIntKeysOutOfOrder(): self
+    {
+        $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
 
         return $this;
     }

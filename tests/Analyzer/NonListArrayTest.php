@@ -121,6 +121,54 @@ final class NonListArrayTest extends TestCase
 
 
     #[Test]
+    public function aLiteralWithAnUnknownIntKeyMayNotBeAList(): void
+    {
+        $closures = [
+            'intKey' => fn (int $id, string $name) => [$id => $name],
+            'afterAListEntry' => fn (int $id, string $first, string $second) => [0 => $first, $id => $second],
+            'twoIntKeys' => fn (int $id, int $otherId, string $first, string $second) => [$id => $first, $otherId => $second],
+            'beforeAKeylessItem' => fn (int $id, string $first, string $second) => [$id => $first, $second],
+            'nested' => fn (int $id, string $name) => ['rows' => [$id => $name]],
+        ];
+
+        $this->assertSame(
+            [
+                'intKey' => self::STRING_LIST_OR_MAP,
+                'afterAListEntry' => self::STRING_LIST_OR_MAP,
+                'twoIntKeys' => self::STRING_LIST_OR_MAP,
+                'beforeAKeylessItem' => self::STRING_LIST_OR_MAP,
+                'nested' => '{"type":"object","properties":{"rows":' . self::STRING_LIST_OR_MAP . '},"required":["rows"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aLiteralWithUnknownKeysKeepsItsEncodingWhenTheKeysDoNotDecideIt(): void
+    {
+        $closures = [
+            'keylessItems' => fn (string $first, string $second) => [$first, $second],
+            'keylessItemAfterAListEntry' => fn (string $first, string $second) => [0 => $first, $second],
+            'afterANonListEntry' => fn (int $id, string $first, string $second) => [5 => $first, $id => $second],
+            'stringKey' => fn (string $key, string $name) => [$key => $name],
+            'intOrStringKey' => fn (int|string $key, string $name) => [$key => $name],
+        ];
+
+        $this->assertSame(
+            [
+                'keylessItems' => self::STRING_LIST,
+                'keylessItemAfterAListEntry' => self::STRING_LIST,
+                'afterANonListEntry' => '{"type":"object","additionalProperties":{"type":"string"}}',
+                'stringKey' => '{"type":"object","additionalProperties":{"type":"string"}}',
+                'intOrStringKey' => '{"type":"object","additionalProperties":{"type":"string"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
     public function writingUnderAKeyOfTheListItselfKeepsAList(): void
     {
         $closures = [
