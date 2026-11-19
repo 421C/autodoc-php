@@ -369,7 +369,7 @@ class GenericTypesController
      *     listValues: value-of<list<string>>,
      *     mapKeys: key-of<array<string, int>>,
      *     mapValues: value-of<array<string, int>>,
-     *     untypedKeys: key-of<array<string>>,
+     *     itemKeys: key-of<array<string>>,
      *     enumValues: value-of<StateEnum>,
      * }
      */
@@ -408,11 +408,8 @@ class GenericTypesController
                                 'mapValues' => [
                                     'type' => 'integer',
                                 ],
-                                'untypedKeys' => [
-                                    'type' => [
-                                        'integer',
-                                        'string',
-                                    ],
+                                'itemKeys' => [
+                                    'type' => 'integer',
                                 ],
                                 'enumValues' => [
                                     'type' => 'integer',
@@ -430,7 +427,7 @@ class GenericTypesController
                                 'listValues',
                                 'mapKeys',
                                 'mapValues',
-                                'untypedKeys',
+                                'itemKeys',
                                 'enumValues',
                             ],
                         ],
@@ -449,7 +446,7 @@ class GenericTypesController
             'listValues' => 'first',
             'mapKeys' => 'id',
             'mapValues' => 1,
-            'untypedKeys' => 'id',
+            'itemKeys' => 0,
             'enumValues' => StateEnum::One->value,
         ];
     }
