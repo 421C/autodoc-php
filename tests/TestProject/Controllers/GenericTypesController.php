@@ -369,7 +369,7 @@ class GenericTypesController
      *     listValues: value-of<list<string>>,
      *     mapKeys: key-of<array<string, int>>,
      *     mapValues: value-of<array<string, int>>,
-     *     untypedKeys: key-of<array<string>>,
+     *     itemKeys: key-of<array<string>>,
      *     enumValues: value-of<StateEnum>,
      * }
      */
@@ -408,11 +408,8 @@ class GenericTypesController
                                 'mapValues' => [
                                     'type' => 'integer',
                                 ],
-                                'untypedKeys' => [
-                                    'type' => [
-                                        'integer',
-                                        'string',
-                                    ],
+                                'itemKeys' => [
+                                    'type' => 'integer',
                                 ],
                                 'enumValues' => [
                                     'type' => 'integer',
@@ -430,7 +427,7 @@ class GenericTypesController
                                 'listValues',
                                 'mapKeys',
                                 'mapValues',
-                                'untypedKeys',
+                                'itemKeys',
                                 'enumValues',
                             ],
                         ],
@@ -449,7 +446,7 @@ class GenericTypesController
             'listValues' => 'first',
             'mapKeys' => 'id',
             'mapValues' => 1,
-            'untypedKeys' => 'id',
+            'itemKeys' => 0,
             'enumValues' => StateEnum::One->value,
         ];
     }
@@ -1059,6 +1056,132 @@ class GenericTypesController
 
 
     /**
+     * Template bindings from callable arguments
+     *
+     * The callback is invoked with the declared parameter types, and a template named by two callbacks takes both return types.
+     *
+     * @phpstan-ignore missingType.iterableValue
+     */
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'summary' => 'Template bindings from callable arguments',
+        'description' => 'The callback is invoked with the declared parameter types, and a template named by two callbacks takes both return types.',
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'closure' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'name' => [
+                                            'type' => 'string',
+                                        ],
+                                    ],
+                                    'required' => ['name'],
+                                ],
+                                'arrowFunction' => [
+                                    'type' => 'integer',
+                                    'const' => 5,
+                                ],
+                                'firstClassCallable' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'length' => [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => ['length'],
+                                ],
+                                'declaredParameterType' => [
+                                    'type' => 'integer',
+                                ],
+                                'closureType' => [
+                                    'type' => 'boolean',
+                                ],
+                                'nullableCallable' => [
+                                    'type' => 'integer',
+                                    'const' => 7,
+                                ],
+                                'twoCallbacks' => [
+                                    'anyOf' => [
+                                        [
+                                            'type' => 'integer',
+                                            'const' => 1,
+                                        ],
+                                        [
+                                            'type' => 'string',
+                                            'const' => 'x',
+                                        ],
+                                    ],
+                                ],
+                                'throwingCallback' => [
+                                    'type' => 'integer',
+                                ],
+                                'forwarded' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'forwarded' => [
+                                            'type' => 'integer',
+                                            'const' => 1,
+                                        ],
+                                    ],
+                                    'required' => ['forwarded'],
+                                ],
+                                'forwardedThroughClosure' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'wrapped' => [
+                                            'type' => 'integer',
+                                            'const' => 2,
+                                        ],
+                                    ],
+                                    'required' => ['wrapped'],
+                                ],
+                            ],
+                            'required' => [
+                                'closure',
+                                'arrowFunction',
+                                'firstClassCallable',
+                                'declaredParameterType',
+                                'closureType',
+                                'nullableCallable',
+                                'twoCallbacks',
+                                'throwingCallback',
+                                'forwarded',
+                                'forwardedThroughClosure',
+                            ],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function templateBindingFromCallables(): array
+    {
+        return [
+            'closure' => $this->templateFromCallback(function (string $value) {
+                return ['name' => $value];
+            }),
+            'arrowFunction' => $this->templateFromCallback(fn () => 5),
+            'firstClassCallable' => $this->templateFromCallback($this->measureLength(...)),
+            'declaredParameterType' => $this->templateFromIntCallback(fn ($number) => $number),
+            'closureType' => $this->templateFromClosure(fn (int $number) => $number > 0),
+            'nullableCallable' => $this->templateFromNullableCallback(fn () => 7),
+            'twoCallbacks' => $this->templateFromEitherCallback(
+                success: fn () => 1,
+                error: fn () => 'x',
+            ),
+            'throwingCallback' => $this->templateFromBoundedCallback(fn () => throw new LogicException),
+            'forwarded' => $this->forwardTemplateCallback(fn () => ['forwarded' => 1]),
+            'forwardedThroughClosure' => $this->forwardTemplateCallbackThroughClosure(fn () => ['wrapped' => 2]),
+        ];
+    }
+
+
+    /**
      * @template TClass of GenericClass
      * @template TParam
      *
@@ -1175,5 +1298,115 @@ class GenericTypesController
     private function templateValueOrClosure(mixed $value): mixed
     {
         return $value instanceof Closure ? $value() : $value;
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param callable(string): TResult $callback
+     *
+     * @return TResult
+     */
+    private function templateFromCallback(callable $callback): mixed
+    {
+        return $callback('x');
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param callable(int): TResult $callback
+     *
+     * @return TResult
+     */
+    private function templateFromIntCallback(callable $callback): mixed
+    {
+        return $callback(1);
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param Closure(int): TResult $callback
+     *
+     * @return TResult
+     */
+    private function templateFromClosure(Closure $callback): mixed
+    {
+        return $callback(1);
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param null|callable(): TResult $callback
+     *
+     * @return TResult
+     */
+    private function templateFromNullableCallback(?callable $callback): mixed
+    {
+        return $callback ? $callback() : throw new LogicException;
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param callable(): TResult $success
+     * @param callable(): TResult $error
+     *
+     * @return TResult
+     */
+    private function templateFromEitherCallback(callable $success, callable $error): mixed
+    {
+        return rand(0, 1) ? $success() : $error();
+    }
+
+
+    /**
+     * @template TResult of int
+     *
+     * @param callable(): TResult $callback
+     *
+     * @return TResult
+     */
+    private function templateFromBoundedCallback(callable $callback): mixed
+    {
+        return $callback();
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param callable(): TResult $callback
+     */
+    private function forwardTemplateCallback(callable $callback): mixed
+    {
+        return $this->templateFromNullableCallback($callback);
+    }
+
+
+    /**
+     * @template TResult
+     *
+     * @param callable(): TResult $callback
+     */
+    private function forwardTemplateCallbackThroughClosure(callable $callback): mixed
+    {
+        return $this->templateFromNullableCallback(fn () => $callback());
+    }
+
+
+    /**
+     * @return array{length: int}
+     */
+    private function measureLength(string $value): array
+    {
+        return ['length' => strlen($value)];
     }
 }

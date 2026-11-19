@@ -186,7 +186,9 @@ class Scope
 
                 $getMethodReturnType = function (ObjectType|ArrayType $varType) use ($context) {
                     if (isset($varType->className)) {
-                        $phpClassMethod = $this->getPhpClassInDeeperScope($varType->className)->getMethod(
+                        $receiverTemplateTypes = $varType instanceof ObjectType ? $varType->templateTypes : [];
+
+                        $phpClassMethod = $this->getPhpClassInDeeperScope($varType->className, $receiverTemplateTypes)->getMethod(
                             name: $context->methodName,
                             args: $context->argTypes,
                         );
@@ -1165,12 +1167,19 @@ class Scope
      * @template T of object
      *
      * @param class-string<T> $className
+     * @param array<string, ?Type> $templateTypes
      *
      * @return PhpClass<T>
      */
-    public function getPhpClassInDeeperScope(string $className): PhpClass
+    public function getPhpClassInDeeperScope(string $className, array $templateTypes = []): PhpClass
     {
-        return $this->createChildScope($className)->getPhpClass($className);
+        $scope = $this->createChildScope($className);
+
+        if ($templateTypes !== []) {
+            $scope->constructorTemplateTypes = $templateTypes;
+        }
+
+        return $scope->getPhpClass($className);
     }
 
     /**

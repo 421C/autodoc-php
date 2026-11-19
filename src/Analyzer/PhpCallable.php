@@ -12,6 +12,7 @@ use AutoDoc\Analyzer\Flow\CallerParameterTypeResolver;
 use AutoDoc\Analyzer\Narrowing\ConditionTypeNarrower;
 use AutoDoc\Analyzer\Narrowing\Target;
 use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\ClassStringType;
 use AutoDoc\DataTypes\IntersectionType;
 use AutoDoc\DataTypes\NeverType;
@@ -39,6 +40,8 @@ use PhpParser\NodeVisitor\NameResolver as PhpParserNameResolver;
 use PhpParser\ParserFactory;
 use PHPStan\PhpDocParser\Ast\PhpDoc\PhpDocTagValueNode;
 use PHPStan\PhpDocParser\Ast\Type\ArrayTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\CallableTypeNode;
+use PHPStan\PhpDocParser\Ast\Type\CallableTypeParameterNode;
 use PHPStan\PhpDocParser\Ast\Type\GenericTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\IdentifierTypeNode;
 use PHPStan\PhpDocParser\Ast\Type\NullableTypeNode;
@@ -209,7 +212,8 @@ class PhpCallable
         $traverser = new NodeTraverser;
         $functionScope = $this->scope->createChildScope();
 
-        $functionScope->callerNode = $callerNode;
+        // Without a call site, captured variables are read where the closure captures them.
+        $functionScope->callerNode = $callerNode ?? $this->node;
 
         $nodeVisitor = new FunctionBodyVisitor(
             scope: $functionScope,
@@ -443,6 +447,7 @@ class PhpCallable
             args: $this->args,
             isOperationEntrypoint: $isOperationEntrypoint,
             methodName: $this->methodName,
+            parameterBinding: $isOperationEntrypoint ? null : $this->getCallBinding(),
         );
 
         $this->phpClass->traverse($methodNodeVisitor);
@@ -519,6 +524,7 @@ class PhpCallable
             args: $this->args,
             isOperationEntrypoint: $isOperationEntrypoint,
             parentScope: $this->scope,
+            parameterBinding: $isOperationEntrypoint ? null : $this->getCallBinding(),
         );
 
         $traverser = new NodeTraverser;
@@ -662,10 +668,16 @@ class PhpCallable
 
         return $phpDoc->getTypeFromPhpDocTag(
             tagValueNode: $tagValueNode,
-            binding: new PhpDocBinding(
-                templateTypes: $this->fillTemplateTypesFromParameters(),
-                argumentTypeResolver: $bindArguments ? $this->getArgumentType(...) : null,
-            ),
+            binding: $this->getCallBinding($bindArguments),
+        );
+    }
+
+
+    private function getCallBinding(bool $bindArguments = true): PhpDocBinding
+    {
+        return new PhpDocBinding(
+            templateTypes: $this->fillTemplateTypesFromParameters(),
+            argumentTypeResolver: $bindArguments ? $this->getArgumentType(...) : null,
         );
     }
 
@@ -787,15 +799,23 @@ class PhpCallable
             $phpDocParamTypes = array_merge($phpDocParamTypes, $promotedPropertyPhpDocCollector->propertyTypes);
         }
 
+        $boundTypes = [];
+
         foreach ($phpDocParamTypes as $name => $unresolvedType) {
-            $templateTypes = [
-                ...$templateTypes,
-                ...$this->bindTemplatesFromArgument(
-                    declaredType: $unresolvedType->typeNode,
-                    resolveArgument: fn () => $this->getArgumentType($name),
-                    templateTypes: $templateTypes,
-                ),
-            ];
+            $argumentBindings = $this->bindTemplatesFromArgument(
+                declaredType: $unresolvedType->typeNode,
+                resolveArgument: fn () => $this->getArgumentType($name),
+                templateTypes: $templateTypes,
+                phpDoc: $unresolvedType->phpDoc,
+            );
+
+            foreach ($argumentBindings as $templateName => $boundType) {
+                $boundTypes[$templateName][] = $boundType;
+
+                $templateTypes[$templateName] = count($boundTypes[$templateName]) === 1
+                    ? $boundType
+                    : new UnionType($boundTypes[$templateName])->unwrapType($this->scope->config);
+            }
         }
 
         return $templateTypes;
@@ -808,7 +828,7 @@ class PhpCallable
      *
      * @return array<string, Type>
      */
-    private function bindTemplatesFromArgument(TypeNode $declaredType, Closure $resolveArgument, array $templateTypes): array
+    private function bindTemplatesFromArgument(TypeNode $declaredType, Closure $resolveArgument, array $templateTypes, PhpDoc $phpDoc): array
     {
         $config = $this->scope->config;
 
@@ -831,6 +851,7 @@ class PhpCallable
                 declaredType: $declaredType->type,
                 resolveArgument: fn () => $resolveArgument()?->unwrapType($config)->removeNull($config),
                 templateTypes: $templateTypes,
+                phpDoc: $phpDoc,
             );
         }
 
@@ -848,6 +869,7 @@ class PhpCallable
                 declaredType: $nonNullMembers[0],
                 resolveArgument: fn () => $resolveArgument()?->unwrapType($config)->removeNull($config),
                 templateTypes: $templateTypes,
+                phpDoc: $phpDoc,
             );
         }
 
@@ -857,6 +879,21 @@ class PhpCallable
                 itemType: $declaredType->type,
                 resolveArgument: $resolveArgument,
                 templateTypes: $templateTypes,
+                phpDoc: $phpDoc,
+            );
+        }
+
+        if ($declaredType instanceof CallableTypeNode) {
+            return $this->bindTemplatesFromArgument(
+                declaredType: $declaredType->returnType,
+                resolveArgument: fn () => $this->resolveCallableArgumentReturnType(
+                    declaredType: $declaredType,
+                    resolveArgument: $resolveArgument,
+                    templateTypes: $templateTypes,
+                    phpDoc: $phpDoc,
+                ),
+                templateTypes: $templateTypes,
+                phpDoc: $phpDoc,
             );
         }
 
@@ -872,6 +909,7 @@ class PhpCallable
                 itemType: $declaredType->genericTypes[$hasKeyType ? 1 : 0] ?? null,
                 resolveArgument: $resolveArgument,
                 templateTypes: $templateTypes,
+                phpDoc: $phpDoc,
             );
         }
 
@@ -894,12 +932,40 @@ class PhpCallable
 
 
     /**
+     * The argument's return type when invoked with the declared parameter types.
+     *
+     * @param Closure(): ?Type $resolveArgument
+     * @param array<string, ?Type> $templateTypes
+     */
+    private function resolveCallableArgumentReturnType(CallableTypeNode $declaredType, Closure $resolveArgument, array $templateTypes, PhpDoc $phpDoc): ?Type
+    {
+        $argumentType = $resolveArgument()?->unwrapType($this->scope->config);
+
+        if (! $argumentType instanceof CallableType) {
+            return null;
+        }
+
+        $binding = new PhpDocBinding([
+            ...$phpDoc->bindTemplates($this->scope)->templateTypes,
+            ...$templateTypes,
+        ]);
+
+        $parameterTypes = array_map(
+            fn (CallableTypeParameterNode $parameter) => $phpDoc->createUnresolvedType($parameter->type, binding: $binding),
+            array_values($declaredType->parameters),
+        );
+
+        return $argumentType->getReturnType(ArgumentList::fromTypes($parameterTypes, $this->scope));
+    }
+
+
+    /**
      * @param Closure(): ?Type $resolveArgument
      * @param array<string, ?Type> $templateTypes
      *
      * @return array<string, Type>
      */
-    private function bindTemplatesFromArrayArgument(?TypeNode $keyType, ?TypeNode $itemType, Closure $resolveArgument, array $templateTypes): array
+    private function bindTemplatesFromArrayArgument(?TypeNode $keyType, ?TypeNode $itemType, Closure $resolveArgument, array $templateTypes, PhpDoc $phpDoc): array
     {
         $typePair = null;
 
@@ -918,11 +984,11 @@ class PhpCallable
         };
 
         $keyBindings = $keyType
-            ? $this->bindTemplatesFromArgument($keyType, fn () => $resolveTypePair()?->keyType, $templateTypes)
+            ? $this->bindTemplatesFromArgument($keyType, fn () => $resolveTypePair()?->keyType, $templateTypes, $phpDoc)
             : [];
 
         $itemBindings = $itemType
-            ? $this->bindTemplatesFromArgument($itemType, fn () => $resolveTypePair()?->itemType, $templateTypes)
+            ? $this->bindTemplatesFromArgument($itemType, fn () => $resolveTypePair()?->itemType, $templateTypes, $phpDoc)
             : [];
 
         return [...$keyBindings, ...$itemBindings];

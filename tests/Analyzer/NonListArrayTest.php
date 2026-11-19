@@ -100,6 +100,12 @@ final class NonListArrayTest extends TestCase
 
                 return $groups;
             },
+            'listWithoutAKeyType' => function (string $name) {
+                $ints = NonListArrayTest::intItems();
+                $ints[$name] = 5;
+
+                return $ints;
+            },
         ];
 
         $this->assertSame(
@@ -107,9 +113,180 @@ final class NonListArrayTest extends TestCase
                 'list' => '{"type":"object","additionalProperties":{"type":"integer"}}',
                 'tuple' => '{"type":"object","additionalProperties":{"type":"string","enum":["zero","x"]}}',
                 'nested' => '{"type":"object","additionalProperties":{"type":"array","items":{"type":"integer"}}}',
+                'listWithoutAKeyType' => '{"type":"object","additionalProperties":{"type":"integer"}}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
+    }
+
+
+    #[Test]
+    public function aLiteralWithAnUnknownIntKeyMayNotBeAList(): void
+    {
+        $closures = [
+            'intKey' => fn (int $id, string $name) => [$id => $name],
+            'afterAListEntry' => fn (int $id, string $first, string $second) => [0 => $first, $id => $second],
+            'twoIntKeys' => fn (int $id, int $otherId, string $first, string $second) => [$id => $first, $otherId => $second],
+            'beforeAKeylessItem' => fn (int $id, string $first, string $second) => [$id => $first, $second],
+            'nested' => fn (int $id, string $name) => ['rows' => [$id => $name]],
+        ];
+
+        $this->assertSame(
+            [
+                'intKey' => self::STRING_LIST_OR_MAP,
+                'afterAListEntry' => self::STRING_LIST_OR_MAP,
+                'twoIntKeys' => self::STRING_LIST_OR_MAP,
+                'beforeAKeylessItem' => self::STRING_LIST_OR_MAP,
+                'nested' => '{"type":"object","properties":{"rows":' . self::STRING_LIST_OR_MAP . '},"required":["rows"]}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aLiteralWithUnknownKeysKeepsItsEncodingWhenTheKeysDoNotDecideIt(): void
+    {
+        $closures = [
+            'keylessItems' => fn (string $first, string $second) => [$first, $second],
+            'keylessItemAfterAListEntry' => fn (string $first, string $second) => [0 => $first, $second],
+            'afterANonListEntry' => fn (int $id, string $first, string $second) => [5 => $first, $id => $second],
+            'stringKey' => fn (string $key, string $name) => [$key => $name],
+            'intOrStringKey' => fn (int|string $key, string $name) => [$key => $name],
+        ];
+
+        $this->assertSame(
+            [
+                'keylessItems' => self::STRING_LIST,
+                'keylessItemAfterAListEntry' => self::STRING_LIST,
+                'afterANonListEntry' => '{"type":"object","additionalProperties":{"type":"string"}}',
+                'stringKey' => '{"type":"object","additionalProperties":{"type":"string"}}',
+                'intOrStringKey' => '{"type":"object","additionalProperties":{"type":"string"}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function writingUnderAKeyOfTheListItselfKeepsAList(): void
+    {
+        $closures = [
+            'items' => function () {
+                $services = NonListArrayTest::services();
+
+                foreach ($services as $key => $service) {
+                    $services[$key]['displayName'] = 'x';
+                }
+
+                return $services;
+            },
+            'arrayOfItems' => function () {
+                $services = NonListArrayTest::serviceArray();
+
+                foreach ($services as $key => $service) {
+                    $services[$key]['displayName'] = 'x';
+                }
+
+                return $services;
+            },
+            'values' => function () {
+                $services = array_values(array_filter(NonListArrayTest::serviceList(), fn (array $service) => $service['code'] !== ''));
+
+                foreach ($services as $key => $service) {
+                    $services[$key]['displayName'] = 'x';
+                }
+
+                return $services;
+            },
+            'varItems' => function () {
+                /** @var array{code: string, displayName?: string|null}[] $services */
+                $services = array_values(array_filter(NonListArrayTest::serviceList(), fn (array $service) => $service['code'] !== ''));
+
+                foreach ($services as $key => $service) {
+                    $services[$key]['displayName'] = 'x';
+                }
+
+                return $services;
+            },
+            'list' => function () {
+                $services = NonListArrayTest::serviceList();
+
+                foreach ($services as $key => $service) {
+                    $services[$key]['displayName'] = 'x';
+                }
+
+                return $services;
+            },
+            'nested' => function () {
+                $data = ['services' => NonListArrayTest::services()];
+
+                foreach ($data['services'] as $key => $service) {
+                    $data['services'][$key]['displayName'] = 'x';
+                }
+
+                return $data['services'];
+            },
+        ];
+
+        $this->assertSame(
+            array_fill_keys(
+                array_keys($closures),
+                '{"type":"array","items":{"type":"object","properties":{"code":{"type":"string"},"displayName":{"type":["string","null"]}},"required":["code"]}}',
+            ),
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function replacingEntriesUnderKeysOfTheListItselfKeepsAList(): void
+    {
+        $closure = function () {
+            $ints = NonListArrayTest::intItems();
+
+            foreach ($ints as $key => $value) {
+                $ints[$key] = (int) $value;
+            }
+
+            return $ints;
+        };
+
+        $this->assertSame(self::INTEGER_LIST, $this->closureReturnSchema($closure));
+    }
+
+
+    #[Test]
+    public function theKeysOfAListWithoutAKeyTypeAreInts(): void
+    {
+        $closure = function () {
+            $keys = [];
+
+            foreach (NonListArrayTest::intItems() as $key => $value) {
+                $keys[] = $key;
+            }
+
+            return $keys;
+        };
+
+        $this->assertSame(self::INTEGER_LIST, $this->closureReturnSchema($closure));
+    }
+
+
+    #[Test]
+    public function theKeysOfAnUntypedArrayMayBeStrings(): void
+    {
+        $closure = function () {
+            $keys = [];
+
+            foreach (NonListArrayTest::untyped() as $key => $value) {
+                $keys[] = $key;
+            }
+
+            return $keys;
+        };
+
+        $this->assertSame('{"type":"array","items":{"type":["integer","string"]}}', $this->closureReturnSchema($closure));
     }
 
 
@@ -294,6 +471,48 @@ final class NonListArrayTest extends TestCase
                 'listAfterStringKey' => '{"type":"object","properties":{"id":{"type":"integer"}},"required":["id"],"additionalProperties":{"type":"integer"}}',
                 'stringKeyedMap' => '{"type":"object","additionalProperties":{"type":"integer"}}',
             ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function mergingWithUnknownItemsKeepsTheKnownItemType(): void
+    {
+        $user = '{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":"string"}},"required":["id","email"]}';
+        $mixed = '{"type":"string","description":"mixed"}';
+
+        $closures = [
+            'merge' => fn () => array_merge(NonListArrayTest::users(), NonListArrayTest::mixedItems()),
+            'spread' => fn () => [...NonListArrayTest::users(), ...NonListArrayTest::mixedItems()],
+            'unknownFirst' => fn () => array_merge(NonListArrayTest::mixedItems(), NonListArrayTest::users()),
+            'untyped' => fn () => array_merge(NonListArrayTest::users(), NonListArrayTest::untyped()),
+            'map' => fn () => [...NonListArrayTest::usersByEmail(), ...NonListArrayTest::mixedByName()],
+        ];
+
+        $this->assertSame(
+            [
+                'merge' => '{"type":"array","items":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+                'spread' => '{"type":"array","items":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+                'unknownFirst' => '{"type":"array","items":{"anyOf":[' . $mixed . ',' . $user . ']}}',
+                'untyped' => '{"type":"array","items":{"anyOf":[' . $user . ',{"type":"string"}]}}',
+                'map' => '{"type":"object","additionalProperties":{"anyOf":[' . $user . ',' . $mixed . ']}}',
+            ],
+            array_map($this->closureReturnSchema(...), $closures),
+        );
+    }
+
+
+    #[Test]
+    public function aShapeMergedWithUnknownItemsStillAllowsAnyOtherEntry(): void
+    {
+        $closures = [
+            'spread' => fn (string $message) => ['error' => $message, ...NonListArrayTest::users(), ...NonListArrayTest::mixedItems()],
+            'merge' => fn (string $message) => array_merge(['error' => $message], NonListArrayTest::users(), NonListArrayTest::mixedItems()),
+        ];
+
+        $this->assertSame(
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"error":{"type":"string"}},"required":["error"],"additionalProperties":true}'),
             array_map($this->closureReturnSchema(...), $closures),
         );
     }
@@ -733,7 +952,7 @@ final class NonListArrayTest extends TestCase
             [
                 'last' => '{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"}],"minItems":2,"maxItems":2}',
                 'first' => '{"type":"object","properties":{"1":{"type":"string"},"2":{"type":"boolean"}},"required":["1","2"]}',
-                'middleInABranch' => '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"},{"type":"boolean"}],"minItems":3,"maxItems":3},{"type":"object","properties":{"0":{"type":"integer"},"1":{"type":"string"},"2":{"type":"boolean"}},"required":["0","2"]}]}',
+                'middleInABranch' => '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"},{"type":"string"},{"type":"boolean"}],"minItems":3,"maxItems":3},{"type":"object","properties":{"0":{"type":"integer"},"2":{"type":"boolean"}},"required":["0","2"]}]}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
         );
@@ -772,7 +991,7 @@ final class NonListArrayTest extends TestCase
         };
 
         $this->assertSame(
-            '{"anyOf":[{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1,"maxItems":1},{"type":"object","properties":{"0":{"type":"integer"},"label":{"type":"string"}},"required":["0"]}]}',
+            '{"anyOf":[{"type":"object","properties":{"0":{"type":"integer"},"label":{"type":"string"}},"required":["0","label"]},{"type":"array","prefixItems":[{"type":"integer"}],"minItems":1,"maxItems":1}]}',
             $this->closureReturnSchema($closure),
         );
     }
@@ -922,6 +1141,67 @@ final class NonListArrayTest extends TestCase
      * @return int[]
      */
     private static function intItems(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /** @phpstan-ignore missingType.iterableValue */
+    private static function untyped(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<mixed>
+     */
+    private static function mixedItems(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function mixedByName(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<string, array{id: int, email: string}>
+     */
+    private static function usersByEmail(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array{code: string, displayName?: string|null}[]
+     */
+    private static function services(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return array<array{code: string, displayName?: string|null}>
+     */
+    private static function serviceArray(): array
+    {
+        return json_decode('[]', true);
+    }
+
+
+    /**
+     * @return list<array{code: string, displayName?: string|null}>
+     */
+    private static function serviceList(): array
     {
         return json_decode('[]', true);
     }

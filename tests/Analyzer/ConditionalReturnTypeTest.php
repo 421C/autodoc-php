@@ -143,6 +143,28 @@ final class ConditionalReturnTypeTest extends TestCase
         $this->assertSchemaArraysMatch(['type' => 'integer'], $schema, 'closure', 'return');
     }
 
+    #[Test]
+    public function aTemplateBoundByTwoCallbacksTakesBothReturnTypesForTheCondition(): void
+    {
+        $schema = $this->getClosureReturnSchema(fn (): mixed => ConditionalReturnTypeTest::request(
+            success: fn (string $body) => [['id' => strlen($body)]],
+            error: function (string $message) {
+                error_log($message);
+            },
+        ));
+
+        $this->assertSchemaArraysMatch([
+            'type' => ['array', 'null'],
+            'items' => [
+                'type' => 'object',
+                'properties' => [
+                    'id' => ['type' => 'integer'],
+                ],
+                'required' => ['id'],
+            ],
+        ], $schema, 'closure', 'return');
+    }
+
     /**
      * Mirrors Laravel's `response()` helper.
      *
@@ -217,6 +239,27 @@ final class ConditionalReturnTypeTest extends TestCase
     private static function describeTemplatedShape(array $items): int|string
     {
         return $items === [] ? 'empty' : count($items);
+    }
+
+    /**
+     * @template TResult
+     *
+     * @param null|callable(string): TResult $success
+     * @param null|callable(string): TResult $error
+     *
+     * @return ($success is null ? string : (TResult is void ? null : TResult))
+     */
+    private static function request(?callable $success = null, ?callable $error = null): mixed
+    {
+        if ($success === null) {
+            return 'raw';
+        }
+
+        if ($error !== null && rand(0, 1)) {
+            return $error('failed');
+        }
+
+        return $success('body');
     }
 
     /**

@@ -1410,13 +1410,16 @@ final class OpenArrayShapeTest extends TestCase
         ];
 
         $this->assertSame(
-            array_fill_keys(
-                array_keys($closures),
-                '{"anyOf":['
+            [
+                'inABranch' => '{"anyOf":['
+                    . self::NULLABLE_INTEGER_LIST . ','
+                    . '{"type":"object","properties":{"0":{"type":["integer","null"]}},"additionalProperties":{"type":["integer","null"]}}'
+                    . ']}',
+                'underADynamicKey' => '{"anyOf":['
                     . self::NULLABLE_INTEGER_LIST . ','
                     . '{"type":"object","properties":{"0":{"type":"integer"}},"additionalProperties":{"type":["integer","null"]}}'
                     . ']}',
-            ),
+            ],
             array_map($this->closureReturnSchema(...), $closures),
         );
     }
@@ -2324,8 +2327,8 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             [
-                'extraKeyInTheSecondMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error"],"additionalProperties":{"type":["string","boolean"]}}',
-                'extraKeyInTheFirstMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"integer"}},"required":["error"],"additionalProperties":{"type":["boolean","string"]}}',
+                'extraKeyInTheSecondMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":["string","integer"]}},"required":["error"],"additionalProperties":{"type":["string","boolean"]}}',
+                'extraKeyInTheFirstMember' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":["integer","string"]}},"required":["error"],"additionalProperties":{"type":["boolean","string"]}}',
             ],
             array_map(fn (Closure $closure) => $this->closureReturnSchema($closure, $config), $closures),
         );
@@ -2690,7 +2693,7 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             [
-                'tupleAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
+                'tupleAfterAnUntypedArray' => '{"type":"array","items":{"type":["string","integer"]}}',
                 'tupleBeforeAnUntypedArray' => '{"type":"array","prefixItems":[{"type":"string"},{"type":"integer"}],"minItems":2}',
                 'keylessItemAfterAnUntypedArray' => '{"type":"array","items":{"type":"string"}}',
             ],
@@ -3470,7 +3473,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aWriteThatMayNotHappenToAKeyOfAMapWidensItsEntries(): void
+    public function aWriteThatMayNotHappenToAKeyOfAMapAddsTheKeyAsOptional(): void
     {
         $closures = [
             'inABranch' => function (string $name, bool $flag) {
@@ -3494,7 +3497,7 @@ final class OpenArrayShapeTest extends TestCase
         ];
 
         $this->assertSame(
-            array_fill_keys(array_keys($closures), '{"type":"object","additionalProperties":{"type":["integer","string","null"]}}'),
+            array_fill_keys(array_keys($closures), '{"type":"object","properties":{"alice":{"type":["integer","string","null"]}},"additionalProperties":{"type":["integer","null"]}}'),
             array_map($this->closureReturnSchema(...), $closures),
         );
     }
@@ -3555,9 +3558,9 @@ final class OpenArrayShapeTest extends TestCase
 
         $this->assertSame(
             [
-                'afterAWriteToAnotherKey' => '{"type":"object","properties":{"alice":{"type":"string"},"bob":{"type":["boolean","integer","null"]}},"required":["alice"],"additionalProperties":{"type":["integer","null"]}}',
-                'readAfterAWriteToAnotherKey' => '{"type":["boolean","integer","null"]}',
-                'declaredOtherEntries' => '{"type":"object","properties":{"error":{"type":"string"},"bob":{"type":["boolean","integer"]}},"required":["error"],"additionalProperties":{"type":"integer"}}',
+                'afterAWriteToAnotherKey' => '{"type":"object","properties":{"alice":{"type":"string"},"bob":{"type":["integer","boolean","null"]}},"required":["alice"],"additionalProperties":{"type":["integer","null"]}}',
+                'readAfterAWriteToAnotherKey' => '{"type":["integer","boolean","null"]}',
+                'declaredOtherEntries' => '{"type":"object","properties":{"error":{"type":"string"},"bob":{"type":["integer","boolean"]}},"required":["error"],"additionalProperties":{"type":"integer"}}',
                 'otherEntriesThatCanNotHoldTheKey' => '{"type":"object","properties":{"error":{"type":"string"},"code":{"type":"string"}},"required":["error"],"additionalProperties":{"type":"boolean"}}',
                 'closedShape' => '{"type":"object","properties":{"alice":{"type":["integer","null"]},"bob":{"type":"integer"},"carol":{"type":"string"}},"required":["alice","bob"]}',
             ],
@@ -3789,7 +3792,7 @@ final class OpenArrayShapeTest extends TestCase
                 'deeperWrite' => '{"type":"object","properties":{"alice":{"type":"object","properties":{"address":{"type":"object","properties":{"city":{"type":"string"}},"required":["city"]}},"required":["address"]}},"required":["alice"],"additionalProperties":' . self::USER . '}',
                 'listInAShape' => '{"type":"object","properties":{"users":{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}},"required":["users"]}',
                 'openShapeWithIntKeyedEntries' => '{"type":"object","properties":{"error":{"type":"string"},"details":{"type":"object","properties":{"code":{"type":"string"}},"required":["code"]}},"required":["error","details"],"additionalProperties":{"type":"boolean"}}',
-                'writeThatMayNotHappen' => '{"type":"object","additionalProperties":' . $userOrNameOnly . '}',
+                'writeThatMayNotHappen' => '{"anyOf":[{"type":"array","items":' . self::USER . '},{"type":"object","properties":{"alice":' . $nameOnly . '},"required":["alice"],"additionalProperties":' . self::USER . '}]}',
                 'intKeyOfAMap' => '{"type":"object","additionalProperties":' . $userOrNameOnly . '}',
             ],
             array_map($this->closureReturnSchema(...), $closures),
@@ -3843,7 +3846,7 @@ final class OpenArrayShapeTest extends TestCase
 
 
     #[Test]
-    public function aNestedWriteThatMayNotHappenUnderAKeyOfAMapChangesItsEntries(): void
+    public function aNestedWriteThatMayNotHappenUnderAKeyOfAMapChangesOnlyThatKey(): void
     {
         $closure = function (string $name, bool $flag) {
             $users = OpenArrayShapeTest::usersByName();
@@ -3856,7 +3859,7 @@ final class OpenArrayShapeTest extends TestCase
         };
 
         $this->assertSame(
-            '{"type":"object","additionalProperties":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email"]}}',
+            '{"type":"object","properties":{"alice":{"type":"object","properties":{"id":{"type":"integer"},"email":{"type":["string","null"]},"name":{"type":"string"}},"required":["id","email"]}},"additionalProperties":' . self::USER . '}',
             $this->closureReturnSchema($closure),
         );
     }

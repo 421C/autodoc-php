@@ -80,6 +80,7 @@ final class VariableStore
     public function mutate(
         Node\Expr\Variable $varNode,
         array $attributes,
+        int $endFilePos,
         array $path = [],
         ?Type $dynamicAttribute = null,
         ?Type $dynamicKey = null,
@@ -91,9 +92,6 @@ final class VariableStore
 
         /** @var int */
         $startFilePos = $varNode->getAttribute('startFilePos');
-
-        /** @var int */
-        $endFilePos = $varNode->getAttribute('endFilePos');
 
         $this->events->mutate(
             varName: $varNode->name,

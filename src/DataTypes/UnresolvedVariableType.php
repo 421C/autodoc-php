@@ -2,13 +2,10 @@
 
 namespace AutoDoc\DataTypes;
 
-use AutoDoc\Analyzer\Flow\ArrayKeyUnsetApplier;
-use AutoDoc\Analyzer\Flow\AttributeMutationApplier;
 use AutoDoc\Analyzer\Flow\BranchPath;
 use AutoDoc\Analyzer\Flow\ScopeEvent;
 use AutoDoc\Analyzer\Flow\ScopeEventType;
-use AutoDoc\Analyzer\Flow\ScopeEventVisibility;
-use AutoDoc\Analyzer\Narrowing\TypeNarrowingApplier;
+use AutoDoc\Analyzer\Flow\VariableEventReplayer;
 use AutoDoc\Analyzer\Scope;
 
 class UnresolvedVariableType extends UnresolvedType
@@ -46,7 +43,7 @@ class UnresolvedVariableType extends UnresolvedType
             return $this->scope->variables->resolvedTypes[$cacheKey] = $this->resolve();
         }
 
-        $resolvedType = $this->resolveFromEvents($events, $readPath);
+        $resolvedType = new VariableEventReplayer($this->scope, $readPath)->replay($events, $this->readBranchPath);
 
         if (! $resolvedType) {
             $resolvedType = new UnknownType;
@@ -75,103 +72,4 @@ class UnresolvedVariableType extends UnresolvedType
                 && (! empty($event->changes['attributes']) || isset($event->changes['dynamicAttribute'])),
         );
     }
-
-
-    /**
-     * @param ScopeEvent[] $events
-     * @param list<int|string> $readPath
-     */
-    private function resolveFromEvents(array $events, array $readPath): ?Type
-    {
-        // Walk events forward, building up the type.
-        // At each point, determine if the event is:
-        //   1. Directly visible (same branch path or ancestor) → apply with certainty
-        //   2. In a sibling branch → collect as uncertain alternative
-        //   3. In a deeper/unrelated branch → skip
-
-        $baseType = null;
-
-        /** @var list<array{ScopeEvent, bool}> $pendingMutations */
-        $pendingMutations = [];
-
-        foreach ($events as $event) {
-            $visibility = $this->scope->variables->events->getEventVisibility($event, $this->readBranchPath);
-
-            if ($visibility === ScopeEventVisibility::Hidden) {
-                continue;
-            }
-
-            $isCertain = $visibility === ScopeEventVisibility::Certain;
-
-            if ($event->type === ScopeEventType::Assign) {
-                if ($isCertain) {
-                    // Certain assignment replaces everything before it
-                    $baseType = $event->changes['type'] ?? null;
-                    $pendingMutations = [];
-
-                } else {
-                    // Uncertain assignment: union with what we have
-                    $pendingMutations[] = [$event, false];
-                }
-
-            } else if ($event->type === ScopeEventType::Mutate || $event->type === ScopeEventType::Unset) {
-                $pendingMutations[] = [$event, $isCertain];
-
-            } else if ($isCertain) {
-                $pendingMutations[] = [$event, true];
-            }
-        }
-
-        // Apply pending mutations to the base type
-        $resolvedType = $baseType?->unwrapType($this->scope->config);
-        $narrowingApplier = new TypeNarrowingApplier($this->scope);
-        $mutationApplier = new AttributeMutationApplier($this->scope);
-        $unsetApplier = new ArrayKeyUnsetApplier($this->scope);
-
-        foreach ($pendingMutations as [$event, $isCertain]) {
-            if ($event->type === ScopeEventType::Assign && isset($event->changes['type'])) {
-                if ($isCertain) {
-                    $resolvedType = $event->changes['type']->unwrapType($this->scope->config);
-
-                } else {
-                    $resolvedType = new UnionType(array_values(array_filter([
-                        $resolvedType,
-                        $event->changes['type'],
-                    ])))->unwrapType($this->scope->config);
-                }
-
-            } else if ($event->type === ScopeEventType::Mutate
-                && (! empty($event->changes['attributes']) || isset($event->changes['dynamicAttribute']))
-            ) {
-                $this->scope->withShapeMerging(function () use ($event, &$resolvedType, $isCertain, $mutationApplier, $readPath) {
-                    $resolvedType = $mutationApplier->apply(
-                        baseType: $resolvedType,
-                        mutationPath: $event->changes['mutationPath'] ?? [],
-                        attributes: $event->changes['attributes'] ?? [],
-                        isCertain: $isCertain,
-                        readPath: $readPath,
-                        dynamicAttribute: $event->changes['dynamicAttribute'] ?? null,
-                        dynamicKey: $event->changes['dynamicKey'] ?? null,
-                    );
-                });
-
-            } else if ($event->type === ScopeEventType::Narrow && isset($event->changes['narrowing'])) {
-                if ($resolvedType !== null) {
-                    $resolvedType = $narrowingApplier->applyPath(
-                        base: $resolvedType,
-                        path: $event->changes['narrowingPath'] ?? [],
-                        narrowing: $event->changes['narrowing'],
-                    );
-                }
-
-            } else if ($event->type === ScopeEventType::Unset && isset($event->changes['unsetPath'])) {
-                if ($resolvedType !== null) {
-                    $resolvedType = $unsetApplier->apply($resolvedType, $event->changes['unsetPath'], $isCertain);
-                }
-            }
-        }
-
-        return $resolvedType;
-    }
-
 }

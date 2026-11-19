@@ -3,6 +3,7 @@
 namespace AutoDoc\Tests\TestProject\Controllers;
 
 use AutoDoc\Tests\Attributes\ExpectedOperationSchema;
+use AutoDoc\Tests\TestProject\Entities\SimpleClass;
 
 /**
  * Tests for closures and arrow functions.
@@ -250,5 +251,62 @@ class ClosuresController
 
             return $f();
         }
+    }
+
+
+    #[ExpectedOperationSchema('showValuesForScalarTypes', [
+        'responses' => [
+            200 => [
+                'content' => [
+                    'application/json' => [
+                        'schema' => [
+                            'type' => 'object',
+                            'properties' => [
+                                'self' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'id' => [
+                                            'type' => 'integer',
+                                        ],
+                                    ],
+                                    'required' => ['id'],
+                                ],
+                                'imported' => [
+                                    'type' => 'object',
+                                    'properties' => [
+                                        'n' => [
+                                            'type' => ['integer', 'null'],
+                                        ],
+                                    ],
+                                    'required' => ['n'],
+                                ],
+                            ],
+                            'required' => ['self', 'imported'],
+                        ],
+                    ],
+                ],
+                'description' => '',
+            ],
+        ],
+    ])]
+    public function closureResolvesClassNamesOfItsClass(): mixed
+    {
+        $closure = function () {
+            return [
+                'self' => self::closureHelper(),
+                'imported' => new SimpleClass,
+            ];
+        };
+
+        return $closure();
+    }
+
+
+    /**
+     * @return array{id: int}
+     */
+    private static function closureHelper(): array
+    {
+        return ['id' => 1];
     }
 }

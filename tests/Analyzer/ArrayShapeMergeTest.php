@@ -4,12 +4,18 @@ namespace AutoDoc\Tests\Analyzer;
 
 use AutoDoc\Analyzer\PhpCallable;
 use AutoDoc\Analyzer\Scope;
+use AutoDoc\Config;
+use AutoDoc\DataTypes\ArrayType;
+use AutoDoc\DataTypes\ObjectType;
+use AutoDoc\DataTypes\Type;
+use AutoDoc\DataTypes\UnionType;
 use AutoDoc\Tests\Traits\ComparesSchemaArrays;
 use AutoDoc\Tests\Traits\LoadsConfig;
 use Closure;
 use PHPUnit\Framework\Attributes\Test;
 use PHPUnit\Framework\TestCase;
 use ReflectionFunction;
+use stdClass;
 
 final class ArrayShapeMergeTest extends TestCase
 {
@@ -279,6 +285,58 @@ final class ArrayShapeMergeTest extends TestCase
 
 
     #[Test]
+    public function aPartialShapeWithAnUnknownKeyKeepsItsEntries(): void
+    {
+        $stringListOrMap = [
+            'anyOf' => [
+                [
+                    'type' => 'array',
+                    'items' => [
+                        'type' => 'string',
+                    ],
+                ],
+                [
+                    'type' => 'object',
+                    'additionalProperties' => [
+                        'type' => 'string',
+                    ],
+                ],
+            ],
+        ];
+
+        $closures = [
+            'intKey' => [
+                fn (int $id, string $name): mixed => [$id => $name],
+                $stringListOrMap,
+            ],
+            'intKeyAfterAKnownKey' => [
+                fn (int $id, string $first, string $second): mixed => [0 => $first, $id => $second],
+                $stringListOrMap,
+            ],
+            'intKeyAfterAKeylessItem' => [
+                fn (int $id, string $first, string $second): mixed => [$first, $id => $second],
+                $stringListOrMap,
+            ],
+            'stringKeyAfterAKnownKey' => [
+                fn (string $key, string $first, string $second): mixed => ['id' => $first, $key => $second],
+                [
+                    'type' => 'object',
+                    'additionalProperties' => [
+                        'type' => 'string',
+                    ],
+                ],
+            ],
+        ];
+
+        foreach ($closures as $name => [$closure, $expectedSchema]) {
+            $schema = $this->getClosureReturnSchema($closure, resolvePartialShapes: true);
+
+            $this->assertSchemaArraysMatch($expectedSchema, $schema, $name, 'return');
+        }
+    }
+
+
+    #[Test]
     public function aKeylessItemAfterASpreadWithAMissingEntryMayTakeAnEarlierIndex(): void
     {
         $schema = $this->getClosureReturnSchema(
@@ -515,6 +573,66 @@ final class ArrayShapeMergeTest extends TestCase
     }
 
 
+    #[Test]
+    public function anEntryMergedFromBranchesKeepsRequiredOffItsMembers(): void
+    {
+        $config = self::loadConfig();
+
+        $service = $this->getClosureReturnType($config, function (bool $flag): mixed {
+            $service = ArrayShapeMergeTest::service();
+
+            if ($flag) {
+                $service['displayName'] = 'x';
+            }
+
+            return $service;
+        });
+
+        $entity = $this->getClosureReturnType($config, function (bool $hasDate, bool $flag): mixed {
+            $entity = new stdClass;
+
+            if ($hasDate) {
+                $entity->date = null;
+            }
+
+            if ($flag) {
+                $entity->date = 'x';
+            }
+
+            return $entity;
+        });
+
+        self::assertInstanceOf(ArrayType::class, $service);
+        self::assertInstanceOf(ObjectType::class, $entity);
+
+        self::assertSame(
+            [
+                'shapeEntry' => ['entry' => false, 'members' => [false, false]],
+                'objectProperty' => ['entry' => false, 'members' => [false, false]],
+            ],
+            [
+                'shapeEntry' => $this->getRequiredFlags($service->shape['displayName'], $config),
+                'objectProperty' => $this->getRequiredFlags($entity->properties['date'], $config),
+            ],
+        );
+    }
+
+
+    /**
+     * @return array{entry: bool, members: list<bool>}
+     */
+    private function getRequiredFlags(Type $entry, Config $config): array
+    {
+        $entry = $entry->unwrapType($config);
+        $members = $entry instanceof UnionType ? array_values($entry->types) : [];
+
+        return [
+            'entry' => $entry->required,
+            'members' => array_map(fn (Type $member) => $member->required, $members),
+        ];
+    }
+
+
     /**
      * @return array<string, mixed>
      */
@@ -524,11 +642,25 @@ final class ArrayShapeMergeTest extends TestCase
         $config->data['openapi']['show_values_for_scalar_types'] = true;
         $config->data['arrays']['resolve_partial_shapes'] = $resolvePartialShapes;
 
-        $type = new PhpCallable(
+        return $this->getClosureReturnType($config, $closure)->toSchema($config);
+    }
+
+
+    private function getClosureReturnType(Config $config, Closure $closure): Type
+    {
+        return new PhpCallable(
             scope: new Scope($config),
             reflection: new ReflectionFunction($closure),
-        )->getReturnType();
+        )->getReturnType()->unwrapType($config);
+    }
 
-        return $type->toSchema($config);
+
+    /**
+     * @return array{code: string, displayName?: string|null}
+     */
+    private static function service(): array
+    {
+        /** @phpstan-ignore return.type */
+        return json_decode('[]', true);
     }
 }

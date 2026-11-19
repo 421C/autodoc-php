@@ -313,6 +313,15 @@ class ArrayType extends Type
     }
 
 
+    public static function mayBeStoredAsIntKey(Type $keyType, Config $config): bool
+    {
+        $storedKeyType = self::toStoredKeyType($keyType, $config);
+        $storedKeyTypes = $storedKeyType instanceof UnionType ? $storedKeyType->types : [$storedKeyType];
+
+        return array_any($storedKeyTypes, fn (Type $type) => $type instanceof IntegerType);
+    }
+
+
     private static function includesStringKeys(?Type $keyType, Config $config): bool
     {
         $keyType = $keyType?->unwrapType($config);
@@ -581,6 +590,14 @@ class ArrayType extends Type
     }
 
 
+    public function placeIntKeysOutOfOrder(): self
+    {
+        $this->intKeyOrder = $this->intKeyOrder->union(IntKeyOrder::NonSequential);
+
+        return $this;
+    }
+
+
     /**
      * Renumbers the int keys in order and keeps the string keys.
      */
@@ -818,12 +835,15 @@ class ArrayType extends Type
         }
 
         $neitherDeclaresAKeyType = $this->keyType === null && $other->keyType === null;
+        $eitherIsAnOpenShape = $this->shape !== [] || $other->shape !== [];
         $itemTypes = [$this->itemType ?? new UnknownType, $other->itemType ?? new UnknownType];
         $keyTypes = [$this->keyType ?? new IntegerType, $other->keyType ?? new IntegerType];
 
-        $itemType = $asIntersection
-            ? new IntersectionType($itemTypes)->unwrapType($config)
-            : self::unionUnlessAnyIsUnknown($itemTypes, $config);
+        $itemType = match (true) {
+            $asIntersection => new IntersectionType($itemTypes)->unwrapType($config),
+            $eitherIsAnOpenShape => self::unionUnlessAnyIsUnknown($itemTypes, $config),
+            default => new UnionType($itemTypes)->unwrapType($config),
+        };
         $keyType = $asIntersection
             ? new IntersectionType($keyTypes)->unwrapType($config)
             : new UnionType($keyTypes)->unwrapType($config);
@@ -841,9 +861,11 @@ class ArrayType extends Type
 
 
     /**
+     * @internal
+     *
      * @param list<Type> $types
      */
-    private static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
+    public static function unionUnlessAnyIsUnknown(array $types, Config $config): Type
     {
         $types = array_map(fn (Type $type) => $type->unwrapType($config), $types);
 
