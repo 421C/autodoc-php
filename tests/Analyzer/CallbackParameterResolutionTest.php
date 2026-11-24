@@ -486,6 +486,59 @@ final class CallbackParameterResolutionTest extends TestCase
     }
 
     #[Test]
+    public function aReassignedByReferenceArgumentIsReported(): void
+    {
+        $schema = $this->analyze(function (string $note) {
+            $parts = ['note' => $note];
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (array &$item): void {
+                $item = ['replaced' => 1];
+                $item['extra'] = true;
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'type' => 'object',
+            'properties' => [
+                'replaced' => ['type' => 'integer'],
+                'extra' => ['type' => 'boolean'],
+            ],
+            'required' => ['replaced', 'extra'],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
+    public function aByReferenceArgumentReassignedInOneBranchMayKeepItsType(): void
+    {
+        $schema = $this->analyze(function (string $note) {
+            $parts = ['note' => $note];
+
+            // @phpstan-ignore method.nonObject
+            return $parts->eachItem(function (array &$item): void {
+                if ($item['note'] === '') {
+                    $item = ['empty' => true];
+                }
+            });
+        });
+
+        $this->assertSchemaArraysMatch([
+            'anyOf' => [
+                [
+                    'type' => 'object',
+                    'properties' => ['note' => ['type' => 'string']],
+                    'required' => ['note'],
+                ],
+                [
+                    'type' => 'object',
+                    'properties' => ['empty' => ['type' => 'boolean']],
+                    'required' => ['empty'],
+                ],
+            ],
+        ], $schema, '/test', 'response');
+    }
+
+    #[Test]
     public function changesToACollectionResolvedAsAnArrayAreReported(): void
     {
         $schema = $this->analyze(function (string $note, int $count) {

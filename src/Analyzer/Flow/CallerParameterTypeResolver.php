@@ -18,7 +18,6 @@ final readonly class CallerParameterTypeResolver
     public function __construct(
         private Scope $scope,
         private CallerParameterBindingAnalysis $bindingAnalysis,
-        private bool $isPassedByReference = false,
     ) {}
 
     public function resolveAtExit(int $readFilePos, BranchPath $readBranchPath): Type
@@ -43,7 +42,7 @@ final readonly class CallerParameterTypeResolver
 
             if ($event->type === ScopeEventType::Mutate
                 && (! empty($event->changes['attributes']) || isset($event->changes['dynamicAttribute']))
-                && $this->isSharedWithCaller($resolvedType, $event->changes['mutationPath'] ?? [])
+                && $this->hasObjectOnPath($resolvedType, $event->changes['mutationPath'] ?? [])
             ) {
                 $this->scope->withShapeMerging(function () use ($event, &$resolvedType, $isCertain, $mutationApplier) {
                     $resolvedType = $mutationApplier->apply(
@@ -58,7 +57,7 @@ final readonly class CallerParameterTypeResolver
 
             } else if ($event->type === ScopeEventType::Unset
                 && isset($event->changes['unsetPath'])
-                && $this->isSharedWithCaller($resolvedType, array_slice($event->changes['unsetPath'], 0, -1))
+                && $this->hasObjectOnPath($resolvedType, array_slice($event->changes['unsetPath'], 0, -1))
             ) {
                 $resolvedType = $unsetApplier->apply($resolvedType, $event->changes['unsetPath'], $isCertain);
 
@@ -79,16 +78,9 @@ final readonly class CallerParameterTypeResolver
 
 
     /**
-     * @param list<PathKey> $containerPath The keys leading to the changed array or object.
-     */
-    private function isSharedWithCaller(Type $parameterType, array $containerPath): bool
-    {
-        return $this->isPassedByReference || $this->hasObjectOnPath($parameterType, $containerPath);
-    }
-
-
-    /**
-     * @param list<PathKey> $path
+     * A by-value parameter shares only its objects with the caller.
+     *
+     * @param list<PathKey> $path The keys leading to the changed array or object.
      */
     private function hasObjectOnPath(Type $type, array $path): bool
     {
