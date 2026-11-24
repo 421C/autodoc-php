@@ -12,6 +12,7 @@ use AutoDoc\Analyzer\Narrowing\IsTruthy;
 use AutoDoc\Analyzer\Narrowing\IsType;
 use AutoDoc\Analyzer\Narrowing\Narrowing;
 use AutoDoc\Analyzer\Narrowing\NotType;
+use AutoDoc\Analyzer\Narrowing\Target;
 use AutoDoc\Analyzer\Scope;
 use AutoDoc\Config;
 use AutoDoc\DataTypes\ArrayType;
@@ -24,6 +25,8 @@ use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
 use AutoDoc\DataTypes\UnknownType;
+use AutoDoc\DataTypes\UnresolvedArrayItemType;
+use AutoDoc\DataTypes\UnresolvedParserNodeType;
 use AutoDoc\Extensions\FuncCallContext;
 use AutoDoc\Extensions\FuncCallExtension;
 use PhpParser\Node;
@@ -69,6 +72,30 @@ class ArrayFuncCall extends FuncCallExtension
 
     public function handleSideEffect(FuncCallContext $context): void
     {
+        if ($context->functionName === 'array_push') {
+            $this->handleArrayPush($context);
+
+        } else if ($context->functionName === 'array_unshift') {
+            $this->handleArrayUnshift($context);
+
+        } else {
+            $this->handleSort($context);
+        }
+    }
+
+    public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void
+    {
+        if ($context->functionName === 'in_array') {
+            $this->handleInArrayNarrowing($context, $negated);
+
+        } else if ($context->functionName === 'array_key_exists') {
+            $this->handleArrayKeyExistsNarrowing($context, $negated);
+        }
+    }
+
+
+    private function handleSort(FuncCallContext $context): void
+    {
         $preservesKeys = match ($context->functionName) {
             'sort', 'rsort', 'usort', 'shuffle' => false,
             'asort', 'arsort', 'uasort', 'uksort', 'krsort', 'natsort', 'natcasesort' => true,
@@ -99,14 +126,92 @@ class ArrayFuncCall extends FuncCallExtension
         $context->setVarType($arrayArg->value->name, $sortedArrayType);
     }
 
-    public function narrowTypeFromCondition(FuncCallContext $context, bool $negated): void
-    {
-        if ($context->functionName === 'in_array') {
-            $this->handleInArrayNarrowing($context, $negated);
 
-        } else if ($context->functionName === 'array_key_exists') {
-            $this->handleArrayKeyExistsNarrowing($context, $negated);
+    private function handleArrayPush(FuncCallContext $context): void
+    {
+        $target = $this->getModifiedArrayTarget($context);
+
+        if ($target === null) {
+            return;
         }
+
+        foreach ($context->node->args as $index => $arg) {
+            if ($index === 0 || ! $arg instanceof Node\Arg) {
+                continue;
+            }
+
+            $valueType = $context->argTypes->get($index, autoResolve: false);
+
+            $context->scope->variables->events->mutate(
+                varName: $target->baseVar,
+                attributes: [],
+                startFilePos: $context->node->getStartFilePos(),
+                endFilePos: $context->node->getEndFilePos(),
+                path: $target->path,
+                dynamicAttribute: $arg->unpack ? new UnresolvedArrayItemType($valueType, $context->scope) : $valueType,
+            );
+        }
+    }
+
+
+    private function handleArrayUnshift(FuncCallContext $context): void
+    {
+        $target = $this->getModifiedArrayTarget($context);
+        $arrayArg = $context->node->args[0] ?? null;
+
+        if ($target === null || ! $arrayArg instanceof Node\Arg) {
+            return;
+        }
+
+        $items = [];
+
+        foreach ($context->node->args as $index => $arg) {
+            if ($index > 0 && $arg instanceof Node\Arg) {
+                $items[] = new Node\ArrayItem($arg->value, unpack: $arg->unpack);
+            }
+        }
+
+        $items[] = new Node\ArrayItem($arrayArg->value, unpack: true);
+
+        $unshiftedType = new UnresolvedParserNodeType(new Node\Expr\Array_($items), $context->scope);
+        $events = $context->scope->variables->events;
+        $path = $target->path;
+        $lastKey = array_pop($path);
+
+        if ($lastKey === null) {
+            $events->assign($target->baseVar, $unshiftedType, $context->node->getStartFilePos(), $context->node->getEndFilePos());
+
+            return;
+        }
+
+        $events->mutate(
+            varName: $target->baseVar,
+            attributes: [$lastKey => $unshiftedType],
+            startFilePos: $context->node->getStartFilePos(),
+            endFilePos: $context->node->getEndFilePos(),
+            path: $path,
+        );
+    }
+
+
+    private function getModifiedArrayTarget(FuncCallContext $context): ?Target
+    {
+        $arrayArg = $context->node->args[0] ?? null;
+
+        if (! $arrayArg instanceof Node\Arg || $arrayArg->unpack) {
+            return null;
+        }
+
+        $target = Target::fromNode($arrayArg->value);
+
+        if ($target === null) {
+            return null;
+        }
+
+        return new Target(
+            baseVar: $target->baseVar,
+            path: array_map($context->scope->normalizeArrayKey(...), $target->path),
+        );
     }
 
 

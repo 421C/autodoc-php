@@ -2925,8 +2925,16 @@ final class OpenArrayShapeTest extends TestCase
             },
         ];
 
+        $listOrNone = '{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"none"}]}';
+
         $this->assertSame(
-            array_fill_keys(array_keys($closures), '{"anyOf":[{"type":"array","items":{"type":"string"}},{"type":"string","const":"none"}]}'),
+            [
+                'filledByABuiltInFunction' => '{"anyOf":[{"type":"array","items":{"type":"string","const":"failed"}},{"type":"string","const":"none"}]}',
+                'filledAsAnOutParameter' => $listOrNone,
+                'filledByAMethod' => $listOrNone,
+                'filledByAClosure' => $listOrNone,
+                'filledThroughAReference' => $listOrNone,
+            ],
             array_map($this->closureReturnSchema(...), $closures),
         );
     }
