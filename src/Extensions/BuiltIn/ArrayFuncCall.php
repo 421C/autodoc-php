@@ -21,6 +21,7 @@ use AutoDoc\DataTypes\CallableType;
 use AutoDoc\DataTypes\IntegerType;
 use AutoDoc\DataTypes\NeverType;
 use AutoDoc\DataTypes\NullType;
+use AutoDoc\DataTypes\ScalarType;
 use AutoDoc\DataTypes\StringType;
 use AutoDoc\DataTypes\Type;
 use AutoDoc\DataTypes\UnionType;
@@ -60,6 +61,7 @@ class ArrayFuncCall extends FuncCallExtension
             'array_diff_key' => $this->handleKeyComparingFunction($config, $argTypes, keepsMatchingKeys: false),
             'array_intersect_key' => $this->handleKeyComparingFunction($config, $argTypes, keepsMatchingKeys: true),
             'array_slice' => $this->handleArraySlice($config, $argTypes),
+            'array_splice' => $this->handleArraySplice($config, $argTypes),
             'array_reverse' => $this->handleArrayReverse($config, $argTypes),
             'array_merge' => $this->handleArrayMerge($config, $argTypes),
             'array_search' => $this->addFalse($this->getKeyType($config, $argTypes, 1), $config),
@@ -79,7 +81,7 @@ class ArrayFuncCall extends FuncCallExtension
             $this->handleArrayUnshift($context);
 
         } else {
-            $this->handleSort($context);
+            $this->handleArrayReplacingFunction($context);
         }
     }
 
@@ -94,36 +96,119 @@ class ArrayFuncCall extends FuncCallExtension
     }
 
 
-    private function handleSort(FuncCallContext $context): void
+    private function handleArrayReplacingFunction(FuncCallContext $context): void
     {
-        $preservesKeys = match ($context->functionName) {
-            'sort', 'rsort', 'usort', 'shuffle' => false,
-            'asort', 'arsort', 'uasort', 'uksort', 'krsort', 'natsort', 'natcasesort' => true,
+        $config = $context->scope->config;
+
+        $getArrayAfterCall = match ($context->functionName) {
+            'sort', 'rsort', 'usort', 'shuffle' => fn (ArrayType $array) => $array->toList($config),
+            'asort', 'arsort', 'uasort', 'uksort', 'krsort', 'natsort', 'natcasesort' => fn (ArrayType $array) => $array->reorderItems($config),
+            'array_pop' => fn (ArrayType $array) => $this->removeLastEntry($array, $config),
+            'array_shift' => fn (ArrayType $array) => $this->removeEdgeEntry($array, array_key_first($array->shape))->renumberKeys($config),
+            'array_splice' => fn (ArrayType $array) => $this->spliceEntries($array, $context),
+            'array_walk' => fn (ArrayType $array) => $this->walkEntries($array, $context),
             default => null,
         };
 
-        $arrayArg = $context->node->args[0] ?? null;
+        $target = $this->getModifiedArrayTarget($context);
 
-        if ($preservesKeys === null
-            || ! $arrayArg instanceof Node\Arg
-            || ! $arrayArg->value instanceof Node\Expr\Variable
-            || ! is_string($arrayArg->value->name)
-        ) {
+        if ($getArrayAfterCall === null || $target === null) {
             return;
         }
 
-        $config = $context->scope->config;
         $arrayType = $context->argTypes->get(0)->unwrapType($config);
 
         if (! $arrayType instanceof ArrayType) {
             return;
         }
 
-        $sortedArrayType = $preservesKeys
-            ? (clone $arrayType)->reorderItems($config)
-            : (clone $arrayType)->toList($config);
+        $this->recordArrayArgumentType(
+            context: $context,
+            target: $target,
+            type: $getArrayAfterCall(clone $arrayType),
+        );
+    }
 
-        $context->setVarType($arrayArg->value->name, $sortedArrayType);
+
+    private function removeLastEntry(ArrayType $array, Config $config): ArrayType
+    {
+        $isList = $array->mayEncodeAsList($config) && ! $array->mayEncodeAsObject($config);
+
+        $this->removeEdgeEntry($array, array_key_last($array->shape));
+
+        return $isList ? $array->renumberKeys($config) : $array;
+    }
+
+
+    private function removeEdgeEntry(ArrayType $array, int|string|null $edgeKey): ArrayType
+    {
+        $everyEntryIsKnownAndRequired = $edgeKey !== null
+            && ! $array->hasEntriesOutsideShape()
+            && array_all($array->shape, fn (Type $entry) => $entry->required);
+
+        return $everyEntryIsKnownAndRequired
+            ? $array->removeItemFromArray($edgeKey)
+            : $array->markItemsOptional();
+    }
+
+
+    private function spliceEntries(ArrayType $array, FuncCallContext $context): ArrayType
+    {
+        $config = $context->scope->config;
+        $array->convertShapeToTypePair($config)->markItemsOptional();
+
+        $replacementIndex = $context->argTypes->indexForParameter('replacement', 3);
+
+        if ($replacementIndex !== null) {
+            $array->mergeArray(
+                array: $this->getReplacementEntries($context->argTypes->get($replacementIndex), $config),
+                config: $config,
+            );
+        }
+
+        return $array->renumberKeys($config);
+    }
+
+
+    private function getReplacementEntries(Type $replacement, Config $config): ArrayType
+    {
+        $replacement = $replacement->unwrapType($config);
+        $entries = ArrayType::withoutEntries();
+
+        $entries->mergeArray(
+            array: $replacement instanceof ScalarType || $replacement instanceof BoolType ? new ArrayType(itemType: $replacement) : $replacement,
+            config: $config,
+        );
+
+        return $entries->toList($config);
+    }
+
+
+    private function walkEntries(ArrayType $array, FuncCallContext $context): ArrayType
+    {
+        $callbackType = $context->argTypes->has(1) ? $context->argTypes->get(1) : null;
+
+        if (! $callbackType instanceof CallableType) {
+            return $array;
+        }
+
+        $extraArgTypes = $context->argTypes->has(2) ? [$context->argTypes->get(2)] : [];
+
+        $walkEntry = fn (Type $entryType, Type $keyType): Type => $callbackType->resolveParameterTypeAfterInvocation(
+            parameterIndex: 0,
+            args: ArgumentList::fromTypes([$entryType, $keyType, ...$extraArgTypes], $context->scope),
+            callerNode: $context->node,
+        ) ?? $entryType;
+
+        foreach ($array->shape as $key => $entryType) {
+            $array->shape[$key] = (clone $walkEntry($entryType, $this->arrayFilterKeyType($key)))->setRequired($entryType->required);
+        }
+
+        if ($array->itemType !== null) {
+            $array->itemType = $walkEntry($array->itemType, $array->keyType ?? new IntegerType);
+        }
+
+        return $array;
     }
 
 
@@ -173,20 +258,28 @@ class ArrayFuncCall extends FuncCallExtension
 
         $items[] = new Node\ArrayItem($arrayArg->value, unpack: true);
 
-        $unshiftedType = new UnresolvedParserNodeType(new Node\Expr\Array_($items), $context->scope);
-        $events = $context->scope->variables->events;
+        $this->recordArrayArgumentType(
+            context: $context,
+            target: $target,
+            type: new UnresolvedParserNodeType(new Node\Expr\Array_($items), $context->scope),
+        );
+    }
+
+
+    private function recordArrayArgumentType(FuncCallContext $context, Target $target, Type $type): void
+    {
         $path = $target->path;
         $lastKey = array_pop($path);
 
         if ($lastKey === null) {
-            $events->assign($target->baseVar, $unshiftedType, $context->node->getStartFilePos(), $context->node->getEndFilePos());
+            $context->setVarType($target->baseVar, $type);
 
             return;
         }
 
-        $events->mutate(
+        $context->scope->variables->events->mutate(
             varName: $target->baseVar,
-            attributes: [$lastKey => $unshiftedType],
+            attributes: [$lastKey => $type],
             startFilePos: $context->node->getStartFilePos(),
             endFilePos: $context->node->getEndFilePos(),
             path: $path,
@@ -805,6 +898,18 @@ class ArrayFuncCall extends FuncCallExtension
         return $this->getBoolArgument($argTypes, 'preserve_keys', 3, $config, default: false) === false
             ? $typePair->renumberKeys($config)
             : $typePair;
+    }
+
+
+    private function handleArraySplice(Config $config, ArgumentList $argTypes): Type
+    {
+        $arrayType = $this->getArrayArgument($argTypes);
+
+        if ($arrayType === null) {
+            return new ArrayType;
+        }
+
+        return $arrayType->convertShapeToTypePair($config)->markItemsOptional()->renumberKeys($config);
     }
 
 

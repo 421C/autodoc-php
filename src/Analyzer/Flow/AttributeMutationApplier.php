@@ -384,7 +384,7 @@ final readonly class AttributeMutationApplier
     private function mergeAttribute(?Type $baseType, int|string $key, Type $attributeType, bool $isCertain, array $readPath = []): Type
     {
         if ($isCertain) {
-            $attributeType = $this->setNestedAttributeAsRequired($attributeType);
+            $attributeType = (clone $attributeType)->setRequired(true);
         }
 
         $potentialTypes = $baseType instanceof UnionType ? $baseType->types : array_filter([$baseType]);
@@ -399,10 +399,7 @@ final readonly class AttributeMutationApplier
 
                 if (isset($potentialTypes[$i]->properties[$keyString])) {
                     if ($isCertain) {
-                        $potentialTypes[$i]->properties[$keyString] = $this->applyCertainAttributeMutation(
-                            currentType: $potentialTypes[$i]->properties[$keyString],
-                            attributeType: $propertyType,
-                        );
+                        $potentialTypes[$i]->properties[$keyString] = $propertyType;
 
                     } else {
                         $potentialTypes[$i]->properties[$keyString] = new UnionType([
@@ -422,10 +419,7 @@ final readonly class AttributeMutationApplier
 
                 if (isset($potentialTypes[$i]->shape[$key])) {
                     if ($isCertain) {
-                        $potentialTypes[$i]->shape[$key] = $this->applyCertainAttributeMutation(
-                            currentType: $potentialTypes[$i]->shape[$key],
-                            attributeType: $attributeType,
-                        );
+                        $potentialTypes[$i]->shape[$key] = $attributeType;
 
                     } else {
                         $potentialTypes[$i]->shape[$key] = new UnionType([
@@ -508,113 +502,5 @@ final readonly class AttributeMutationApplier
         $declaredType = $phpClass->getProperty($propertyName, onlyPublic: false)?->unwrapType($this->scope->config);
 
         return $declaredType instanceof UnknownType ? null : $declaredType;
-    }
-
-
-    private function applyCertainAttributeMutation(Type $currentType, Type $attributeType): Type
-    {
-        if (! $attributeType instanceof ArrayType && ! $attributeType instanceof ObjectType) {
-            return $attributeType;
-        }
-
-        $currentType = $currentType->unwrapType($this->scope->config);
-
-        if ($currentType instanceof UnionType) {
-            $types = [];
-
-            foreach ($currentType->types as $type) {
-                $type = $type->unwrapType($this->scope->config);
-
-                if ($type instanceof ArrayType || $type instanceof ObjectType || $type instanceof UnionType) {
-                    $types[] = $this->applyCertainAttributeMutation($type, $attributeType);
-                }
-            }
-
-            if ($types !== []) {
-                return new UnionType($types)->unwrapType($this->scope->config);
-            }
-        }
-
-        $patch = $this->getPatchAttributes($attributeType);
-
-        if ($patch === []) {
-            return new UnionType([$currentType, $attributeType])->unwrapType($this->scope->config);
-        }
-
-        if ($currentType instanceof ObjectType) {
-            $currentType = clone $currentType;
-
-            foreach ($patch as $key => $patchType) {
-                $keyString = (string) $key;
-
-                if (isset($currentType->properties[$keyString])) {
-                    $currentType->properties[$keyString] = $this->applyCertainAttributeMutation(
-                        currentType: $currentType->properties[$keyString],
-                        attributeType: $patchType,
-                    );
-
-                } else {
-                    $currentType->properties[$keyString] = $patchType;
-                }
-            }
-
-            $currentType->required = $currentType->required || $attributeType->required;
-
-            return $currentType;
-        }
-
-        if ($currentType instanceof ArrayType) {
-            $currentType = clone $currentType;
-
-            foreach ($patch as $key => $patchType) {
-                if (isset($currentType->shape[$key])) {
-                    $currentType->shape[$key] = $this->applyCertainAttributeMutation(
-                        currentType: $currentType->shape[$key],
-                        attributeType: $patchType,
-                    );
-
-                } else {
-                    $currentType->shape[$key] = $patchType;
-                }
-            }
-
-            $currentType->required = $currentType->required || $attributeType->required;
-
-            return $currentType;
-        }
-
-        return $attributeType;
-    }
-
-
-    /**
-     * @return array<int|string, Type>
-     */
-    private function getPatchAttributes(ArrayType|ObjectType $type): array
-    {
-        if ($type instanceof ObjectType) {
-            return $type->properties;
-        }
-
-        return $type->shape;
-    }
-
-
-    private function setNestedAttributeAsRequired(Type $type): Type
-    {
-        $type = clone $type;
-
-        if ($type instanceof ArrayType) {
-            $type->shape = array_map($this->setNestedAttributeAsRequired(...), $type->shape);
-
-            if ($type->itemType !== null) {
-                $type->itemType = $this->setNestedAttributeAsRequired($type->itemType);
-            }
-
-        } else if ($type instanceof ObjectType) {
-            $type->properties = array_map($this->setNestedAttributeAsRequired(...), $type->properties);
-        }
-
-        return $type->setRequired(true);
     }
 }
