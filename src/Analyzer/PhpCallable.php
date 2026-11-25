@@ -24,6 +24,7 @@ use AutoDoc\DataTypes\UnknownType;
 use AutoDoc\DataTypes\UnresolvedClassType;
 use AutoDoc\DataTypes\UnresolvedPhpDocType;
 use AutoDoc\DataTypes\UnresolvedReflectionType;
+use AutoDoc\DataTypes\UnresolvedVariableType;
 use AutoDoc\DataTypes\VoidType;
 use AutoDoc\OpenApi\MediaType;
 use AutoDoc\OpenApi\Operation;
@@ -164,25 +165,32 @@ class PhpCallable
             return null;
         }
 
-        /** @var int */
-        $paramVarStartFilePos = $param->var->getAttribute('startFilePos');
+        if ($param->byRef) {
+            $resolveAtExit = fn (int $readFilePos, BranchPath $readBranchPath): Type => new UnresolvedVariableType(
+                varName: $paramName,
+                scope: $functionScope,
+                varStartFilePos: $readFilePos,
+                readBranchPath: $readBranchPath,
+            )->unwrapType($this->scope->config);
 
-        $bindingAnalysis = new CallerParameterBindingAnalysis(
-            events: $functionScope->variables->events,
-            parameterName: $paramName,
-            parameterStartFilePos: $paramVarStartFilePos,
-        );
-        $parameterTypeResolver = new CallerParameterTypeResolver(
-            scope: $functionScope,
-            bindingAnalysis: $bindingAnalysis,
-            isPassedByReference: $param->byRef,
-        );
+        } else {
+            /** @var int */
+            $paramVarStartFilePos = $param->var->getAttribute('startFilePos');
+
+            $parameterTypeResolver = new CallerParameterTypeResolver(
+                scope: $functionScope,
+                bindingAnalysis: new CallerParameterBindingAnalysis(
+                    events: $functionScope->variables->events,
+                    parameterName: $paramName,
+                    parameterStartFilePos: $paramVarStartFilePos,
+                ),
+            );
+
+            $resolveAtExit = $parameterTypeResolver->resolveAtExit(...);
+        }
 
         $exitTypes = array_map(
-            fn (array $exit): Type => $parameterTypeResolver->resolveAtExit(
-                readFilePos: $exit['readFilePos'],
-                readBranchPath: $exit['branchPath'],
-            ),
+            fn (array $exit): Type => $resolveAtExit($exit['readFilePos'], $exit['branchPath']),
             $returnPoints,
         );
 

@@ -95,4 +95,71 @@ final class AttributeMutationApplierTest extends TestCase
         self::assertInstanceOf(ObjectType::class, $mutatedElement);
         self::assertArrayHasKey('tagged', $mutatedElement->properties);
     }
+
+    #[Test]
+    public function certainMutationReplacesTheArrayOrObjectAtItsKey(): void
+    {
+        $config = self::loadConfig();
+        $applier = new AttributeMutationApplier(new Scope($config));
+
+        $result = $applier->apply(
+            baseType: new ObjectType(properties: [
+                'meta' => new ObjectType(properties: ['before' => new StringType]),
+                'tags' => new ArrayType(shape: ['before' => new StringType]),
+            ]),
+            mutationPath: [],
+            attributes: [
+                'meta' => new ObjectType(properties: ['after' => new IntegerType]),
+                'tags' => new ArrayType(shape: ['after' => new IntegerType]),
+            ],
+            isCertain: true,
+        );
+
+        self::assertInstanceOf(ObjectType::class, $result);
+
+        $meta = $result->properties['meta']->unwrapType($config);
+        $tags = $result->properties['tags']->unwrapType($config);
+
+        self::assertInstanceOf(ObjectType::class, $meta);
+        self::assertInstanceOf(ArrayType::class, $tags);
+        self::assertSame(['after'], array_keys($meta->properties));
+        self::assertSame(['after'], array_keys($tags->shape));
+    }
+
+    #[Test]
+    public function certainMutationKeepsOptionalEntriesOfTheWrittenValueOptional(): void
+    {
+        $config = self::loadConfig();
+        $applier = new AttributeMutationApplier(new Scope($config));
+
+        $result = $applier->apply(
+            baseType: new ObjectType(properties: []),
+            mutationPath: [],
+            attributes: [
+                'meta' => new ObjectType(properties: [
+                    'id' => (new IntegerType)->setRequired(true),
+                    'note' => new StringType,
+                ]),
+                'row' => new ArrayType(shape: [
+                    'a' => (new IntegerType)->setRequired(true),
+                    'b' => new IntegerType,
+                ]),
+            ],
+            isCertain: true,
+        );
+
+        self::assertInstanceOf(ObjectType::class, $result);
+        self::assertTrue($result->properties['meta']->required);
+        self::assertTrue($result->properties['row']->required);
+
+        $meta = $result->properties['meta']->unwrapType($config);
+        $row = $result->properties['row']->unwrapType($config);
+
+        self::assertInstanceOf(ObjectType::class, $meta);
+        self::assertInstanceOf(ArrayType::class, $row);
+        self::assertTrue($meta->properties['id']->required);
+        self::assertFalse($meta->properties['note']->required);
+        self::assertTrue($row->shape['a']->required);
+        self::assertFalse($row->shape['b']->required);
+    }
 }
